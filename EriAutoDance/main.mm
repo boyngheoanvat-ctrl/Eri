@@ -2,7 +2,8 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
-#import "ImGui/imgui.h"
+#import <objc/runtime.h>
+#import "imgui.h"
 
 // Biến trạng thái menu
 static bool g_ActiveOn = false;
@@ -25,8 +26,6 @@ void ApplyCombinedMod(bool enable) {
                 if (objs && [objs respondsToSelector:@selector(count)]) {
                     NSUInteger objCount = [[objs valueForKey:@"count"] unsignedIntegerValue];
                     for (NSUInteger i = 1; i <= objCount; i++) {
-                        // Lấy phần tử theo index tương đương mảng lua (giả lập qua NSArray/NSFastEnumeration)
-                        // Tùy theo cấu trúc đối tượng cụ thể trong game để set giá trị judgeLevel, isHitBeat, v.v.
                         count++;
                     }
                 }
@@ -62,7 +61,7 @@ void RenderImGuiMenu() {
     ImGui::SetNextWindowSize(ImVec2(500, 340), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Mod By ERI NGUYỄN")) {
         
-        bool toggleChanged = ImGui::Checkbox("Auto Dance)", &g_ActiveOn);
+        bool toggleChanged = ImGui::Checkbox("Auto Dance", &g_ActiveOn);
         if (toggleChanged) {
             if (g_ActiveOn) {
                 ApplyCombinedMod(true);
@@ -86,11 +85,9 @@ void RenderImGuiMenu() {
     ImGui::End();
 }
 
-// Móc vào chu kỳ render của game để hiển thị ImGui (ví dụ qua hàm dựng sẵn của menu template)
+// Móc vào chu kỳ render của game để hiển thị ImGui
 static void (*orig_update)(id self, SEL _cmd, id view) = NULL;
 static void hook_update(id self, SEL _cmd, id view) {
     orig_update(self, _cmd, view);
-    // Gọi hàm render menu tại đây mỗi khung hình
     RenderImGuiMenu();
 }
-
