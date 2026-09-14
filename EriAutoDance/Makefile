@@ -4,8 +4,7 @@ include $(THEOS)/makefiles/common.mk
 
 LIBRARY_NAME = EriAutoDance
 
-EriAutoDance_FILES = main.mm ImGui/imgui.cpp ImGui/imgui_draw.cpp ImGui/imgui_tables.cpp ImGui/imgui_widgets.cpp
-EriAutoDance_CFLAGS = -fobjc-arc -I. -IImGui
+EriAutoDance_FILES = main.mm
+EriAutoDance_CFLAGS = -fobjc-arc
 
 include $(THEOS_MAKE_PATH)/library.mk
-
