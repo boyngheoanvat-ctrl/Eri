@@ -3,3 +3,4 @@
 __attribute__((constructor)) void initialize() {
     NSLog(@"[EriMod] Loaded successfully!");
 }
+ 
