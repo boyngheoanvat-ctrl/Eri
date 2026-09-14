@@ -2,8 +2,6 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <objc/runtime.h>
 
-@import UIKit;
-
 // Biến trạng thái
 static bool g_ActiveOn = false;
 static int g_ModifiedCount = 0;
