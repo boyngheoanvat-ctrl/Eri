@@ -8,13 +8,11 @@ static int g_PatchedCount = 0;
 static UILabel *g_StatusLabel = nil;
 static UILabel *g_CountLabel = nil;
 
-// Ham patch offset bo nhieu truc tiep
+// Ham patch offset bo nho truc tiep
 void ApplyIl2CppMemoryPatch(bool enable) {
     int modified = 0;
     @autoreleasepool {
         if (enable) {
-            uintptr_t slide = 0;
-            
             Class auditionClass = objc_getClass("Dance.AuditionGroup");
             if (!auditionClass) auditionClass = objc_getClass("Dance_AuditionGroup");
             
