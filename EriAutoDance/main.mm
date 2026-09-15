@@ -1,22 +1,5 @@
 #import <Foundation/Foundation.h>
-
-// 1. Định nghĩa struct ImVec2 trước tiên
-struct ImVec2 {
-    float x, y;
-    ImVec2() : x(0.0f), y(0.0f) {}
-    ImVec2(float _x, float _y) : x(_x), y(_y) {}
-};
-
-// 2. Sau đó mới khai báo namespace ImGui sử dụng ImVec2
-namespace ImGui {
-    bool Begin(const char* name, bool* p_open = NULL, int flags = 0);
-    void End();
-    bool Checkbox(const char* label, bool* v);
-    void Text(const char* fmt, ...);
-    void Separator();
-    bool Button(const char* label, const ImVec2& size = ImVec2(0,0));
-    void SetNextWindowSize(float width, float height, int cond = 0);
-}
+#import <UIKit/UIKit.h>
 
 static BOOL g_activeOn = NO;
 static int g_modifiedCount = 0;
@@ -53,6 +36,7 @@ static void applyMod(BOOL enable) {
     g_modifiedCount = count;
 }
 
+// Hàm giả lập vòng lặp gọi từ game
 void OnDraw() {
     static time_t lastCheck = 0;
     time_t currentTime = time(NULL);
@@ -61,32 +45,33 @@ void OnDraw() {
         lastCheck = currentTime;
         applyMod(YES);
     }
+}
 
-    ImGui::SetNextWindowSize(500, 340, 0);
-    if (ImGui::Begin("AutoDance HexControl v4 (Auto-Match)", NULL, 0)) {
-        if (ImGui::Checkbox("Bật Auto Tất Cả (Tự động bắt trận mới)", &g_activeOn)) {
-            if (g_activeOn) {
-                applyMod(YES);
-            }
-        }
+// Hiển thị menu cấu hình nhanh bằng UIKit khi dylib khởi động
+static void showControlPanel() {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
+        UIViewController *rootVC = keyWindow.rootViewController;
         
-        if (g_activeOn) {
-            ImGui::Text("[Trạng thái]: ĐANG BẬT (Auto)");
-        } else {
-            ImGui::Text("[Trạng thái]: TẮT");
-        }
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"EriAutoDance Control"
+                                                                       message:@"Chọn tính năng Auto-Match"
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+                                                                
+        [alert addAction:[UIAlertAction actionWithTitle:(g_activeOn ? @"Tắt Auto" : @"Bật Auto")
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction * _Nonnull action) {
+            g_activeOn = !g_activeOn;
+            applyMod(g_activeOn);
+            NSLog(@"[EriAuto]: Trạng thái Auto = %@", g_activeOn ? @"BẬT" : @"TẮT");
+        }]];
         
-        ImGui::Text("Số lượng đối tượng hiện tại: %d", g_modifiedCount);
-        ImGui::Separator();
+        [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
         
-        if (ImGui::Button("Reset / Khôi phục", ImVec2(0, 0))) {
-            g_activeOn = NO;
-            g_modifiedCount = 0;
-        }
-    }
-    ImGui::End();
+        [rootVC presentViewController:alert animated:YES completion:nil];
+    });
 }
 
 __attribute__((constructor)) static void init() {
     NSLog(@"=== EriAutoDance Native Loaded Successfully ===");
+    showControlPanel();
 }
