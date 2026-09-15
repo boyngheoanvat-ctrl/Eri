@@ -1,0 +1,22 @@
+#ifndef LAUXLIB_H
+#define LAUXLIB_H
+
+#include "lua.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+lua_State *(luaL_newstate) (void);
+void (luaL_openlibs) (lua_State *L);
+int (luaL_loadstring) (lua_State *L, const char *s);
+#define luaL_dostring(L, s) \
+	(luaL_loadstring(L, s) || lua_pcall(L, 0, LUA_MULTRET, 0))
+
+#define LUA_MULTRET	(-1)
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
