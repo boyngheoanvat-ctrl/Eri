@@ -3,6 +3,7 @@
 #include <cstring>
 #include <vector>
 #include <unordered_map>
+#include <chrono>
 
 #include "il2cpp/il2cpp-api.h"
 #include "il2cpp/il2cpp-class-internals.h"
@@ -57,7 +58,11 @@ static std::vector<Il2CppObject*> FindObjectsOfClass(Il2CppClass* klass) {
     return out;
 }
 
-static uint64_t NowMs() { return GetTickCount64(); }
+static uint64_t NowMs() {
+    auto now = std::chrono::steady_clock::now();
+    auto duration = now.time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+}
 
 static void CaptureObject(Il2CppObject* group, Il2CppObject* track) {
     if (group) {
