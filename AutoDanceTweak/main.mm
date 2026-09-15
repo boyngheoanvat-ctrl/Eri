@@ -1,0 +1,29 @@
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
+#include <thread>
+#include <chrono>
+
+void EnableAutoDance();
+void DisableAutoDance();
+int32_t ModifiedCount();
+void OnTick();
+
+static void* MainLoopThread(void*) {
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        OnTick();
+    }
+    return nullptr;
+}
+
+__attribute__((constructor)) static void init() {
+    NSLog(@"[EriOmni] AutoDance Tweak Loaded successfully!");
+    
+    pthread_t t;
+    pthread_create(&t, nullptr, MainLoopThread, nullptr);
+    
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        NSLog(@"[EriOmni] Auto-enabling AutoDance...");
+        EnableAutoDance();
+    });
+}
