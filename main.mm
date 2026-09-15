@@ -1,10 +1,11 @@
-// main.mm — AutoDance HexControl v4.2 (Dynamic IL2CPP + Floating Menu)
+// main.mm — AutoDance HexControl v4.2 (Anti-Miss Edition)
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #include <pthread.h>
 #include <dlfcn.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 #include <substrate.h>
 
 // ============================================================
@@ -30,33 +31,35 @@ static il2cpp_class_get_method_from_name_t p_il2cpp_class_get_method_from_name =
 
 static void InitIL2CPPAPIs() {
     void* handle = RTLD_DEFAULT; 
-    p_il2cpp_domain_get = (il2cpp_domain_get_t)dlsym(handle, "il2cpp_domain_get");
-    p_il2cpp_domain_get_assembly_count = (il2cpp_domain_get_assembly_count_t)dlsym(handle, "il2cpp_domain_get_assembly_count");
-    p_il2cpp_domain_get_assembly = (il2cpp_domain_get_assembly_t)dlsym(handle, "il2cpp_domain_get_assembly");
-    p_il2cpp_assembly_get_image = (il2cpp_assembly_get_image_t)dlsym(handle, "il2cpp_assembly_get_image");
-    p_il2cpp_class_from_name = (il2cpp_class_from_name_t)dlsym(handle, "il2cpp_class_from_name");
-    p_il2cpp_class_get_field_from_name = (il2cpp_class_get_field_from_name_t)dlsym(handle, "il2cpp_class_get_field_from_name");
-    p_il2cpp_field_get_offset = (il2cpp_field_get_offset_t)dlsym(handle, "il2cpp_field_get_offset");
-    p_il2cpp_class_get_method_from_name = (il2cpp_class_get_method_from_name_t)dlsym(handle, "il2cpp_class_get_method_from_name");
+    if (!p_il2cpp_domain_get) p_il2cpp_domain_get = (il2cpp_domain_get_t)dlsym(handle, "il2cpp_domain_get");
+    if (!p_il2cpp_domain_get_assembly_count) p_il2cpp_domain_get_assembly_count = (il2cpp_domain_get_assembly_count_t)dlsym(handle, "il2cpp_domain_get_assembly_count");
+    if (!p_il2cpp_domain_get_assembly) p_il2cpp_domain_get_assembly = (il2cpp_domain_get_assembly_t)dlsym(handle, "il2cpp_domain_get_assembly");
+    if (!p_il2cpp_assembly_get_image) p_il2cpp_assembly_get_image = (il2cpp_assembly_get_image_t)dlsym(handle, "il2cpp_assembly_get_image");
+    if (!p_il2cpp_class_from_name) p_il2cpp_class_from_name = (il2cpp_class_from_name_t)dlsym(handle, "il2cpp_class_from_name");
+    if (!p_il2cpp_class_get_field_from_name) p_il2cpp_class_get_field_from_name = (il2cpp_class_get_field_from_name_t)dlsym(handle, "il2cpp_class_get_field_from_name");
+    if (!p_il2cpp_field_get_offset) p_il2cpp_field_get_offset = (il2cpp_field_get_offset_t)dlsym(handle, "il2cpp_field_get_offset");
+    if (!p_il2cpp_class_get_method_from_name) p_il2cpp_class_get_method_from_name = (il2cpp_class_get_method_from_name_t)dlsym(handle, "il2cpp_class_get_method_from_name");
 }
 
 // ============================================================
-// 2) Configuration & Offsets Mapping (tương đương Lua script)
+// 2) Configuration & Offsets Mapping
 // ============================================================
 static const int    PERFECT_LEVEL   = 4;
 static bool         g_AutoDanceOn   = true;
 
 struct ModOffsets {
-    ptrdiff_t judgeLevel;     // offset 64
-    ptrdiff_t isHitBeat;      // offset 50
-    ptrdiff_t isPlay;         // offset 408 (GuidTrackDanceNoteCtrl)
+    ptrdiff_t judgeLevel;
+    ptrdiff_t isHitBeat;
+    ptrdiff_t isPlay;
     bool ready;
 };
 static ModOffsets g_off = {0, 0, 0, false};
 
-static void* FindClass(const char* ns, const char* name) {
+static void* FindClassDynamic(const char* ns, const char* name) {
     if (!p_il2cpp_domain_get || !p_il2cpp_domain_get_assembly_count) return nullptr;
     const void* domain = p_il2cpp_domain_get();
+    if (!domain) return nullptr;
+    
     size_t count = p_il2cpp_domain_get_assembly_count(domain);
     for (size_t i = 0; i < count; i++) {
         void* asm_ = p_il2cpp_domain_get_assembly(domain, i);
@@ -69,33 +72,8 @@ static void* FindClass(const char* ns, const char* name) {
     return nullptr;
 }
 
-static void ResolveOffsets() {
-    if (g_off.ready) return;
-    InitIL2CPPAPIs();
-
-    // 1. Dance.AuditionGroup
-    void* agCls = FindClass("Dance", "AuditionGroup");
-    if (agCls && p_il2cpp_class_get_field_from_name && p_il2cpp_field_get_offset) {
-        void* f1 = p_il2cpp_class_get_field_from_name(agCls, "judgeLevel");
-        void* f2 = p_il2cpp_class_get_field_from_name(agCls, "isHitBeat");
-        if (f1) g_off.judgeLevel = p_il2cpp_field_get_offset(f1);
-        if (f2) g_off.isHitBeat  = p_il2cpp_field_get_offset(f2);
-    }
-
-    // 2. GuidTrackDanceNoteCtrl
-    void* trCls = FindClass("", "GuidTrackDanceNoteCtrl");
-    if (trCls && p_il2cpp_class_get_field_from_name && p_il2cpp_field_get_offset) {
-        void* f3 = p_il2cpp_class_get_field_from_name(trCls, "isPlay");
-        if (f3) g_off.isPlay = p_il2cpp_field_get_offset(f3);
-    }
-
-    g_off.ready = true;
-    NSLog(@"[AutoDance v4.2] Offsets resolved -> judgeLevel: %td, isHitBeat: %td, isPlay: %td", 
-          g_off.judgeLevel, g_off.isHitBeat, g_off.isPlay);
-}
-
 // ============================================================
-// 3) Hook Implementation (AuditionGroup::Update)
+// 3) Hook Implementation
 // ============================================================
 typedef void (*AuditionGroup_Update_t)(void* self, void* method);
 static AuditionGroup_Update_t orig_AuditionGroup_Update = nullptr;
@@ -117,23 +95,48 @@ static void hk_AuditionGroup_Update(void* self, void* method) {
     }
 }
 
-static void SetupHooks() {
-    ResolveOffsets();
-    void* agCls = FindClass("Dance", "AuditionGroup");
-    if (!agCls || !p_il2cpp_class_get_method_from_name) return;
-
-    void* updateMethod = p_il2cpp_class_get_method_from_name(agCls, "Update", 0);
-    if (updateMethod) {
-        void* funcAddress = *(void**)((uintptr_t)updateMethod);
-        if (funcAddress) {
-            MSHookFunction(funcAddress, (void*)&hk_AuditionGroup_Update, (void**)&orig_AuditionGroup_Update);
-            NSLog(@"[AutoDance v4.2] Hooked AuditionGroup::Update successfully at %p", funcAddress);
+// ============================================================
+// 4) Background Retry Loop (Chống Miss tuyệt đối)
+// ============================================================
+static void StartAntiMissResolver() {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        int attempt = 0;
+        while (!g_off.ready && attempt < 60) { // Thử tối đa 60 lần (mỗi lần cách nhau 1 giây)
+            InitIL2CPPAPIs();
+            
+            void* agCls = FindClassDynamic("Dance", "AuditionGroup");
+            if (agCls && p_il2cpp_class_get_field_from_name && p_il2cpp_field_get_offset) {
+                void* f1 = p_il2cpp_class_get_field_from_name(agCls, "judgeLevel");
+                void* f2 = p_il2cpp_class_get_field_from_name(agCls, "isHitBeat");
+                if (f1) g_off.judgeLevel = p_il2cpp_field_get_offset(f1);
+                if (f2) g_off.isHitBeat  = p_il2cpp_field_get_offset(f2);
+                
+                if (g_off.judgeLevel != 0 && p_il2cpp_class_get_method_from_name) {
+                    void* updateMethod = p_il2cpp_class_get_method_from_name(agCls, "Update", 0);
+                    if (updateMethod) {
+                        void* funcAddress = *(void**)((uintptr_t)updateMethod);
+                        if (funcAddress) {
+                            MSHookFunction(funcAddress, (void*)&hk_AuditionGroup_Update, (void**)&orig_AuditionGroup_Update);
+                            g_off.ready = true;
+                            NSLog(@"[AutoDance v4.2] ✅ Hook thành công sau %d giây chờ HotFix.dll!", attempt);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            attempt++;
+            sleep(1); // Chờ 1 giây rồi quét lại nếu chưa thấy
         }
-    }
+        
+        if (!g_off.ready) {
+            NSLog(@"[AutoDance v4.2] ❌ Hết thời gian chờ nhưng vẫn không tìm thấy class.");
+        }
+    });
 }
 
 // ============================================================
-// 4) Floating Menu UI Implementation (Giao diện tùy chỉnh)
+// 5) Floating Menu UI Implementation
 // ============================================================
 @interface AutoDanceMenuController : NSObject
 @property (nonatomic, strong) UIButton *floatingButton;
@@ -176,7 +179,7 @@ static void SetupHooks() {
 
     if (!keyWindow) return;
 
-    // 1. Floating Button (Nút icon mở menu)
+    // Floating Button
     self.floatingButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.floatingButton.frame = CGRectMake(20, 120, 45, 45);
     self.floatingButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:0.85];
@@ -190,7 +193,7 @@ static void SetupHooks() {
     [self.floatingButton addGestureRecognizer:pan];
     [keyWindow addSubview:self.floatingButton];
 
-    // 2. Menu View (Bảng điều khiển)
+    // Menu View
     self.menuView = [[UIView alloc] initWithFrame:CGRectMake(75, 120, 240, 180)];
     self.menuView.backgroundColor = [UIColor colorWithRed:0.06 green:0.06 blue:0.06 alpha:0.92];
     self.menuView.layer.cornerRadius = 12;
@@ -198,7 +201,6 @@ static void SetupHooks() {
     self.menuView.layer.borderColor = [[UIColor cyanColor] CGColor];
     self.menuView.hidden = YES;
 
-    // Title
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, 220, 25)];
     titleLabel.text = @"AutoDance HexControl v4.2";
     titleLabel.textColor = [UIColor cyanColor];
@@ -206,7 +208,6 @@ static void SetupHooks() {
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.menuView addSubview:titleLabel];
 
-    // Switch Toggle Auto Perfect
     UILabel *switchLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 45, 140, 30)];
     switchLabel.text = @"Bật Auto (Perfect)";
     switchLabel.textColor = [UIColor whiteColor];
@@ -218,7 +219,6 @@ static void SetupHooks() {
     [toggleSwitch addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
     [self.menuView addSubview:toggleSwitch];
 
-    // Status Display
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 85, 210, 80)];
     self.statusLabel.text = @"Sẵn sàng. Bật toggle để chạy tự động qua các trận.";
     self.statusLabel.textColor = [UIColor lightGrayColor];
@@ -235,11 +235,7 @@ static void SetupHooks() {
 
 - (void)switchChanged:(UISwitch *)sender {
     g_AutoDanceOn = sender.isOn;
-    if (g_AutoDanceOn) {
-        self.statusLabel.text = @"Đã BẬT tính năng Auto Dance.";
-    } else {
-        self.statusLabel.text = @"Đã TẮT tính năng Auto Dance.";
-    }
+    self.statusLabel.text = g_AutoDanceOn ? @"Đã BẬT tính năng Auto Dance." : @"Đã TẮT tính năng Auto Dance.";
 }
 
 - (void)buttonDragged:(UIPanGestureRecognizer *)gesture {
@@ -253,14 +249,14 @@ static void SetupHooks() {
 @end
 
 // ============================================================
-// 5) Dylib Entry Point
+// 6) Dylib Entry Point
 // ============================================================
 __attribute__((constructor))
 static void InitDylib() {
     dispatch_after(
-        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)),
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)),
         dispatch_get_main_queue(), ^{
-            SetupHooks();
+            StartAntiMissResolver();
             [[AutoDanceMenuController sharedInstance] showMenu];
         }
     );
