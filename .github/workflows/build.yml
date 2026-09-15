@@ -21,7 +21,7 @@ jobs:
     - name: Compile Dylib
       run: |
         export THEOS=~/theos
-        cd EriAutoDance
+        cd AutoDanceTweak
         make
 
     - name: Upload Artifact
