@@ -1,6 +1,0 @@
-#pragma once
-#include "lua.h"
-
-lua_State* luaL_newstate(void);
-void luaL_openlibs(lua_State *L);
-int luaL_dostring(lua_State *L, const char *str);
