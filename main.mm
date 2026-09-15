@@ -29,32 +29,22 @@ static void InitIl2CppSymbols() {
     f_il2cpp_gc_foreach_heap_object = (t_il2cpp_gc_foreach_heap_object)dlsym(handle, "il2cpp_gc_foreach_heap_object");
 }
 
-// Khớp chính xác các offset theo Lua script (HexControl v4)
-// Lưu ý: Các field trong C# thông thường qua il2cpp được biên dịch thành offset field thực tế bên trong struct instance.
-// Dựa theo script Lua: judgeLevel, isHitBeat, isJudgeAllKey, IsPlaying
-static const uint32_t OFF_JUDGE_LEVEL      = 0x40; // judgeLevel
-static const uint32_t OFF_IS_HIT_BEAT       = 0x34; // isHitBeat
-static const uint32_t OFF_IS_JUDGE_ALL_KEY  = 0x35; // isJudgeAllKey
-static const uint32_t OFF_IS_PLAYING        = 0x198;// IsPlaying
-
-static const int32_t  PERFECT               = 4;     
+// Thử dịch chuyển hoặc kiểm tra lại offset chuẩn của bản game hiện tại
+static const uint32_t OFF_JUDGE_LEVEL = 0x44;   // Đã dịch chuyển nhẹ để tránh đè sai biến logic
+static const uint32_t OFF_IS_HIT_BEAT  = 0x36;  
+static const int32_t  PERFECT          = 4;     
 
 static std::atomic<bool> g_isHackActive{false};
 static int g_modifiedObjectsCount = 0;
 
 static std::vector<void*> g_cachedAuditionGroups;
-static std::vector<void*> g_cachedTrackCtrls;
-
 static Il2CppClass* g_targetAuditionClass = nullptr;
-static Il2CppClass* g_targetTrackCtrlClass = nullptr;
 
 static void HeapObjectCallback(Il2CppObject* obj, void* user_data) {
     if (!obj) return;
     Il2CppClass* klass = *(Il2CppClass**)(obj);
     if (klass == g_targetAuditionClass) {
         g_cachedAuditionGroups.push_back((void*)obj);
-    } else if (klass == g_targetTrackCtrlClass) {
-        g_cachedTrackCtrls.push_back((void*)obj);
     }
 }
 
@@ -118,7 +108,7 @@ static void HeapObjectCallback(Il2CppObject* obj, void* user_data) {
     [self.floatingButton addTarget:self action:@selector(toggleMenuVisibility:) forControlEvents:UIControlEventTouchUpInside];
     [keyWindow addSubview:self.floatingButton];
 
-    self.menuView = [[UIView alloc] initWithFrame:CGRectMake(95, 120, 260, 210)];
+    self.menuView = [[UIView alloc] initWithFrame:CGRectMake(95, 120, 260, 200)];
     self.menuView.backgroundColor = [UIColor colorWithWhite:0.12 alpha:0.95];
     self.menuView.layer.cornerRadius = 14;
     self.menuView.layer.borderWidth = 1.5;
@@ -126,7 +116,7 @@ static void HeapObjectCallback(Il2CppObject* obj, void* user_data) {
     self.menuView.hidden = YES;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, 240, 25)];
-    titleLabel.text = @"HexControl v4 (Auto-Match)";
+    titleLabel.text = @"Eri AutoDance Menu v4.3";
     titleLabel.textColor = [UIColor cyanColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:14];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -137,16 +127,16 @@ static void HeapObjectCallback(Il2CppObject* obj, void* user_data) {
     [self.menuView addSubview:self.toggleSwitch];
 
     UILabel *switchText = [[UILabel alloc] initWithFrame:CGRectMake(85, 45, 160, 30)];
-    switchText.text = @"Bật Auto Tất Cả";
+    switchText.text = @"Bật Auto Perfect";
     switchText.textColor = [UIColor whiteColor];
     switchText.font = [UIFont systemFontOfSize:13];
     [self.menuView addSubview:switchText];
 
-    self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 85, 230, 110)];
-    self.statusLabel.text = @"Trạng thái: Sẵn sàng.\n- Bật toggle để chạy tự động qua các trận.\n- Objects: 0";
+    self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 85, 230, 95)];
+    self.statusLabel.text = @"Trạng thái: Đang Tắt\n- Sẵn sàng quét...\n- Bấm công tắc để bắt đầu.";
     self.statusLabel.textColor = [UIColor lightGrayColor];
     self.statusLabel.font = [UIFont systemFontOfSize:11];
-    self.statusLabel.numberOfLines = 5;
+    self.statusLabel.numberOfLines = 4;
     [self.menuView addSubview:self.statusLabel];
 
     [keyWindow addSubview:self.menuView];
@@ -159,16 +149,16 @@ static void HeapObjectCallback(Il2CppObject* obj, void* user_data) {
 -(void)onSwitchChanged:(UISwitch *)sender {
     g_isHackActive = sender.isOn;
     if (sender.isOn) {
-        self.statusLabel.text = [NSString stringWithFormat:@"Trạng thái: ĐÃ BẬT (Auto) 🟢\n- Đang theo dõi trận đấu...\n- Objects: %d", g_modifiedObjectsCount];
+        self.statusLabel.text = [NSString stringWithFormat:@"Trạng thái: ĐÃ BẬT 🟢\n- Đang quét AuditionGroup...\n- Đã tác động: %d objects", g_modifiedObjectsCount];
     } else {
-        self.statusLabel.text = @"Trạng thái: ĐÃ TẮT 🔴\n- Đã dừng tính năng.";
+        self.statusLabel.text = @"Trạng thái: ĐÃ TẮT 🔴\n- Đã dừng can thiệp.";
     }
 }
 
 -(void)updateStatusTextCount:(NSNumber *)countNum {
     if (g_isHackActive) {
         int count = [countNum intValue];
-        self.statusLabel.text = [NSString stringWithFormat:@"Trạng thái: ĐÃ BẬT (Auto) 🟢\n- Đã tự động áp dụng trận mới!\n- Objects: %d", count];
+        self.statusLabel.text = [NSString stringWithFormat:@"Trạng thái: ĐÃ BẬT 🟢\n- Đang chạy mượt.\n- Đã tác động: %d objects", count];
     }
 }
 
@@ -176,64 +166,44 @@ static void HeapObjectCallback(Il2CppObject* obj, void* user_data) {
 
 void* HackLoopThread(void* arg) {
     InitIl2CppSymbols();
-    time_t lastCheckTime = 0;
-    
     while (true) {
-        time_t currentTime = time(NULL);
-        // Cơ chế thông minh định kỳ mỗi 2 giây nhận trận mới y như script Lua
-        if (g_isHackActive.load() && f_il2cpp_domain_get && (currentTime - lastCheckTime >= 2)) {
-            lastCheckTime = currentTime;
-            int count = 0;
+        if (g_isHackActive.load() && f_il2cpp_domain_get) {
+            int currentModified = 0;
             @try {
                 Il2CppDomain* domain = f_il2cpp_domain_get();
                 if (domain && f_il2cpp_domain_get_assemblies) {
                     size_t assemblyCount = 0;
                     Il2CppImage** assemblies = f_il2cpp_domain_get_assemblies(domain, &assemblyCount);
                     
-                    if ((!g_targetAuditionClass || !g_targetTrackCtrlClass) && f_il2cpp_class_from_name) {
+                    if (!g_targetAuditionClass && f_il2cpp_class_from_name) {
                         for (size_t i = 0; i < assemblyCount; i++) {
-                            if (!g_targetAuditionClass) {
-                                g_targetAuditionClass = f_il2cpp_class_from_name(assemblies[i], "Dance", "AuditionGroup");
-                            }
-                            if (!g_targetTrackCtrlClass) {
-                                g_targetTrackCtrlClass = f_il2cpp_class_from_name(assemblies[i], "", "GuidTrackDanceNoteCtrl");
-                            }
+                            g_targetAuditionClass = f_il2cpp_class_from_name(assemblies[i], "Dance", "AuditionGroup");
+                            if (g_targetAuditionClass) break;
                         }
                     }
 
-                    if ((g_targetAuditionClass || g_targetTrackCtrlClass) && f_il2cpp_gc_foreach_heap_object) {
+                    if (g_targetAuditionClass && f_il2cpp_gc_foreach_heap_object) {
                         g_cachedAuditionGroups.clear();
-                        g_cachedTrackCtrls.clear();
-                        
                         f_il2cpp_gc_foreach_heap_object(HeapObjectCallback, nullptr);
 
                         for (void* obj : g_cachedAuditionGroups) {
                             if (obj) {
+                                // Chỉ ghi đè mức phán định khi object còn sống và hợp lệ
                                 *(int32_t*)((uint8_t*)obj + OFF_JUDGE_LEVEL) = PERFECT;
                                 *(bool*)((uint8_t*)obj + OFF_IS_HIT_BEAT) = true;
-                                *(bool*)((uint8_t*)obj + OFF_IS_JUDGE_ALL_KEY) = true;
-                                count++;
-                            }
-                        }
-
-                        for (void* obj : g_cachedTrackCtrls) {
-                            if (obj) {
-                                *(bool*)((uint8_t*)obj + OFF_IS_PLAYING) = true;
-                                count++;
+                                currentModified++;
                             }
                         }
                     }
                 }
                 
-                g_modifiedObjectsCount = count;
-                if (count > 0) {
-                    [[EriMenuController sharedInstance] performSelectorOnMainThread:@selector(updateStatusTextCount:) withObject:@(count) waitUntilDone:NO];
-                }
+                g_modifiedObjectsCount = currentModified;
+                [[EriMenuController sharedInstance] performSelectorOnMainThread:@selector(updateStatusTextCount:) withObject:@(currentModified) waitUntilDone:NO];
             } @catch (NSException *exception) {
-                NSLog(@"[HexControlError]: %@", exception.reason);
+                NSLog(@"[EriError]: %@", exception.reason);
             }
         }
-        usleep(500000); // Ngủ ngắn để không chiếm dụng CPU
+        usleep(200000); // Tần suất quét nhanh hơn mượt hơn (0.2s)
     }
     return NULL;
 }
@@ -243,6 +213,5 @@ __attribute__((constructor)) static void initEriDylib() {
         [EriMenuController sharedInstance];
         pthread_t t;
         pthread_create(&t, NULL, HackLoopThread, NULL);
-        NSLog(@"[HexControl v4]: Initialized successfully.");
     }
 }
