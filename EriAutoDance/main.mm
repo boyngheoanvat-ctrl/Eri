@@ -1,218 +1,158 @@
-#import <UIKit/UIKit.h>
-#import <CoreGraphics/CoreGraphics.h>
-#import <objc/runtime.h>
-#include <mach/mach.h>
+#import <Foundation/Foundation.h>
 
-static bool g_ActiveOn = false;
-static int g_PatchedCount = 0;
-static UILabel *g_StatusLabel = nil;
-static UILabel *g_CountLabel = nil;
+// Khai báo nguyên mẫu C cho Lua
+extern "C" {
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+}
 
-// Ham patch offset bo nho truc tiep
-void ApplyIl2CppMemoryPatch(bool enable) {
-    int modified = 0;
+// -----------------------------------------------------------------
+// Hàm C/Objective-C để mở rộng (Ví dụ: ImGui bridge hoặc log)
+// -----------------------------------------------------------------
+static int l_nativeLog(lua_State *L) {
+    const char *msg = lua_tostring(L, 1);
+    if (msg) {
+        NSLog(@"[Lua Script Log]: %s", msg);
+    }
+    return 0;
+}
+
+int main(int argc, char *argv[]) {
     @autoreleasepool {
-        if (enable) {
-            Class auditionClass = objc_getClass("Dance.AuditionGroup");
-            if (!auditionClass) auditionClass = objc_getClass("Dance_AuditionGroup");
-            
-            Class trackClass = objc_getClass("GuidTrackDanceNoteCtrl");
-            if (!trackClass) trackClass = objc_getClass("GuidTrackDanceNoteCtrl_");
-
-            if (auditionClass || trackClass) {
-                modified++;
-            }
-        }
-    }
-    g_PatchedCount = modified;
-    
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (g_CountLabel) {
-            g_CountLabel.text = [NSString stringWithFormat:@"Patched Target: %d", g_PatchedCount];
-            if (g_PatchedCount > 0) {
-                g_StatusLabel.text = @"Trang thai: Dang ep Perfect (Offset Active)!";
-                g_StatusLabel.textColor = [UIColor greenColor];
-            } else {
-                g_StatusLabel.text = @"Trang thai: Cho vao man choi (Match)...";
-                g_StatusLabel.textColor = [UIColor orangeColor];
-            }
-        }
-    });
-}
-
-// Button icon chu meo keo tha tu do
-@interface EriFloatingButton : UIButton
-@end
-
-@implementation EriFloatingButton {
-    CGPoint touchLocation;
-}
-
-- (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
-    if (self) {
-        NSBundle *bundle = [NSBundle bundleForClass:[self class]];
-        UIImage *iconImage = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"cat_icon" ofType:@"png"]];
-        if (!iconImage) {
-            iconImage = [UIImage imageNamed:@"cat_icon.png"];
+        NSLog(@"=== KHOI DONG MOI TRUONG LUA & SCRIPT AUTO-DANCE ===");
+        
+        // 1. Khởi tạo Lua State
+        lua_State *L = luaL_newstate();
+        if (L == NULL) {
+            NSLog(@"Loi: Khong the khoi tao lua_State!");
+            return -1;
         }
         
-        if (iconImage) {
-            [self setImage:iconImage forState:UIControlStateNormal];
-            self.imageView.contentMode = UIViewContentModeScaleAspectFill;
+        // 2. Nạp thư viện chuẩn
+        luaL_openlibs(L);
+        
+        // 3. Đăng ký hàm giao tiếp native (nếu cần)
+        lua_register(L, "nativeLog", l_nativeLog);
+        
+        // 4. Đoạn mã script Lua 'AutoDance HexControl v4' của bạn
+        const char *autoDanceScript = R"lua(
+-- AutoDance HexControl v4 — Auto Re-apply New Match (Optimized & Lag-free)
+local state = {
+  activeOn = false,
+  status = "Sẵn sàng. Bật toggle để chạy tự động qua các trận.",
+  PERFECT = 4,
+  stats = { modified = 0 },
+  lastCheck = 0,
+  lastCount = 0
+}
+
+local function applyCombinedMod(enable)
+  local count = 0
+  local ok, err = pcall(function()
+    local auditionGroupClass = Class.fromName("Dance.AuditionGroup")
+    local trackCtrlClass = Class.fromName("GuidTrackDanceNoteCtrl")
+    
+    if enable then
+      if auditionGroupClass and auditionGroupClass.findObjects then
+        local objs = auditionGroupClass:findObjects()
+        if objs and objs.count and objs.count > 0 then
+          for i = 1, objs.count do
+            local obj = objs[i]
+            if obj then
+              obj.judgeLevel = state.PERFECT
+              obj.isHitBeat = true
+              obj.isJudgeAllKey = true
+              count = count + 1
+            end
+          end
+        end
+      end
+
+      if trackCtrlClass and trackCtrlClass.findObjects then
+        local ctrls = trackCtrlClass:findObjects()
+        if ctrls and ctrls.count and ctrls.count > 0 then
+          for i = 1, ctrls.count do
+            local ctrl = ctrls[i]
+            if ctrl then
+              ctrl.IsPlaying = true
+              count = count + 1
+            end
+          end
+        end
+      end
+    end
+  end)
+
+  if ok then
+    state.stats.modified = count
+  end
+  return count
+end
+
+function OnDraw()
+  -- Cơ chế thông minh: Chỉ kiểm tra định kỳ nhẹ nhàng mỗi 2 giây khi bật toggle 
+  local currentTime = os.time()
+  if state.activeOn and (currentTime - state.lastCheck >= 2) then
+    state.lastCheck = currentTime
+    local count = applyCombinedMod(true)
+    if count > 0 and count ~= state.lastCount then
+      state.lastCount = count
+      state.status = "Đã tự động áp dụng cho trận mới! Objects=" .. tostring(count)
+    end
+  end
+
+  if ImGui then
+    ImGui.SetNextWindowSize(500, 340)
+    local visible = ImGui.Begin("AutoDance HexControl v4 (Auto-Match)")
+    if visible then
+      local c1, v1 = ImGui.Checkbox("Bật Auto Tất Cả (Tự động bắt trận mới)", state.activeOn)
+      if c1 then
+        state.activeOn = v1
+        if v1 then
+          local count = applyCombinedMod(true)
+          state.status = "Đã BẬT. Đang theo dõi trận đấu..."
+        else
+          state.status = "Đã TẮT tính năng."
+        end
+      end
+
+      ImGui.Text(state.activeOn and "[Trạng thái]: ĐANG BẬT (Auto)" or "[Trạng thái]: TẮT")
+      ImGui.Text("Số lượng đối tượng hiện tại: " .. tostring(state.stats.modified))
+      ImGui.SeparatorText("Status")
+      ImGui.TextWrapped(state.status)
+
+      if ImGui.Button("Reset / Khôi phục") then
+        state.activeOn = false
+        state.status = "Đã reset trạng thái."
+      end
+    end
+    ImGui.End()
+  end
+end
+
+function OnStop()
+  state.activeOn = false
+  nativeLog("AutoDance HexControl v4 stopped.")
+end
+
+nativeLog("AutoDance HexControl v4 da duoc nap thanh cong vao Lua State!")
+        )lua";
+        
+        // 5. Thực thi script Lua
+        if (luaL_dostring(L, autoDanceScript) != LUA_OK) {
+            const char *errorMsg = lua_tostring(L, -1);
+            NSLog(@"Loi thuc thi AutoDance Script: %s", errorMsg);
+            lua_pop(L, 1);
         }
         
-        self.backgroundColor = [UIColor colorWithWhite:0.15f alpha:0.9f];
-        self.layer.cornerRadius = frame.size.width / 2.0f;
-        self.clipsToBounds = YES;
-        self.layer.borderWidth = 2.0f;
-        self.layer.borderColor = [UIColor purpleColor].CGColor;
-        self.layer.shadowColor = [UIColor blackColor].CGColor;
-        self.layer.shadowOffset = CGSizeMake(0, 3);
-        self.layer.shadowRadius = 4.0f;
-        self.layer.shadowOpacity = 0.6f;
+        // (Tùy chọn) Gọi hàm OnDraw hoặc OnStop giả lập vòng lặp nếu app chạy luồng native
+        // lua_getglobal(L, "OnDraw");
+        // if (lua_isfunction(L, -1)) { lua_pcall(L, 0, 0, 0); } else { lua_pop(L, 1); }
+
+        // 6. Dọn dẹp (nếu chương trình kết thúc)
+        // lua_close(L);
+        NSLog(@"=== HOAN TAT NAP SCRIPT VAO MOI TRUONG OBJECTIVE-C ===");
     }
-    return self;
-}
-
-- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    [super touchesBegan:touches withEvent:event];
-    UITouch *touch = [touches anyObject];
-    touchLocation = [touch locationInView:self.superview];
-}
-
-- (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    UITouch *touch = [touches anyObject];
-    CGPoint currentLocation = [touch locationInView:self.superview];
-    
-    CGFloat deltaX = currentLocation.x - touchLocation.x;
-    CGFloat deltaY = currentLocation.y - touchLocation.y;
-    
-    CGPoint newCenter = CGPointMake(self.center.x + deltaX, self.center.y + deltaY);
-    
-    CGFloat halfW = self.frame.size.width / 2.0f;
-    CGFloat halfH = self.frame.size.height / 2.0f;
-    CGSize screenBounds = [UIScreen mainScreen].bounds.size;
-    
-    newCenter.x = MAX(halfW, MIN(screenBounds.width - halfW, newCenter.x));
-    newCenter.y = MAX(halfH, MIN(screenBounds.height - halfH, newCenter.y));
-    
-    self.center = newCenter;
-    touchLocation = currentLocation;
-}
-@end
-
-// Giao dien Menu Noi
-@interface EriMenuViewController : UIViewController
-@end
-
-@implementation EriMenuViewController {
-    UIView *menuView;
-}
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    
-    menuView = [[UIView alloc] initWithFrame:CGRectMake(50, 100, 260, 210)];
-    menuView.backgroundColor = [UIColor colorWithWhite:0.1f alpha:0.9f];
-    menuView.layer.cornerRadius = 12.0f;
-    menuView.layer.borderWidth = 1.5f;
-    menuView.layer.borderColor = [UIColor purpleColor].CGColor;
-    [self.view addSubview:menuView];
-    
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, 240, 30)];
-    titleLabel.text = @"Mod By ERI NGUYEN";
-    titleLabel.textColor = [UIColor whiteColor];
-    titleLabel.font = [UIFont boldSystemFontOfSize:15];
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    [menuView addSubview:titleLabel];
-    
-    UILabel *switchLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 55, 150, 30)];
-    switchLabel.text = @"Auto Perfect (V4)";
-    switchLabel.textColor = [UIColor whiteColor];
-    switchLabel.font = [UIFont systemFontOfSize:14];
-    [menuView addSubview:switchLabel];
-    
-    UISwitch *toggleSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(190, 55, 50, 30)];
-    [toggleSwitch setOn:g_ActiveOn];
-    [toggleSwitch addTarget:self action:@selector(toggleChanged:) forControlEvents:UIControlEventValueChanged];
-    [menuView addSubview:toggleSwitch];
-    
-    g_CountLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 95, 230, 25)];
-    g_CountLabel.text = @"Patched Target: 0";
-    g_CountLabel.textColor = [UIColor cyanColor];
-    g_CountLabel.font = [UIFont systemFontOfSize:13];
-    [menuView addSubview:g_CountLabel];
-    
-    g_StatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 125, 230, 40)];
-    g_StatusLabel.text = @"Trang thai: San sang";
-    g_StatusLabel.textColor = [UIColor lightGrayColor];
-    g_StatusLabel.font = [UIFont systemFontOfSize:12];
-    g_StatusLabel.numberOfLines = 2;
-    [menuView addSubview:g_StatusLabel];
-    
-    // Tao icon chu meo noi tren man hinh
-    EriFloatingButton *floatBtn = [[EriFloatingButton alloc] initWithFrame:CGRectMake(20, 40, 50, 50)];
-    [floatBtn addTarget:self action:@selector(toggleMenuVisibility) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:floatBtn];
-}
-
-- (void)toggleChanged:(UISwitch *)sender {
-    g_ActiveOn = sender.isOn;
-    if (g_ActiveOn) {
-        g_StatusLabel.text = @"Da BAT. Dang ghi de Offset...";
-        g_StatusLabel.textColor = [UIColor greenColor];
-    } else {
-        g_StatusLabel.text = @"Da TAT tinh nang.";
-        g_StatusLabel.textColor = [UIColor lightGrayColor];
-    }
-}
-
-- (void)toggleMenuVisibility {
-    menuView.hidden = !menuView.hidden;
-}
-
-@end
-
-__attribute__((constructor)) static void initialize() {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        while (true) {
-            if (g_ActiveOn) {
-                ApplyIl2CppMemoryPatch(true);
-            }
-            sleep(1);
-        }
-    });
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *window = nil;
-        if (@available(iOS 13.0, *)) {
-            for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-                if ([scene isKindOfClass:[UIWindowScene class]]) {
-                    for (UIWindow *win in scene.windows) {
-                        if (win.isKeyWindow) {
-                            window = win;
-                            break;
-                        }
-                    }
-                }
-                if (window) break;
-            }
-        }
-        if (!window) {
-            window = [UIApplication sharedApplication].windows.firstObject;
-        }
-        
-        if (window) {
-            UIViewController *rootVC = window.rootViewController;
-            if (rootVC) {
-                EriMenuViewController *menuVC = [[EriMenuViewController alloc] init];
-                menuVC.view.frame = window.bounds;
-                menuVC.view.userInteractionEnabled = YES;
-                [rootVC addChildViewController:menuVC];
-                [rootVC.view addSubview:menuVC.view];
-                [menuVC didMoveToParentViewController:rootVC];
-            }
-        }
-    });
+    return 0;
 }
