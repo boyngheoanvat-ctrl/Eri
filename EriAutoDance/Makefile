@@ -7,7 +7,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = EriAutoDance
 
 EriAutoDance_FILES = main.mm
-EriAutoDance_CFLAGS = -fobjc-arc -I. -DLUA_32BITS
-EriAutoDance_CCFLAGS = -std=c++11 -fno-rtti -fno-exceptions -DLUA_32BITS
+EriAutoDance_CFLAGS = -fobjc-arc
+EriAutoDance_CCFLAGS = -std=c++11 -fno-rtti -fno-exceptions
 
 include $(THEOS_MAKE_PATH)/tweak.mk
