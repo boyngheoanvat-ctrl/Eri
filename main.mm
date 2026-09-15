@@ -1,5 +1,6 @@
-// main.mm — AutoDance HexControl v7 (Dynamic IL2CPP Resolution)
+// main.mm — AutoDance HexControl v8 (Dynamic API + Floating Menu)
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #include <pthread.h>
 #include <dlfcn.h>
 #include <stdint.h>
@@ -7,7 +8,7 @@
 #include <substrate.h>
 
 // ============================================================
-// 1) Dynamic IL2CPP Function Pointers (Tránh lỗi Undefined Symbols)
+// 1) Dynamic IL2CPP Function Pointers
 // ============================================================
 typedef const void* (*il2cpp_domain_get_t)(void);
 typedef size_t (*il2cpp_domain_get_assembly_count_t)(const void *domain);
@@ -28,9 +29,7 @@ static il2cpp_field_get_offset_t           p_il2cpp_field_get_offset = nullptr;
 static il2cpp_class_get_method_from_name_t p_il2cpp_class_get_method_from_name = nullptr;
 
 static void InitIL2CPPAPIs() {
-    // Lấy handle của tiến trình hoặc libil2cpp trực tiếp lúc runtime
     void* handle = RTLD_DEFAULT; 
-    
     p_il2cpp_domain_get = (il2cpp_domain_get_t)dlsym(handle, "il2cpp_domain_get");
     p_il2cpp_domain_get_assembly_count = (il2cpp_domain_get_assembly_count_t)dlsym(handle, "il2cpp_domain_get_assembly_count");
     p_il2cpp_domain_get_assembly = (il2cpp_domain_get_assembly_t)dlsym(handle, "il2cpp_domain_get_assembly");
@@ -39,8 +38,6 @@ static void InitIL2CPPAPIs() {
     p_il2cpp_class_get_field_from_name = (il2cpp_class_get_field_from_name_t)dlsym(handle, "il2cpp_class_get_field_from_name");
     p_il2cpp_field_get_offset = (il2cpp_field_get_offset_t)dlsym(handle, "il2cpp_field_get_offset");
     p_il2cpp_class_get_method_from_name = (il2cpp_class_get_method_from_name_t)dlsym(handle, "il2cpp_class_get_method_from_name");
-    
-    NSLog(@"[AutoDance] IL2CPP APIs resolved via dlsym.");
 }
 
 // ============================================================
@@ -81,11 +78,7 @@ static void ResolveOffsets() {
         void* f2 = p_il2cpp_class_get_field_from_name(agCls, "isHitBeat");
         if (f1) g_off.judgeLevel = p_il2cpp_field_get_offset(f1);
         if (f2) g_off.isHitBeat  = p_il2cpp_field_get_offset(f2);
-        NSLog(@"[AutoDance] AuditionGroup resolved — judgeLevel: %td, isHitBeat: %td", 
-              g_off.judgeLevel, g_off.isHitBeat);
         g_off.ready = true;
-    } else {
-        NSLog(@"[AutoDance] ⚠️ Dance.AuditionGroup not found yet, retrying later...");
     }
 }
 
@@ -115,39 +108,127 @@ static void hk_AuditionGroup_Update(void* self, void* method) {
 static void SetupHooks() {
     ResolveOffsets();
     void* agCls = FindClass("Dance", "AuditionGroup");
-    if (!agCls || !p_il2cpp_class_get_method_from_name) {
-        NSLog(@"[AutoDance] SetupHooks failed: AuditionGroup class missing.");
-        return;
-    }
+    if (!agCls || !p_il2cpp_class_get_method_from_name) return;
 
     void* updateMethod = p_il2cpp_class_get_method_from_name(agCls, "Update", 0);
     if (updateMethod) {
         void* funcAddress = *(void**)((uintptr_t)updateMethod);
-        
         if (funcAddress) {
             MSHookFunction(funcAddress, (void*)&hk_AuditionGroup_Update, (void**)&orig_AuditionGroup_Update);
-            NSLog(@"[AutoDance] Successfully hooked AuditionGroup::Update at %p", funcAddress);
-        } else {
-            NSLog(@"[AutoDance] ⚠️ Method pointer address is NULL.");
         }
-    } else {
-        NSLog(@"[AutoDance] ⚠️ Update method not found in AuditionGroup.");
     }
 }
 
 // ============================================================
-// 4) Dylib Entry Point
+// 4) Floating Menu UI Implementation
+// ============================================================
+@interface AutoDanceMenuController : NSObject
+@property (nonatomic, strong) UIButton *floatingButton;
+@property (nonatomic, strong) UIView *menuView;
+@end
+
+@implementation AutoDanceMenuController
+
++ल्फ़ (instancetype)sharedInstance {
+    static AutoDanceMenuController *sharedInstance = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        sharedInstance = [[AutoDanceMenuController alloc] init];
+    });
+    return sharedInstance;
+}
+
+- (void)showMenu {
+    UIWindow *keyWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                for (UIWindow *window in scene.windows) {
+                    if (window.isKeyWindow) {
+                        keyWindow = window;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (!keyWindow) keyWindow = [UIApplication sharedApplication].keyWindow;
+
+    // 1. Floating Button (Nút icon nổi trên màn hình)
+    self.floatingButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.floatingButton.frame = CGRectMake(20, 100, 50, 50);
+    self.floatingButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:0.8];
+    [self.floatingButton setTitle:@"💃" forState:UIControlStateNormal];
+    self.floatingButton.layer.cornerRadius = 25;
+    self.floatingButton.layer.borderWidth = 1.5;
+    self.floatingButton.layer.borderColor = [[UIColor cyanColor] CGColor];
+    [self.floatingButton addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
+    
+    // Thêm gesture để kéo thả nút floating
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(buttonDragged:)];
+    [self.floatingButton addGestureRecognizer:pan];
+
+    [keyWindow addSubview:self.floatingButton];
+
+    // 2. Menu View (Bảng điều khiển chính)
+    self.menuView = [[UIView alloc] initWithFrame:CGRectMake(80, 100, 220, 160)];
+    self.menuView.backgroundColor = [UIColor colorWithRed:0.05 green:0.05 blue:0.05 alpha:0.9];
+    self.menuView.layer.cornerRadius = 12;
+    self.menuView.layer.borderWidth = 1;
+    self.menuView.layer.borderColor = [[UIColor cyanColor] CGColor];
+    self.menuView.hidden = YES;
+
+    // Tiêu đề Menu
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, 200, 30)];
+    titleLabel.text = @"AutoDance HexControl";
+    titleLabel.textColor = [UIColor cyanColor];
+    titleLabel.font = [UIFont boldSystemFontOfSize:14];
+    titleLabel.textAlignment = NSTextAlignmentCenter;
+    [self.menuView addSubview:titleLabel];
+
+    // Công tắc bật/tắt Auto Dance
+    UILabel *switchLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 60, 130, 30)];
+    switchLabel.text = @"Auto Perfect";
+    switchLabel.textColor = [UIColor whiteColor];
+    switchLabel.font = [UIFont systemFontOfSize:14];
+    [self.menuView addSubview:switchLabel];
+
+    UISwitch *toggleSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(150, 60, 0, 0)];
+    toggleSwitch.on = g_AutoDanceOn;
+    [toggleSwitch addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
+    [self.menuView addSubview:toggleSwitch];
+
+    [keyWindow addSubview:self.menuView];
+}
+
+- (void)toggleMenu {
+    self.menuView.hidden = !self.menuView.hidden;
+}
+
+- (void)switchChanged:(UISwitch *)sender {
+    g_AutoDanceOn = sender.isOn;
+}
+
+- (void)buttonDragged:(UIPanGestureRecognizer *)gesture {
+    UIWindow *window = self.floatingButton.window;
+    CGPoint translation = [gesture translationInView:window];
+    CGPoint center = self.floatingButton.center;
+    self.floatingButton.center = CGPointMake(center.x + translation.x, center.y + translation.y);
+    [gesture setTranslation:CGPointZero inView:window];
+}
+
+@end
+
+// ============================================================
+// 5) Dylib Entry Point
 // ============================================================
 __attribute__((constructor))
 static void InitDylib() {
-    NSLog(@"╔══════════════════════════════════════════╗");
-    NSLog(@"║  MOD BY ERI NGUYỄN                       ║");
-    NSLog(@"╚══════════════════════════════════════════╝");
-
     dispatch_after(
-        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)),
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(6 * NSEC_PER_SEC)),
         dispatch_get_main_queue(), ^{
             SetupHooks();
+            [[AutoDanceMenuController sharedInstance] showMenu];
         }
     );
 }
