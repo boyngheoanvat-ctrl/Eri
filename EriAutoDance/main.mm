@@ -5,7 +5,6 @@ static BOOL g_activeOn = NO;
 static int g_modifiedCount = 0;
 static time_t g_lastCheck = 0;
 static int g_lastCount = 0;
-static NSString *g_statusText = @"Sẵn sàng. Bật toggle để chạy tự động.";
 
 static void applyCombinedMod(BOOL enable) {
     int count = 0;
@@ -54,6 +53,7 @@ static void applyCombinedMod(BOOL enable) {
 @property (nonatomic, strong) UIButton *floatingButton;
 @property (nonatomic, strong) UIView *menuView;
 @property (nonatomic, strong) UILabel *statusLabel;
+-(void)setupUI;
 @end
 
 @implementation EriMenuController
@@ -62,12 +62,12 @@ static void applyCombinedMod(BOOL enable) {
     static EriMenuController *sharedInstance = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        sharedInstance = [[self alloc] init];
+        sharedInstance = [[EriMenuController alloc] initPrivate];
     });
     return sharedInstance;
 }
 
-- (instancetype)init {
+-(instancetype)initPrivate {
     self = [super init];
     if (self) {
         [self performSelector:@selector(setupUI) withObject:nil afterDelay:3.0];
@@ -75,7 +75,7 @@ static void applyCombinedMod(BOOL enable) {
     return self;
 }
 
-- (void)setupUI {
+-(void)setupUI {
     UIWindow *keyWindow = nil;
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
@@ -90,7 +90,10 @@ static void applyCombinedMod(BOOL enable) {
         }
     }
     if (!keyWindow) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
         keyWindow = [UIApplication sharedApplication].keyWindow;
+#pragma clang diagnostic pop
     }
     if (!keyWindow) return;
 
@@ -146,11 +149,11 @@ static void applyCombinedMod(BOOL enable) {
     [keyWindow addSubview:self.menuView];
 }
 
-- (void)toggleMenu:(UIButton *)sender {
+-(void)toggleMenu:(UIButton *)sender {
     self.menuView.hidden = !self.menuView.hidden;
 }
 
-- (void)switchChanged:(UISwitch *)sender {
+-(void)switchChanged:(UISwitch *)sender {
     g_activeOn = sender.isOn;
     if (g_activeOn) {
         applyCombinedMod(YES);
@@ -160,7 +163,7 @@ static void applyCombinedMod(BOOL enable) {
     }
 }
 
-- (void)resetTapped:(UIButton *)sender {
+-(void)resetTapped:(UIButton *)sender {
     g_activeOn = NO;
     g_modifiedCount = 0;
     self.statusLabel.text = @"Đã reset trạng thái.";
