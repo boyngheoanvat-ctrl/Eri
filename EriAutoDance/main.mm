@@ -8,32 +8,21 @@ static int g_PatchedCount = 0;
 static UILabel *g_StatusLabel = nil;
 static UILabel *g_CountLabel = nil;
 
-// Hàm can thiệp trực tiếp vào offset bộ nhớ của đối tượng AuditionGroup & TrackCtrl
+// Ham patch offset bo nhieu truc tiep
 void ApplyIl2CppMemoryPatch(bool enable) {
     int modified = 0;
     @autoreleasepool {
-        // Lấy base address của image nhị phân (thường là UnityFramework hoặc main executable trong Il2Cpp)
-        // Ta dùng phương pháp quét qua các instance active của class thông qua il2cpp domain nếu cần,
-        // hoặc hook trực tiếp vào RVA của hàm set_IsPlaying / get_IsPlaying đã có:
-        
         if (enable) {
-            // Định nghĩa RVA chuẩn xác từ bảng phân tích của bạn:
-            // get_IsPlaying: 0x16D22B4
-            // set_IsPlaying: 0x170CB8C
-            uintptr_t slide = 0; // Sẽ được tự động tính dựa trên ASLR của tiến trình
+            uintptr_t slide = 0;
             
-            // Tìm kiếm các class bằng tên chuẩn Il2Cpp (hỗ trợ cả dạng phân tách namespace dấu chấm hoặc gạch dưới)
             Class auditionClass = objc_getClass("Dance.AuditionGroup");
             if (!auditionClass) auditionClass = objc_getClass("Dance_AuditionGroup");
             
             Class trackClass = objc_getClass("GuidTrackDanceNoteCtrl");
             if (!trackClass) trackClass = objc_getClass("GuidTrackDanceNoteCtrl_");
 
-            // Nếu tìm thấy class trong runtime objective-c bridging của Il2Cpp assembly:
             if (auditionClass || trackClass) {
                 modified++;
-                // Thực hiện ghi đè giá trị judgeLevel = 4 (Perfect) và isHitBeat = true (offset 0x32, 0x40)
-                // Lưu ý: Việc thực thi này diễn ra mỗi chu kỳ vòng lặp ngầm khi bật Switch.
             }
         }
     }
@@ -43,17 +32,79 @@ void ApplyIl2CppMemoryPatch(bool enable) {
         if (g_CountLabel) {
             g_CountLabel.text = [NSString stringWithFormat:@"Patched Target: %d", g_PatchedCount];
             if (g_PatchedCount > 0) {
-                g_StatusLabel.text = @"Trạng thái: Đang ép Perfect (Offset Active)!";
+                g_StatusLabel.text = @"Trang thai: Dang ep Perfect (Offset Active)!";
                 g_StatusLabel.textColor = [UIColor greenColor];
             } else {
-                g_StatusLabel.text = @"Trạng thái: Chờ vào màn chơi (Match)...";
+                g_StatusLabel.text = @"Trang thai: Cho vao man choi (Match)...";
                 g_StatusLabel.textColor = [UIColor orangeColor];
             }
         }
     });
 }
 
-// Giao diện Menu Nổi
+// Button icon chu meo keo tha tu do
+@interface EriFloatingButton : UIButton
+@end
+
+@implementation EriFloatingButton {
+    CGPoint touchLocation;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+        UIImage *iconImage = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"cat_icon" ofType:@"png"]];
+        if (!iconImage) {
+            iconImage = [UIImage imageNamed:@"cat_icon.png"];
+        }
+        
+        if (iconImage) {
+            [self setImage:iconImage forState:UIControlStateNormal];
+            self.imageView.contentMode = UIViewContentModeScaleAspectFill;
+        }
+        
+        self.backgroundColor = [UIColor colorWithWhite:0.15f alpha:0.9f];
+        self.layer.cornerRadius = frame.size.width / 2.0f;
+        self.clipsToBounds = YES;
+        self.layer.borderWidth = 2.0f;
+        self.layer.borderColor = [UIColor purpleColor].CGColor;
+        self.layer.shadowColor = [UIColor blackColor].CGColor;
+        self.layer.shadowOffset = CGSizeMake(0, 3);
+        self.layer.shadowRadius = 4.0f;
+        self.layer.shadowOpacity = 0.6f;
+    }
+    return self;
+}
+
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    [super touchesBegan:touches withEvent:event];
+    UITouch *touch = [touches anyObject];
+    touchLocation = [touch locationInView:self.superview];
+}
+
+- (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    UITouch *touch = [touches anyObject];
+    CGPoint currentLocation = [touch locationInView:self.superview];
+    
+    CGFloat deltaX = currentLocation.x - touchLocation.x;
+    CGFloat deltaY = currentLocation.y - touchLocation.y;
+    
+    CGPoint newCenter = CGPointMake(self.center.x + deltaX, self.center.y + deltaY);
+    
+    CGFloat halfW = self.frame.size.width / 2.0f;
+    CGFloat halfH = self.frame.size.height / 2.0f;
+    CGSize screenBounds = [UIScreen mainScreen].bounds.size;
+    
+    newCenter.x = MAX(halfW, MIN(screenBounds.width - halfW, newCenter.x));
+    newCenter.y = MAX(halfH, MIN(screenBounds.height - halfH, newCenter.y));
+    
+    self.center = newCenter;
+    touchLocation = currentLocation;
+}
+@end
+
+// Giao dien Menu Noi
 @interface EriMenuViewController : UIViewController
 @end
 
@@ -72,7 +123,7 @@ void ApplyIl2CppMemoryPatch(bool enable) {
     [self.view addSubview:menuView];
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, 240, 30)];
-    titleLabel.text = @"Mod By ERI NGUYỄN";
+    titleLabel.text = @"Mod By ERI NGUYEN";
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:15];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -96,18 +147,14 @@ void ApplyIl2CppMemoryPatch(bool enable) {
     [menuView addSubview:g_CountLabel];
     
     g_StatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 125, 230, 40)];
-    g_StatusLabel.text = @"Trạng thái: Sẵn sàng";
+    g_StatusLabel.text = @"Trang thai: San sang";
     g_StatusLabel.textColor = [UIColor lightGrayColor];
     g_StatusLabel.font = [UIFont systemFontOfSize:12];
     g_StatusLabel.numberOfLines = 2;
     [menuView addSubview:g_StatusLabel];
     
-    UIButton *floatBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    floatBtn.frame = CGRectMake(20, 40, 45, 45);
-    floatBtn.backgroundColor = [UIColor purpleColor];
-    [floatBtn setTitle:@"ERI" forState:UIControlStateNormal];
-    floatBtn.titleLabel.font = [UIFont boldSystemFontOfSize:12];
-    floatBtn.layer.cornerRadius = 22.5f;
+    // Tao icon chu meo noi tren man hinh
+    EriFloatingButton *floatBtn = [[EriFloatingButton alloc] initWithFrame:CGRectMake(20, 40, 50, 50)];
     [floatBtn addTarget:self action:@selector(toggleMenuVisibility) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:floatBtn];
 }
@@ -115,10 +162,10 @@ void ApplyIl2CppMemoryPatch(bool enable) {
 - (void)toggleChanged:(UISwitch *)sender {
     g_ActiveOn = sender.isOn;
     if (g_ActiveOn) {
-        g_StatusLabel.text = @"Đã BẬT. Đang ghi đè Offset...";
+        g_StatusLabel.text = @"Da BAT. Dang ghi de Offset...";
         g_StatusLabel.textColor = [UIColor greenColor];
     } else {
-        g_StatusLabel.text = @"Đã TẮT tính năng.";
+        g_StatusLabel.text = @"Da TAT tinh nang.";
         g_StatusLabel.textColor = [UIColor lightGrayColor];
     }
 }
