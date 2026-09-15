@@ -28,4 +28,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: AutoDanceTweak-dylib
-        path: AutoDanceTweak/.theos/obj/debug/EriAutoDance.dylib
+        path: AutoDanceTweak/.theos/obj/debug/AutoDanceTweak.dylib
