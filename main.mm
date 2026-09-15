@@ -1,4 +1,4 @@
-// main.mm — AutoDance HexControl v8 (Dynamic API + Floating Menu)
+// main.mm — AutoDance HexControl v9 (Dynamic API + Floating Menu Fixed)
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #include <pthread.h>
@@ -129,7 +129,7 @@ static void SetupHooks() {
 
 @implementation AutoDanceMenuController
 
-+ल्फ़ (instancetype)sharedInstance {
++ (instancetype)sharedInstance {
     static AutoDanceMenuController *sharedInstance = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -139,7 +139,11 @@ static void SetupHooks() {
 }
 
 - (void)showMenu {
-    UIWindow *keyWindow = nil;
+    __block UIWindow *keyWindow = nil;
+    
+    // Tắt kiểm tra warning deprecated bằng pragmas
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
@@ -152,9 +156,14 @@ static void SetupHooks() {
             }
         }
     }
-    if (!keyWindow) keyWindow = [UIApplication sharedApplication].keyWindow;
+    if (!keyWindow) {
+        keyWindow = [UIApplication sharedApplication].keyWindow;
+    }
+#pragma clang diagnostic pop
 
-    // 1. Floating Button (Nút icon nổi trên màn hình)
+    if (!keyWindow) return;
+
+    // 1. Floating Button
     self.floatingButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.floatingButton.frame = CGRectMake(20, 100, 50, 50);
     self.floatingButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:0.8];
@@ -164,13 +173,12 @@ static void SetupHooks() {
     self.floatingButton.layer.borderColor = [[UIColor cyanColor] CGColor];
     [self.floatingButton addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
     
-    // Thêm gesture để kéo thả nút floating
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(buttonDragged:)];
     [self.floatingButton addGestureRecognizer:pan];
 
     [keyWindow addSubview:self.floatingButton];
 
-    // 2. Menu View (Bảng điều khiển chính)
+    // 2. Menu View
     self.menuView = [[UIView alloc] initWithFrame:CGRectMake(80, 100, 220, 160)];
     self.menuView.backgroundColor = [UIColor colorWithRed:0.05 green:0.05 blue:0.05 alpha:0.9];
     self.menuView.layer.cornerRadius = 12;
@@ -178,7 +186,6 @@ static void SetupHooks() {
     self.menuView.layer.borderColor = [[UIColor cyanColor] CGColor];
     self.menuView.hidden = YES;
 
-    // Tiêu đề Menu
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, 200, 30)];
     titleLabel.text = @"AutoDance HexControl";
     titleLabel.textColor = [UIColor cyanColor];
@@ -186,7 +193,6 @@ static void SetupHooks() {
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.menuView addSubview:titleLabel];
 
-    // Công tắc bật/tắt Auto Dance
     UILabel *switchLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 60, 130, 30)];
     switchLabel.text = @"Auto Perfect";
     switchLabel.textColor = [UIColor whiteColor];
