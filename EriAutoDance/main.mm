@@ -1,6 +1,13 @@
 #import <Foundation/Foundation.h>
 
-// Khai báo cấu trúc ImGui để trình biên dịch không báo lỗi
+// 1. Định nghĩa struct ImVec2 trước tiên
+struct ImVec2 {
+    float x, y;
+    ImVec2() : x(0.0f), y(0.0f) {}
+    ImVec2(float _x, float _y) : x(_x), y(_y) {}
+};
+
+// 2. Sau đó mới khai báo namespace ImGui sử dụng ImVec2
 namespace ImGui {
     bool Begin(const char* name, bool* p_open = NULL, int flags = 0);
     void End();
@@ -10,12 +17,6 @@ namespace ImGui {
     bool Button(const char* label, const ImVec2& size = ImVec2(0,0));
     void SetNextWindowSize(float width, float height, int cond = 0);
 }
-
-struct ImVec2 {
-    float x, y;
-    ImVec2() : x(0.0f), y(0.0f) {}
-    ImVec2(float _x, float _y) : x(_x), y(_y) {}
-};
 
 static BOOL g_activeOn = NO;
 static int g_modifiedCount = 0;
