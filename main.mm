@@ -3,8 +3,8 @@
 #include <pthread.h>
 #include <atomic>
 #include <vector>
+#include <dlfcn.h>
 
-// --- Định nghĩa cấu trúc IL2CPP tối thiểu để quét heap ---
 struct Il2CppObject;
 struct Il2CppClass;
 
@@ -19,7 +19,6 @@ typedef struct Il2CppImage {
     void* assembly;
 } Il2CppImage;
 
-// Khai báo hàm API từ runtime IL2CPP của game
 extern "C" {
     Il2CppDomain* il2cpp_domain_get(void);
     size_t il2cpp_domain_get_assemblies(const Il2CppDomain* domain, size_t* size);
@@ -27,20 +26,17 @@ extern "C" {
     void il2cpp_gc_foreach_heap_object(void(*callback)(Il2CppObject*, void*), void* user_data);
 }
 
-// --- Cấu hình Offset chuẩn ---
-static const uint32_t OFF_JUDGE_LEVEL = 0x40;   // int32
-static const uint32_t OFF_IS_HIT_BEAT  = 0x32;  // bool
-static const uint32_t OFF_IS_PLAY      = 0x198; // bool
+static const uint32_t OFF_JUDGE_LEVEL = 0x40;   
+static const uint32_t OFF_IS_HIT_BEAT  = 0x32;  
+static const uint32_t OFF_IS_PLAY      = 0x198; 
 static const int32_t  PERFECT          = 4;     
 
 static std::atomic<bool> g_isHackActive{false};
 static int g_modifiedObjectsCount = 0;
 
-// Lưu trữ danh sách object tìm thấy để ép giá trị liên tục mỗi vòng lặp
 static std::vector<void*> g_cachedAuditionGroups;
 static std::vector<void*> g_cachedTrackCtrls;
 
-// Callback quét heap bộ nhớ tìm instance của class
 static Il2CppClass* g_targetAuditionClass = nullptr;
 static Il2CppClass* g_targetTrackCtrlClass = nullptr;
 
@@ -170,7 +166,6 @@ static void HeapObjectCallback(Il2CppObject* obj, void* user_data) {
 
 @end
 
-// --- Vòng lặp chạy ngầm thực thi logic hack trực tiếp vào bộ nhớ ---
 void* HackLoopThread(void* arg) {
     while (true) {
         if (g_isHackActive.load()) {
@@ -181,7 +176,6 @@ void* HackLoopThread(void* arg) {
                     size_t assemblyCount = 0;
                     Il2CppImage** assemblies = (Il2CppImage**)il2cpp_domain_get_assemblies(domain, &assemblyCount);
                     
-                    // Tìm class nếu chưa tìm được
                     if (!g_targetAuditionClass || !g_targetTrackCtrlClass) {
                         for (size_t i = 0; i < assemblyCount; i++) {
                             if (!g_targetAuditionClass) {
@@ -193,16 +187,12 @@ void* HackLoopThread(void* arg) {
                         }
                     }
 
-                    // Nếu tìm thấy class, tiến hành quét heap và ghi đè offset
                     if (g_targetAuditionClass || g_targetTrackCtrlClass) {
                         g_cachedAuditionGroups.clear();
                         g_cachedTrackCtrls.clear();
                         
-                        if (il2cpp_gc_foreach_heap_object) {
-                            il2cpp_gc_foreach_heap_object(HeapObjectCallback, nullptr);
-                        }
+                        il2cpp_gc_foreach_heap_object(HeapObjectCallback, nullptr);
 
-                        // Ghi đè AuditionGroup (JudgeLevel = PERFECT (4), IsHitBeat = true)
                         for (void* obj : g_cachedAuditionGroups) {
                             if (obj) {
                                 *(int32_t*)((uint8_t*)obj + OFF_JUDGE_LEVEL) = PERFECT;
@@ -211,7 +201,6 @@ void* HackLoopThread(void* arg) {
                             }
                         }
 
-                        // Ghi đè TrackCtrl (IsPlaying = true)
                         for (void* obj : g_cachedTrackCtrls) {
                             if (obj) {
                                 *(bool*)((uint8_t*)obj + OFF_IS_PLAY) = true;
@@ -222,12 +211,12 @@ void* HackLoopThread(void* arg) {
                 }
                 
                 g_modifiedObjectsCount = currentModified;
-                [[EriMenuController sharedInstance] performSelectorOnMainThread:@selector(updateStatusTextCount:) withObject:@(currentModified) waitUntilDone:NO];
+                [[EriMenuController sharedInstance] performSelectorOnMainThread:@selector(updateStatusTextCount:) withObject:@(numberWithInt:currentModified) waitUntilDone:NO];
             } @catch (NSException *exception) {
                 NSLog(@"[EriError]: %@", exception.reason);
             }
         }
-        usleep(500000); // Quét liên tục mỗi 0.5 giây để đảm bảo bắt trọn các nốt nhạc trong trận
+        usleep(500000);
     }
     return NULL;
 }
