@@ -1,15 +1,13 @@
 #import <Foundation/Foundation.h>
 
-// Khai báo nguyên mẫu C cho Lua
+// Khai báo chuẩn C cho Lua
 extern "C" {
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
 }
 
-// -----------------------------------------------------------------
-// Hàm C/Objective-C để mở rộng (Ví dụ: ImGui bridge hoặc log)
-// -----------------------------------------------------------------
+// Hàm giao tiếp log từ Lua ra Native Console
 static int l_nativeLog(lua_State *L) {
     const char *msg = lua_tostring(L, 1);
     if (msg) {
@@ -20,7 +18,7 @@ static int l_nativeLog(lua_State *L) {
 
 int main(int argc, char *argv[]) {
     @autoreleasepool {
-        NSLog(@"=== KHOI DONG MOI TRUONG LUA & SCRIPT AUTO-DANCE ===");
+        NSLog(@"=== KHOI DONG MOI TRUONG LUA & AUTO-DANCE ===");
         
         // 1. Khởi tạo Lua State
         lua_State *L = luaL_newstate();
@@ -29,13 +27,13 @@ int main(int argc, char *argv[]) {
             return -1;
         }
         
-        // 2. Nạp thư viện chuẩn
+        // 2. Mở thư viện chuẩn Lua
         luaL_openlibs(L);
         
-        // 3. Đăng ký hàm giao tiếp native (nếu cần)
+        // 3. Đăng ký hàm native
         lua_register(L, "nativeLog", l_nativeLog);
         
-        // 4. Đoạn mã script Lua 'AutoDance HexControl v4' của bạn
+        // 4. Đoạn mã script Lua 'AutoDance HexControl v4'
         const char *autoDanceScript = R"lua(
 -- AutoDance HexControl v4 — Auto Re-apply New Match (Optimized & Lag-free)
 local state = {
@@ -91,7 +89,6 @@ local function applyCombinedMod(enable)
 end
 
 function OnDraw()
-  -- Cơ chế thông minh: Chỉ kiểm tra định kỳ nhẹ nhàng mỗi 2 giây khi bật toggle 
   local currentTime = os.time()
   if state.activeOn and (currentTime - state.lastCheck >= 2) then
     state.lastCheck = currentTime
@@ -110,7 +107,7 @@ function OnDraw()
       if c1 then
         state.activeOn = v1
         if v1 then
-          local count = applyCombinedMod(true)
+          applyCombinedMod(true)
           state.status = "Đã BẬT. Đang theo dõi trận đấu..."
         else
           state.status = "Đã TẮT tính năng."
@@ -136,7 +133,7 @@ function OnStop()
   nativeLog("AutoDance HexControl v4 stopped.")
 end
 
-nativeLog("AutoDance HexControl v4 da duoc nap thanh cong vao Lua State!")
+nativeLog("AutoDance HexControl v4 da duoc nap thanh cong!")
         )lua";
         
         // 5. Thực thi script Lua
@@ -146,13 +143,9 @@ nativeLog("AutoDance HexControl v4 da duoc nap thanh cong vao Lua State!")
             lua_pop(L, 1);
         }
         
-        // (Tùy chọn) Gọi hàm OnDraw hoặc OnStop giả lập vòng lặp nếu app chạy luồng native
-        // lua_getglobal(L, "OnDraw");
-        // if (lua_isfunction(L, -1)) { lua_pcall(L, 0, 0, 0); } else { lua_pop(L, 1); }
-
-        // 6. Dọn dẹp (nếu chương trình kết thúc)
+        // 6. Đóng trạng thái khi kết thúc (hoặc giữ lại tùy cấu trúc vòng lặp tweak)
         // lua_close(L);
-        NSLog(@"=== HOAN TAT NAP SCRIPT VAO MOI TRUONG OBJECTIVE-C ===");
+        NSLog(@"=== HOAN TAT KHOI TAO MOI TRUONG ===");
     }
     return 0;
 }
