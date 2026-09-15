@@ -1,8 +1,0 @@
-#pragma once
-typedef struct lua_State lua_State;
-typedef int (*lua_CFunction) (lua_State *L);
-
-#define LUA_OK 0
-#define lua_pop(L,n) ((void)0)
-#define lua_tostring(L,i) ""
-#define lua_pushstring(L,s) ((void)0)
