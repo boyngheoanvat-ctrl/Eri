@@ -2,15 +2,57 @@
 #import <UIKit/UIKit.h>
 #include <pthread.h>
 #include <atomic>
+#include <vector>
+
+// --- Định nghĩa cấu trúc IL2CPP tối thiểu để quét heap ---
+struct Il2CppObject;
+struct Il2CppClass;
+
+typedef struct Il2CppDomain {
+    void* domain;
+    void* setup;
+} Il2CppDomain;
+
+typedef struct Il2CppImage {
+    const char* name;
+    const char* nameWithoutExtension;
+    void* assembly;
+} Il2CppImage;
+
+// Khai báo hàm API từ runtime IL2CPP của game
+extern "C" {
+    Il2CppDomain* il2cpp_domain_get(void);
+    size_t il2cpp_domain_get_assemblies(const Il2CppDomain* domain, size_t* size);
+    Il2CppClass* il2cpp_class_from_name(const Il2CppImage* image, const char* namespaze, const char* name);
+    void il2cpp_gc_foreach_heap_object(void(*callback)(Il2CppObject*, void*), void* user_data);
+}
 
 // --- Cấu hình Offset chuẩn ---
-static const uint32_t OFF_JUDGE_LEVEL __attribute__((unused)) = 0x40;   
-static const uint32_t OFF_IS_HIT_BEAT  __attribute__((unused)) = 0x32;  
-static const uint32_t OFF_IS_PLAY      __attribute__((unused)) = 0x198; 
-static const int32_t  PERFECT          __attribute__((unused)) = 4;     
+static const uint32_t OFF_JUDGE_LEVEL = 0x40;   // int32
+static const uint32_t OFF_IS_HIT_BEAT  = 0x32;  // bool
+static const uint32_t OFF_IS_PLAY      = 0x198; // bool
+static const int32_t  PERFECT          = 4;     
 
 static std::atomic<bool> g_isHackActive{false};
 static int g_modifiedObjectsCount = 0;
+
+// Lưu trữ danh sách object tìm thấy để ép giá trị liên tục mỗi vòng lặp
+static std::vector<void*> g_cachedAuditionGroups;
+static std::vector<void*> g_cachedTrackCtrls;
+
+// Callback quét heap bộ nhớ tìm instance của class
+static Il2CppClass* g_targetAuditionClass = nullptr;
+static Il2CppClass* g_targetTrackCtrlClass = nullptr;
+
+static void HeapObjectCallback(Il2CppObject* obj, void* user_data) {
+    if (!obj) return;
+    Il2CppClass* klass = *(Il2CppClass**)(obj);
+    if (klass == g_targetAuditionClass) {
+        g_cachedAuditionGroups.push_back((void*)obj);
+    } else if (klass == g_targetTrackCtrlClass) {
+        g_cachedTrackCtrls.push_back((void*)obj);
+    }
+}
 
 @interface EriMenuController : NSObject
 @property (nonatomic, strong) UIButton *floatingButton;
@@ -60,7 +102,6 @@ static int g_modifiedObjectsCount = 0;
     }
     if (!keyWindow) return;
 
-    // Nút nổi trên màn hình
     self.floatingButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.floatingButton.frame = CGRectMake(30, 120, 55, 55);
     self.floatingButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.6 blue:0.9 alpha:0.9];
@@ -73,7 +114,6 @@ static int g_modifiedObjectsCount = 0;
     [self.floatingButton addTarget:self action:@selector(toggleMenuVisibility:) forControlEvents:UIControlEventTouchUpInside];
     [keyWindow addSubview:self.floatingButton];
 
-    // Khung Menu
     self.menuView = [[UIView alloc] initWithFrame:CGRectMake(95, 120, 260, 200)];
     self.menuView.backgroundColor = [UIColor colorWithWhite:0.12 alpha:0.95];
     self.menuView.layer.cornerRadius = 14;
@@ -130,16 +170,55 @@ static int g_modifiedObjectsCount = 0;
 
 @end
 
-// --- Vòng lặp chạy ngầm thực thi logic hack ---
+// --- Vòng lặp chạy ngầm thực thi logic hack trực tiếp vào bộ nhớ ---
 void* HackLoopThread(void* arg) {
     while (true) {
         if (g_isHackActive.load()) {
             int currentModified = 0;
             @try {
-                // Thực hiện quét / tác động dựa trên offset đã định nghĩa
-                // (Sử dụng trực tiếp các biến cấu hình để triệt tiêu hoàn toàn lỗi unused variable)
-                if (OFF_JUDGE_LEVEL == 0x40 && PERFECT == 4) {
-                    currentModified++; 
+                Il2CppDomain* domain = il2cpp_domain_get();
+                if (domain) {
+                    size_t assemblyCount = 0;
+                    Il2CppImage** assemblies = (Il2CppImage**)il2cpp_domain_get_assemblies(domain, &assemblyCount);
+                    
+                    // Tìm class nếu chưa tìm được
+                    if (!g_targetAuditionClass || !g_targetTrackCtrlClass) {
+                        for (size_t i = 0; i < assemblyCount; i++) {
+                            if (!g_targetAuditionClass) {
+                                g_targetAuditionClass = il2cpp_class_from_name(assemblies[i], "Dance", "AuditionGroup");
+                            }
+                            if (!g_targetTrackCtrlClass) {
+                                g_targetTrackCtrlClass = il2cpp_class_from_name(assemblies[i], "", "GuidTrackDanceNoteCtrl");
+                            }
+                        }
+                    }
+
+                    // Nếu tìm thấy class, tiến hành quét heap và ghi đè offset
+                    if (g_targetAuditionClass || g_targetTrackCtrlClass) {
+                        g_cachedAuditionGroups.clear();
+                        g_cachedTrackCtrls.clear();
+                        
+                        if (il2cpp_gc_foreach_heap_object) {
+                            il2cpp_gc_foreach_heap_object(HeapObjectCallback, nullptr);
+                        }
+
+                        // Ghi đè AuditionGroup (JudgeLevel = PERFECT (4), IsHitBeat = true)
+                        for (void* obj : g_cachedAuditionGroups) {
+                            if (obj) {
+                                *(int32_t*)((uint8_t*)obj + OFF_JUDGE_LEVEL) = PERFECT;
+                                *(bool*)((uint8_t*)obj + OFF_IS_HIT_BEAT) = true;
+                                currentModified++;
+                            }
+                        }
+
+                        // Ghi đè TrackCtrl (IsPlaying = true)
+                        for (void* obj : g_cachedTrackCtrls) {
+                            if (obj) {
+                                *(bool*)((uint8_t*)obj + OFF_IS_PLAY) = true;
+                                currentModified++;
+                            }
+                        }
+                    }
                 }
                 
                 g_modifiedObjectsCount = currentModified;
@@ -148,7 +227,7 @@ void* HackLoopThread(void* arg) {
                 NSLog(@"[EriError]: %@", exception.reason);
             }
         }
-        usleep(1500000); 
+        usleep(500000); // Quét liên tục mỗi 0.5 giây để đảm bảo bắt trọn các nốt nhạc trong trận
     }
     return NULL;
 }
@@ -160,6 +239,6 @@ __attribute__((constructor)) static void initEriDylib() {
         pthread_t t;
         pthread_create(&t, NULL, HackLoopThread, NULL);
         
-        NSLog(@"[EriAutoDance]: Dylib successfully loaded with Floating Menu!");
+        NSLog(@"[EriAutoDance]: Dylib successfully loaded with active memory injection!");
     }
 }
