@@ -1,4 +1,4 @@
-// main.mm — AutoDance HexControl v9 (Dynamic API + Floating Menu Fixed)
+// main.mm — AutoDance HexControl v4.2 (Dynamic IL2CPP + Floating Menu)
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #include <pthread.h>
@@ -41,17 +41,18 @@ static void InitIL2CPPAPIs() {
 }
 
 // ============================================================
-// 2) Configuration & Offsets
+// 2) Configuration & Offsets Mapping (tương đương Lua script)
 // ============================================================
 static const int    PERFECT_LEVEL   = 4;
 static bool         g_AutoDanceOn   = true;
 
 struct ModOffsets {
-    ptrdiff_t judgeLevel;
-    ptrdiff_t isHitBeat;
+    ptrdiff_t judgeLevel;     // offset 64
+    ptrdiff_t isHitBeat;      // offset 50
+    ptrdiff_t isPlay;         // offset 408 (GuidTrackDanceNoteCtrl)
     bool ready;
 };
-static ModOffsets g_off = {0, 0, false};
+static ModOffsets g_off = {0, 0, 0, false};
 
 static void* FindClass(const char* ns, const char* name) {
     if (!p_il2cpp_domain_get || !p_il2cpp_domain_get_assembly_count) return nullptr;
@@ -72,18 +73,29 @@ static void ResolveOffsets() {
     if (g_off.ready) return;
     InitIL2CPPAPIs();
 
+    // 1. Dance.AuditionGroup
     void* agCls = FindClass("Dance", "AuditionGroup");
     if (agCls && p_il2cpp_class_get_field_from_name && p_il2cpp_field_get_offset) {
         void* f1 = p_il2cpp_class_get_field_from_name(agCls, "judgeLevel");
         void* f2 = p_il2cpp_class_get_field_from_name(agCls, "isHitBeat");
         if (f1) g_off.judgeLevel = p_il2cpp_field_get_offset(f1);
         if (f2) g_off.isHitBeat  = p_il2cpp_field_get_offset(f2);
-        g_off.ready = true;
     }
+
+    // 2. GuidTrackDanceNoteCtrl
+    void* trCls = FindClass("", "GuidTrackDanceNoteCtrl");
+    if (trCls && p_il2cpp_class_get_field_from_name && p_il2cpp_field_get_offset) {
+        void* f3 = p_il2cpp_class_get_field_from_name(trCls, "isPlay");
+        if (f3) g_off.isPlay = p_il2cpp_field_get_offset(f3);
+    }
+
+    g_off.ready = true;
+    NSLog(@"[AutoDance v4.2] Offsets resolved -> judgeLevel: %td, isHitBeat: %td, isPlay: %td", 
+          g_off.judgeLevel, g_off.isHitBeat, g_off.isPlay);
 }
 
 // ============================================================
-// 3) Hook Implementation via MSHookFunction
+// 3) Hook Implementation (AuditionGroup::Update)
 // ============================================================
 typedef void (*AuditionGroup_Update_t)(void* self, void* method);
 static AuditionGroup_Update_t orig_AuditionGroup_Update = nullptr;
@@ -115,16 +127,18 @@ static void SetupHooks() {
         void* funcAddress = *(void**)((uintptr_t)updateMethod);
         if (funcAddress) {
             MSHookFunction(funcAddress, (void*)&hk_AuditionGroup_Update, (void**)&orig_AuditionGroup_Update);
+            NSLog(@"[AutoDance v4.2] Hooked AuditionGroup::Update successfully at %p", funcAddress);
         }
     }
 }
 
 // ============================================================
-// 4) Floating Menu UI Implementation
+// 4) Floating Menu UI Implementation (Giao diện tùy chỉnh)
 // ============================================================
 @interface AutoDanceMenuController : NSObject
 @property (nonatomic, strong) UIButton *floatingButton;
 @property (nonatomic, strong) UIView *menuView;
+@property (nonatomic, strong) UILabel *statusLabel;
 @end
 
 @implementation AutoDanceMenuController
@@ -141,7 +155,6 @@ static void SetupHooks() {
 - (void)showMenu {
     __block UIWindow *keyWindow = nil;
     
-    // Tắt kiểm tra warning deprecated bằng pragmas
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     if (@available(iOS 13.0, *)) {
@@ -163,46 +176,55 @@ static void SetupHooks() {
 
     if (!keyWindow) return;
 
-    // 1. Floating Button
+    // 1. Floating Button (Nút icon mở menu)
     self.floatingButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    self.floatingButton.frame = CGRectMake(20, 100, 50, 50);
-    self.floatingButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:0.8];
+    self.floatingButton.frame = CGRectMake(20, 120, 45, 45);
+    self.floatingButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:0.85];
     [self.floatingButton setTitle:@"💃" forState:UIControlStateNormal];
-    self.floatingButton.layer.cornerRadius = 25;
+    self.floatingButton.layer.cornerRadius = 22.5;
     self.floatingButton.layer.borderWidth = 1.5;
     self.floatingButton.layer.borderColor = [[UIColor cyanColor] CGColor];
     [self.floatingButton addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(buttonDragged:)];
     [self.floatingButton addGestureRecognizer:pan];
-
     [keyWindow addSubview:self.floatingButton];
 
-    // 2. Menu View
-    self.menuView = [[UIView alloc] initWithFrame:CGRectMake(80, 100, 220, 160)];
-    self.menuView.backgroundColor = [UIColor colorWithRed:0.05 green:0.05 blue:0.05 alpha:0.9];
+    // 2. Menu View (Bảng điều khiển)
+    self.menuView = [[UIView alloc] initWithFrame:CGRectMake(75, 120, 240, 180)];
+    self.menuView.backgroundColor = [UIColor colorWithRed:0.06 green:0.06 blue:0.06 alpha:0.92];
     self.menuView.layer.cornerRadius = 12;
     self.menuView.layer.borderWidth = 1;
     self.menuView.layer.borderColor = [[UIColor cyanColor] CGColor];
     self.menuView.hidden = YES;
 
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, 200, 30)];
-    titleLabel.text = @"AutoDance HexControl";
+    // Title
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, 220, 25)];
+    titleLabel.text = @"AutoDance HexControl v4.2";
     titleLabel.textColor = [UIColor cyanColor];
-    titleLabel.font = [UIFont boldSystemFontOfSize:14];
+    titleLabel.font = [UIFont boldSystemFontOfSize:13];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.menuView addSubview:titleLabel];
 
-    UILabel *switchLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 60, 130, 30)];
-    switchLabel.text = @"Auto Perfect";
+    // Switch Toggle Auto Perfect
+    UILabel *switchLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 45, 140, 30)];
+    switchLabel.text = @"Bật Auto (Perfect)";
     switchLabel.textColor = [UIColor whiteColor];
-    switchLabel.font = [UIFont systemFontOfSize:14];
+    switchLabel.font = [UIFont systemFontOfSize:13];
     [self.menuView addSubview:switchLabel];
 
-    UISwitch *toggleSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(150, 60, 0, 0)];
+    UISwitch *toggleSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(165, 45, 0, 0)];
     toggleSwitch.on = g_AutoDanceOn;
     [toggleSwitch addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
     [self.menuView addSubview:toggleSwitch];
+
+    // Status Display
+    self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 85, 210, 80)];
+    self.statusLabel.text = @"Sẵn sàng. Bật toggle để chạy tự động qua các trận.";
+    self.statusLabel.textColor = [UIColor lightGrayColor];
+    self.statusLabel.font = [UIFont systemFontOfSize:11];
+    self.statusLabel.numberOfLines = 0;
+    [self.menuView addSubview:self.statusLabel];
 
     [keyWindow addSubview:self.menuView];
 }
@@ -213,6 +235,11 @@ static void SetupHooks() {
 
 - (void)switchChanged:(UISwitch *)sender {
     g_AutoDanceOn = sender.isOn;
+    if (g_AutoDanceOn) {
+        self.statusLabel.text = @"Đã BẬT tính năng Auto Dance.";
+    } else {
+        self.statusLabel.text = @"Đã TẮT tính năng Auto Dance.";
+    }
 }
 
 - (void)buttonDragged:(UIPanGestureRecognizer *)gesture {
@@ -231,7 +258,7 @@ static void SetupHooks() {
 __attribute__((constructor))
 static void InitDylib() {
     dispatch_after(
-        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(6 * NSEC_PER_SEC)),
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)),
         dispatch_get_main_queue(), ^{
             SetupHooks();
             [[AutoDanceMenuController sharedInstance] showMenu];
