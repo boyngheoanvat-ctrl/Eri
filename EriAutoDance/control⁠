@@ -1,7 +1,0 @@
-package: com.erinq.eriautodance
-name: EriAutoDance
-author: Eri Nguyễn
-description: AutoDance HexControl v4 Embedded Lua
-arch: iphoneos-arm
-version: 1.0.0
-depends: mobilesubstrate, firmware (>= 14.0)
