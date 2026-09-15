@@ -7,23 +7,27 @@
 
 struct Il2CppObject;
 struct Il2CppClass;
+struct Il2CppDomain;
+struct Il2CppImage;
 
-typedef struct Il2CppDomain {
-    void* domain;
-    void* setup;
-} Il2CppDomain;
+// Con trỏ hàm động cho IL2CPP API
+typedef Il2CppDomain* (*t_il2cpp_domain_get)(void);
+typedef Il2CppImage** (*t_il2cpp_domain_get_assemblies)(const Il2CppDomain* domain, size_t* size);
+typedef Il2CppClass* (*t_il2cpp_class_from_name)(const Il2CppImage* image, const char* namespaze, const char* name);
+typedef void (*t_il2cpp_gc_foreach_heap_object)(void(*callback)(Il2CppObject*, void*), void* user_data);
 
-typedef struct Il2CppImage {
-    const char* name;
-    const char* nameWithoutExtension;
-    void* assembly;
-} Il2CppImage;
+static t_il2cpp_domain_get f_il2cpp_domain_get = nullptr;
+static t_il2cpp_domain_get_assemblies f_il2cpp_domain_get_assemblies = nullptr;
+static t_il2cpp_class_from_name f_il2cpp_class_from_name = nullptr;
+static t_il2cpp_gc_foreach_heap_object f_il2cpp_gc_foreach_heap_object = nullptr;
 
-extern "C" {
-    Il2CppDomain* il2cpp_domain_get(void);
-    size_t il2cpp_domain_get_assemblies(const Il2CppDomain* domain, size_t* size);
-    Il2CppClass* il2cpp_class_from_name(const Il2CppImage* image, const char* namespaze, const char* name);
-    void il2cpp_gc_foreach_heap_object(void(*callback)(Il2CppObject*, void*), void* user_data);
+static void InitIl2CppSymbols() {
+    if (f_il2cpp_domain_get) return;
+    void* handle = RTLD_DEFAULT;
+    f_il2cpp_domain_get = (t_il2cpp_domain_get)dlsym(handle, "il2cpp_domain_get");
+    f_il2cpp_domain_get_assemblies = (t_il2cpp_domain_get_assemblies)dlsym(handle, "il2cpp_domain_get_assemblies");
+    f_il2cpp_class_from_name = (t_il2cpp_class_from_name)dlsym(handle, "il2cpp_class_from_name");
+    f_il2cpp_gc_foreach_heap_object = (t_il2cpp_gc_foreach_heap_object)dlsym(handle, "il2cpp_gc_foreach_heap_object");
 }
 
 static const uint32_t OFF_JUDGE_LEVEL = 0x40;   
@@ -167,31 +171,32 @@ static void HeapObjectCallback(Il2CppObject* obj, void* user_data) {
 @end
 
 void* HackLoopThread(void* arg) {
+    InitIl2CppSymbols();
     while (true) {
-        if (g_isHackActive.load()) {
+        if (g_isHackActive.load() && f_il2cpp_domain_get) {
             int currentModified = 0;
             @try {
-                Il2CppDomain* domain = il2cpp_domain_get();
-                if (domain) {
+                Il2CppDomain* domain = f_il2cpp_domain_get();
+                if (domain && f_il2cpp_domain_get_assemblies) {
                     size_t assemblyCount = 0;
-                    Il2CppImage** assemblies = (Il2CppImage**)il2cpp_domain_get_assemblies(domain, &assemblyCount);
+                    Il2CppImage** assemblies = f_il2cpp_domain_get_assemblies(domain, &assemblyCount);
                     
-                    if (!g_targetAuditionClass || !g_targetTrackCtrlClass) {
+                    if ((!g_targetAuditionClass || !g_targetTrackCtrlClass) && f_il2cpp_class_from_name) {
                         for (size_t i = 0; i < assemblyCount; i++) {
                             if (!g_targetAuditionClass) {
-                                g_targetAuditionClass = il2cpp_class_from_name(assemblies[i], "Dance", "AuditionGroup");
+                                g_targetAuditionClass = f_il2cpp_class_from_name(assemblies[i], "Dance", "AuditionGroup");
                             }
                             if (!g_targetTrackCtrlClass) {
-                                g_targetTrackCtrlClass = il2cpp_class_from_name(assemblies[i], "", "GuidTrackDanceNoteCtrl");
+                                g_targetTrackCtrlClass = f_il2cpp_class_from_name(assemblies[i], "", "GuidTrackDanceNoteCtrl");
                             }
                         }
                     }
 
-                    if (g_targetAuditionClass || g_targetTrackCtrlClass) {
+                    if ((g_targetAuditionClass || g_targetTrackCtrlClass) && f_il2cpp_gc_foreach_heap_object) {
                         g_cachedAuditionGroups.clear();
                         g_cachedTrackCtrls.clear();
                         
-                        il2cpp_gc_foreach_heap_object(HeapObjectCallback, nullptr);
+                        f_il2cpp_gc_foreach_heap_object(HeapObjectCallback, nullptr);
 
                         for (void* obj : g_cachedAuditionGroups) {
                             if (obj) {
@@ -228,6 +233,6 @@ __attribute__((constructor)) static void initEriDylib() {
         pthread_t t;
         pthread_create(&t, NULL, HackLoopThread, NULL);
         
-        NSLog(@"[EriAutoDance]: Dylib successfully loaded with active memory injection!");
+        NSLog(@"[EriAutoDance]: Dylib successfully loaded with dlsym bindings!");
     }
 }
