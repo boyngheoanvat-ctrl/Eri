@@ -36,7 +36,6 @@ static void applyMod(BOOL enable) {
     g_modifiedCount = count;
 }
 
-// Hàm giả lập vòng lặp gọi từ game
 void OnDraw() {
     static time_t lastCheck = 0;
     time_t currentTime = time(NULL);
@@ -47,11 +46,15 @@ void OnDraw() {
     }
 }
 
-// Hiển thị menu cấu hình nhanh bằng UIKit khi dylib khởi động
 static void showControlPanel() {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
         UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
+        #pragma clang diagnostic pop
+        
         UIViewController *rootVC = keyWindow.rootViewController;
+        if (!rootVC) return;
         
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"EriAutoDance Control"
                                                                        message:@"Chọn tính năng Auto-Match"
