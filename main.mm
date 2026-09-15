@@ -1,217 +1,155 @@
+// main.mm — AutoDance HexControl v6 (Native IL2CPP + MSHookFunction)
+// Compile (với Theos hoặc Makefile có liên kết MobileSubstrate):
+//   xcrun -sdk iphoneos clang++ -shared -fobjc-arc -arch arm64 \
+//     -o main.dylib main.mm -framework Foundation -lsubstrate
+
 #import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
 #include <pthread.h>
-#include <atomic>
-#include <vector>
 #include <dlfcn.h>
+#include <stdint.h>
+#include <string.h>
+#include <substrate.h>
 
-struct Il2CppObject;
-struct Il2CppClass;
-struct Il2CppDomain;
-struct Il2CppImage;
+// ============================================================
+// 1) IL2CPP C API Declarations
+// ============================================================
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef Il2CppDomain* (*t_il2cpp_domain_get)(void);
-typedef Il2CppImage** (*t_il2cpp_domain_get_assemblies)(const Il2CppDomain* domain, size_t* size);
-typedef Il2CppClass* (*t_il2cpp_class_from_name)(const Il2CppImage* image, const char* namespaze, const char* name);
-typedef void (*t_il2cpp_gc_foreach_heap_object)(void(*callback)(Il2CppObject*, void*), void* user_data);
+typedef struct Il2CppImage    Il2CppImage;
+typedef struct Il2CppClass    Il2CppClass;
+typedef struct Il2CppObject   Il2CppObject;
+typedef struct Il2CppField    Il2CppField;
+typedef struct Il2CppAssembly Il2CppAssembly;
+typedef struct Il2CppMethodInfo Il2CppMethodInfo;
 
-static t_il2cpp_domain_get f_il2cpp_domain_get = nullptr;
-static t_il2cpp_domain_get_assemblies f_il2cpp_domain_get_assemblies = nullptr;
-static t_il2cpp_class_from_name f_il2cpp_class_from_name = nullptr;
-static t_il2cpp_gc_foreach_heap_object f_il2cpp_gc_foreach_heap_object = nullptr;
+const void*     il2cpp_domain_get(void);
+size_t          il2cpp_domain_get_assembly_count(const void *domain);
+Il2CppAssembly* il2cpp_domain_get_assembly(const void *domain, size_t idx);
+const Il2CppImage* il2cpp_assembly_get_image(Il2CppAssembly *a);
+Il2CppClass*    il2cpp_class_from_name(const Il2CppImage *img, const char *ns, const char *name);
+Il2CppField*    il2cpp_class_get_field_from_name(Il2CppClass *k, const char *name);
+ptrdiff_t       il2cpp_field_get_offset(Il2CppField *f);
+Il2CppMethodInfo* il2cpp_class_get_method_from_name(Il2CppClass *klass, const char *name, int argsCount);
 
-static void InitIl2CppSymbols() {
-    if (f_il2cpp_domain_get) return;
-    void* handle = RTLD_DEFAULT;
-    f_il2cpp_domain_get = (t_il2cpp_domain_get)dlsym(handle, "il2cpp_domain_get");
-    f_il2cpp_domain_get_assemblies = (t_il2cpp_domain_get_assemblies)dlsym(handle, "il2cpp_domain_get_assemblies");
-    f_il2cpp_class_from_name = (t_il2cpp_class_from_name)dlsym(handle, "il2cpp_class_from_name");
-    f_il2cpp_gc_foreach_heap_object = (t_il2cpp_gc_foreach_heap_object)dlsym(handle, "il2cpp_gc_foreach_heap_object");
+#ifdef __cplusplus
 }
+#endif
 
-// Thử dịch chuyển hoặc kiểm tra lại offset chuẩn của bản game hiện tại
-static const uint32_t OFF_JUDGE_LEVEL = 0x44;   // Đã dịch chuyển nhẹ để tránh đè sai biến logic
-static const uint32_t OFF_IS_HIT_BEAT  = 0x36;  
-static const int32_t  PERFECT          = 4;     
+// ============================================================
+// 2) Configuration & Offsets
+// ============================================================
+static const int    PERFECT_LEVEL   = 4;   // 4 tương ứng với Perfect
+static bool         g_AutoDanceOn   = true;
 
-static std::atomic<bool> g_isHackActive{false};
-static int g_modifiedObjectsCount = 0;
+struct ModOffsets {
+    ptrdiff_t judgeLevel;
+    ptrdiff_t isHitBeat;
+    bool ready;
+};
+static ModOffsets g_off = {0, 0, false};
 
-static std::vector<void*> g_cachedAuditionGroups;
-static Il2CppClass* g_targetAuditionClass = nullptr;
-
-static void HeapObjectCallback(Il2CppObject* obj, void* user_data) {
-    if (!obj) return;
-    Il2CppClass* klass = *(Il2CppClass**)(obj);
-    if (klass == g_targetAuditionClass) {
-        g_cachedAuditionGroups.push_back((void*)obj);
+static Il2CppClass* FindClass(const char* ns, const char* name) {
+    const void* domain = il2cpp_domain_get();
+    size_t count = il2cpp_domain_get_assembly_count(domain);
+    for (size_t i = 0; i < count; i++) {
+        Il2CppAssembly* asm_ = il2cpp_domain_get_assembly(domain, i);
+        if (!asm_) continue;
+        const Il2CppImage* img = il2cpp_assembly_get_image(asm_);
+        if (!img) continue;
+        Il2CppClass* cls = il2cpp_class_from_name(img, ns, name);
+        if (cls) return cls;
     }
+    return nullptr;
 }
 
-@interface EriMenuController : NSObject
-@property (nonatomic, strong) UIButton *floatingButton;
-@property (nonatomic, strong) UIView *menuView;
-@property (nonatomic, strong) UILabel *statusLabel;
-@property (nonatomic, strong) UISwitch *toggleSwitch;
-@end
+static void ResolveOffsets() {
+    if (g_off.ready) return;
 
-@implementation EriMenuController
-
-+ (instancetype)sharedInstance {
-    static EriMenuController *sharedInstance = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        sharedInstance = [[EriMenuController alloc] initPrivate];
-    });
-    return sharedInstance;
-}
-
--(instancetype)initPrivate {
-    self = [super init];
-    if (self) {
-        [self performSelector:@selector(setupUI) withObject:nil afterDelay:3.0];
-    }
-    return self;
-}
-
--(void)setupUI {
-    UIWindow *keyWindow = nil;
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if ([scene isKindOfClass:[UIWindowScene class]]) {
-                for (UIWindow *window in scene.windows) {
-                    if (window.isKeyWindow) {
-                        keyWindow = window;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    if (!keyWindow) {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        keyWindow = [UIApplication sharedApplication].keyWindow;
-#pragma clang diagnostic pop
-    }
-    if (!keyWindow) return;
-
-    self.floatingButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    self.floatingButton.frame = CGRectMake(30, 120, 55, 55);
-    self.floatingButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.6 blue:0.9 alpha:0.9];
-    [self.floatingButton setTitle:@"Eri" forState:UIControlStateNormal];
-    [self.floatingButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.floatingButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-    self.floatingButton.layer.cornerRadius = 27.5;
-    self.floatingButton.layer.borderWidth = 2.0;
-    self.floatingButton.layer.borderColor = [UIColor whiteColor].CGColor;
-    [self.floatingButton addTarget:self action:@selector(toggleMenuVisibility:) forControlEvents:UIControlEventTouchUpInside];
-    [keyWindow addSubview:self.floatingButton];
-
-    self.menuView = [[UIView alloc] initWithFrame:CGRectMake(95, 120, 260, 200)];
-    self.menuView.backgroundColor = [UIColor colorWithWhite:0.12 alpha:0.95];
-    self.menuView.layer.cornerRadius = 14;
-    self.menuView.layer.borderWidth = 1.5;
-    self.menuView.layer.borderColor = [UIColor cyanColor].CGColor;
-    self.menuView.hidden = YES;
-
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, 240, 25)];
-    titleLabel.text = @"Eri AutoDance Menu v4.3";
-    titleLabel.textColor = [UIColor cyanColor];
-    titleLabel.font = [UIFont boldSystemFontOfSize:14];
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    [self.menuView addSubview:titleLabel];
-
-    self.toggleSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(20, 48, 0, 0)];
-    [self.toggleSwitch addTarget:self action:@selector(onSwitchChanged:) forControlEvents:UIControlEventValueChanged];
-    [self.menuView addSubview:self.toggleSwitch];
-
-    UILabel *switchText = [[UILabel alloc] initWithFrame:CGRectMake(85, 45, 160, 30)];
-    switchText.text = @"Bật Auto Perfect";
-    switchText.textColor = [UIColor whiteColor];
-    switchText.font = [UIFont systemFontOfSize:13];
-    [self.menuView addSubview:switchText];
-
-    self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 85, 230, 95)];
-    self.statusLabel.text = @"Trạng thái: Đang Tắt\n- Sẵn sàng quét...\n- Bấm công tắc để bắt đầu.";
-    self.statusLabel.textColor = [UIColor lightGrayColor];
-    self.statusLabel.font = [UIFont systemFontOfSize:11];
-    self.statusLabel.numberOfLines = 4;
-    [self.menuView addSubview:self.statusLabel];
-
-    [keyWindow addSubview:self.menuView];
-}
-
--(void)toggleMenuVisibility:(UIButton *)sender {
-    self.menuView.hidden = !self.menuView.hidden;
-}
-
--(void)onSwitchChanged:(UISwitch *)sender {
-    g_isHackActive = sender.isOn;
-    if (sender.isOn) {
-        self.statusLabel.text = [NSString stringWithFormat:@"Trạng thái: ĐÃ BẬT 🟢\n- Đang quét AuditionGroup...\n- Đã tác động: %d objects", g_modifiedObjectsCount];
+    Il2CppClass* agCls = FindClass("Dance", "AuditionGroup");
+    if (agCls) {
+        Il2CppField* f1 = il2cpp_class_get_field_from_name(agCls, "judgeLevel");
+        Il2CppField* f2 = il2cpp_class_get_field_from_name(agCls, "isHitBeat");
+        if (f1) g_off.judgeLevel = il2cpp_field_get_offset(f1);
+        if (f2) g_off.isHitBeat  = il2cpp_field_get_offset(f2);
+        NSLog(@"[AutoDance] AuditionGroup resolved — judgeLevel: %td, isHitBeat: %td", 
+              g_off.judgeLevel, g_off.isHitBeat);
+        g_off.ready = true;
     } else {
-        self.statusLabel.text = @"Trạng thái: ĐÃ TẮT 🔴\n- Đã dừng can thiệp.";
+        NSLog(@"[AutoDance] ⚠️ Dance.AuditionGroup not found yet, retrying later...");
     }
 }
 
--(void)updateStatusTextCount:(NSNumber *)countNum {
-    if (g_isHackActive) {
-        int count = [countNum intValue];
-        self.statusLabel.text = [NSString stringWithFormat:@"Trạng thái: ĐÃ BẬT 🟢\n- Đang chạy mượt.\n- Đã tác động: %d objects", count];
-    }
-}
+// ============================================================
+// 3) Hook Implementation via MSHookFunction
+// ============================================================
+typedef void (*AuditionGroup_Update_t)(void* self, void* method);
+static AuditionGroup_Update_t orig_AuditionGroup_Update = nullptr;
 
-@end
-
-void* HackLoopThread(void* arg) {
-    InitIl2CppSymbols();
-    while (true) {
-        if (g_isHackActive.load() && f_il2cpp_domain_get) {
-            int currentModified = 0;
-            @try {
-                Il2CppDomain* domain = f_il2cpp_domain_get();
-                if (domain && f_il2cpp_domain_get_assemblies) {
-                    size_t assemblyCount = 0;
-                    Il2CppImage** assemblies = f_il2cpp_domain_get_assemblies(domain, &assemblyCount);
-                    
-                    if (!g_targetAuditionClass && f_il2cpp_class_from_name) {
-                        for (size_t i = 0; i < assemblyCount; i++) {
-                            g_targetAuditionClass = f_il2cpp_class_from_name(assemblies[i], "Dance", "AuditionGroup");
-                            if (g_targetAuditionClass) break;
-                        }
-                    }
-
-                    if (g_targetAuditionClass && f_il2cpp_gc_foreach_heap_object) {
-                        g_cachedAuditionGroups.clear();
-                        f_il2cpp_gc_foreach_heap_object(HeapObjectCallback, nullptr);
-
-                        for (void* obj : g_cachedAuditionGroups) {
-                            if (obj) {
-                                // Chỉ ghi đè mức phán định khi object còn sống và hợp lệ
-                                *(int32_t*)((uint8_t*)obj + OFF_JUDGE_LEVEL) = PERFECT;
-                                *(bool*)((uint8_t*)obj + OFF_IS_HIT_BEAT) = true;
-                                currentModified++;
-                            }
-                        }
-                    }
-                }
-                
-                g_modifiedObjectsCount = currentModified;
-                [[EriMenuController sharedInstance] performSelectorOnMainThread:@selector(updateStatusTextCount:) withObject:@(currentModified) waitUntilDone:NO];
-            } @catch (NSException *exception) {
-                NSLog(@"[EriError]: %@", exception.reason);
-            }
+static void hk_AuditionGroup_Update(void* self, void* method) {
+    // Thực hiện ghi đè giá trị trực tiếp trên instance hiện tại mỗi frame
+    if (g_AutoDanceOn && g_off.ready && self) {
+        if (g_off.judgeLevel != 0) {
+            int* judgePtr = (int*)((uintptr_t)self + g_off.judgeLevel);
+            *judgePtr = PERFECT_LEVEL;
         }
-        usleep(200000); // Tần suất quét nhanh hơn mượt hơn (0.2s)
+        if (g_off.isHitBeat != 0) {
+            bool* hitPtr = (bool*)((uintptr_t)self + g_off.isHitBeat);
+            *hitPtr = true;
+        }
     }
-    return NULL;
+
+    // Gọi lại hàm gốc để game duy trì luồng xử lý bình thường
+    if (orig_AuditionGroup_Update) {
+        orig_AuditionGroup_Update(self, method);
+    }
 }
 
-__attribute__((constructor)) static void initEriDylib() {
-    @autoreleasepool {
-        [EriMenuController sharedInstance];
-        pthread_t t;
-        pthread_create(&t, NULL, HackLoopThread, NULL);
+static void SetupHooks() {
+    ResolveOffsets();
+    Il2CppClass* agCls = FindClass("Dance", "AuditionGroup");
+    if (!agCls) {
+        NSLog(@"[AutoDance] SetupHooks failed: AuditionGroup class missing.");
+        return;
     }
+
+    Il2CppMethodInfo* updateMethod = il2cpp_class_get_method_from_name(agCls, "Update", 0);
+    if (updateMethod) {
+        // Trong cấu trúc Il2CppMethodInfo của Unity, con trỏ hàm thực thi (methodPointer) 
+        // thường nằm ở các offset đầu tiên. Ta ép kiểu lấy con trỏ thực thi thực tế:
+        // Lưu ý: Offset của methodPointer có thể khác nhau tùy phiên bản Unity (thường là offset tương ứng trong struct).
+        // Cách an toàn chuẩn IL2CPP: lấy trực tiếp trường `methodPointer` từ struct `Il2CppMethodInfo`.
+        
+        void* funcAddress = *(void**)((uintptr_t)updateMethod); // Hoặc dịch offset chuẩn tùy phiên bản Unity nếu cần
+        
+        if (funcAddress) {
+            MSHookFunction(funcAddress, (void*)&hk_AuditionGroup_Update, (void**)&orig_AuditionGroup_Update);
+            NSLog(@"[AutoDance] Successfully hooked AuditionGroup::Update at %p", funcAddress);
+        } else {
+            // Fallback nếu layout trỏ trực tiếp cần dịch offset
+            // Ví dụ Unity 2022+ đôi khi `methodPointer` nằm ở offset khác, 
+            // bạn có thể dùng trực tiếp địa chỉ thunk từ IDA/Ghidra nếu cần độ chính xác tuyệt đối.
+            NSLog(@"[AutoDance] ⚠️ Method pointer address is NULL.");
+        }
+    } else {
+        NSLog(@"[AutoDance] ⚠️ Update method not found in AuditionGroup.");
+    }
+}
+
+// ============================================================
+// 4) Dylib Entry Point
+// ============================================================
+__attribute__((constructor))
+static void InitDylib() {
+    NSLog(@"╔══════════════════════════════════════════╗");
+    NSLog(@"║          Mod By Eri Nguyễn               ║");
+    NSLog(@"╚══════════════════════════════════════════╝");
+
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+            SetupHooks();
+        }
+    );
 }
