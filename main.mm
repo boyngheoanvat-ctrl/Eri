@@ -211,7 +211,7 @@ void* HackLoopThread(void* arg) {
                 }
                 
                 g_modifiedObjectsCount = currentModified;
-                [[EriMenuController sharedInstance] performSelectorOnMainThread:@selector(updateStatusTextCount:) withObject:@(numberWithInt:currentModified) waitUntilDone:NO];
+                [[EriMenuController sharedInstance] performSelectorOnMainThread:@selector(updateStatusTextCount:) withObject:@(currentModified) waitUntilDone:NO];
             } @catch (NSException *exception) {
                 NSLog(@"[EriError]: %@", exception.reason);
             }
