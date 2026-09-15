@@ -1,0 +1,31 @@
+name: Build iOS Dylib
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Theos environment
+      run: |
+        git clone --recursive https://github.com/theos/theos.git ~/theos
+        echo "THEOS=~/theos" >> $GITHUB_ENV
+        brew install ldid
+
+    - name: Compile Dylib
+      run: |
+        export THEOS=~/theos
+        cd AutoDanceTweak
+        make
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: AutoDanceTweak-dylib
+        path: AutoDanceTweak/.theos/obj/debug/AutoDanceTweak.dylib
