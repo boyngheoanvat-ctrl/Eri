@@ -1,7 +1,11 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <QuartzCore/QuartzCore.h> // Buộc nhúng framework QuartzCore tại đây
 #include "substrate.h"
 #include "lua_script.h"
+
+// Khai báo liên kết trực tiếp với Clang linker
+#pragma comment(lib, "QuartzCore")
 
 // Khai báo thư viện Lua
 extern "C" {
