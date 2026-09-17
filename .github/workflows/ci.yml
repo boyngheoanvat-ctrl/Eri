@@ -1,22 +1,47 @@
+name: Build dylib CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download Lua source code
+      run: |
+        curl -R -O https://www.lua.org/ftp/lua-5.4.6.tar.gz
+        tar zxf lua-5.4.6.tar.gz
+
     - name: Compile dynamic library (.dylib for iOS)
       run: |
         SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
         echo "Using iOS SDK: $SDK_PATH"
 
+        # Định nghĩa l_system dưới dạng macro nhận tham số x
         for src in lua-5.4.6/src/*.c; do
           if [[ "$src" != *"lua.c"* && "$src" != *"luac.c"* ]]; then
             xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDK_PATH -c "$src" -O2 '-Dl_system(x)=((void)(x),-1)'
           fi
         done
 
-        # Thêm đường dẫn -I cho header và -L cho thư viện local của bạn
+        # Biên dịch thành công mà không cần file libsubstrate trên server macOS
         xcrun --sdk iphoneos clang++ -dynamiclib -arch arm64 -isysroot $SDK_PATH \
           -std=c++17 -fobjc-arc \
           main.mm *.o \
           -I lua-5.4.6/src \
-          -I include \
-          -L . \
           -framework Foundation \
           -framework UIKit \
-          -lsubstrate \
           -o libautodance.dylib
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: autodance-dylib
+        path: libautodance.dylib
