@@ -1,13 +1,12 @@
 //
-//  AutoDance HexControl v7.2.6 — FIX BUILD ERROR
-//  ✅ Không lỗi __weak typeof | ✅ Sửa UIWindow deprecated
-//  ✅ Menu Ẩn/Hiện | ✅ Không văng | ✅ Offset chuẩn AU2 v23.4
+//  AutoDance v7.3 — ICON NỔI ẨN/HIỆN + KHÔNG VĂNG
+//  ✅ Icon trôi góc màn hình | ✅ Bấm = ẩn/hiện menu
+//  ✅ Vào game không văng | ✅ Tạo menu khi sẵn sàng
 //
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import "substrate.h"
-#include <cmath>
 #include <map>
 #include <string>
 #include <ctime>
@@ -40,24 +39,23 @@ struct Off {
     static const uint32_t OB_ratio  = 0x34;
 };
 
-// === IL2CPP ABI ===
+// === AN TOÀN ===
 static inline int32_t cntList(void* p) { return p ? *(int32_t*)((uint8_t*)p+0x18) : 0; }
 static inline void* getList(void* p, int32_t i) {
     if(!p||i<0)return nullptr; void** arr=*(void***)((uint8_t*)p+0x10);
-    return arr ? arr[i] : nullptr;
+    return arr && i < cntList(p) ? arr[i] : nullptr;
 }
 static inline int32_t cntArr(void* p) { return p ? (int32_t)*(int64_t*)((uint8_t*)p+0x18) : 0; }
 static inline void* getArr(void* p, int32_t i) {
-    if(!p||i<0)return nullptr; return *(void**)((uint8_t*)p+0x20+(size_t)i*8);
+    if(!p||i<0)return nullptr; return i < cntArr(p) ? *(void**)((uint8_t*)p+0x20+(size_t)i*8) : nullptr;
 }
 
-// === AN TOÀN ===
 #define RD32(p,o,d) ((p)?*(int32_t*)((uint8_t*)(p)+(o)):(d))
 #define RD64(p,o,d) ((p)?*(int64_t*)((uint8_t*)(p)+(o)):(d))
 #define RDB(p,o,d)  ((p)?*(bool*)((uint8_t*)(p)+(o)):(d))
-#define WR32(p,o,v) {if(p)*(int32_t*)((uint8_t*)(p)+(o))=(v);}
-#define WR64(p,o,v) {if(p)*(int64_t*)((uint8_t*)(p)+(o))=(v);}
-#define WRB(p,o,v)  {if(p)*(bool*)((uint8_t*)(p)+(o))=(v);}
+#define WR32(p,o,v) do{if(p)*(int32_t*)((uint8_t*)(p)+(o))=(v);}while(0)
+#define WR64(p,o,v) do{if(p)*(int64_t*)((uint8_t*)(p)+(o))=(v);}while(0)
+#define WRB(p,o,v)  do{if(p)*(bool*)((uint8_t*)(p)+(o))=(v);}while(0)
 
 #pragma mark - === STATE ===
 
@@ -67,7 +65,8 @@ struct Saved {
 };
 
 static struct Global {
-    bool showMenu;
+    bool didInitMenu;
+    bool menuVisible;
     bool arrow, taiko, mini;
     
     void* pA;
@@ -77,7 +76,8 @@ static struct Global {
     std::map<void*, bool> scored;
     std::map<void*, Saved> saved;
     
-    Global() : showMenu(true), arrow(false), taiko(false), mini(false),
+    Global() : didInitMenu(false), menuVisible(true),
+               arrow(false), taiko(false), mini(false),
                pA(nullptr), pT(nullptr), pD(nullptr) {}
 } g;
 
@@ -97,9 +97,7 @@ static void restoreAll() {
         for(auto& x : kv.second.i32) WR32(kv.first, x.first, x.second);
         for(auto& x : kv.second.b)   WRB(kv.first, x.first, x.second);
     }
-    g.saved.clear();
-    g.scored.clear();
-    NSLog(@"✅ Đã khôi phục");
+    g.saved.clear(); g.scored.clear();
 }
 
 #pragma mark - === LOGIC CHÍNH ===
@@ -159,7 +157,6 @@ static long long doScore() {
     int combo=RD32(g.pD,Off::D_combo,1);
     int64_t score=RD64(g.pD,Off::D_score,0);
     double mul=1.0+std::max(combo-1,0)*0.05;
-    
     void* list = *(void**)((uint8_t*)g.pD + Off::D_listGrp);
     long long add=0;
     for(int i=0,N=cntList(list);i<N;i++){
@@ -191,88 +188,100 @@ static int doMini() {
     return n;
 }
 
-#pragma mark - === MENU ===
+#pragma mark - === ICON NỔI + MENU ===
 
-static UIWindow* g_win = nil;
-static UIView* g_panel = nil;
+static UIWindow* g_iconWin = nil;
+static UIWindow* g_menuWin = nil;
+static UIView* g_menuPanel = nil;
 static UIButton* g_btnArrow = nil;
 static UIButton* g_btnTaiko = nil;
 static UIButton* g_btnMini = nil;
 
 static void updateMenuUI() {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if(!g_btnArrow)return;
         [g_btnArrow setTitle:[NSString stringWithFormat:@"⚡ Auto Arrow: %s", g.arrow?"BẬT":"TẮT"] forState:UIControlStateNormal];
         g_btnArrow.backgroundColor = g.arrow ? [UIColor colorWithRed:0.15 green:0.7 blue:0.2 alpha:1] : [UIColor darkGrayColor];
-        
         [g_btnTaiko setTitle:[NSString stringWithFormat:@"🥁 Auto Taiko: %s", g.taiko?"BẬT":"TẮT"] forState:UIControlStateNormal];
         g_btnTaiko.backgroundColor = g.taiko ? [UIColor colorWithRed:0.15 green:0.7 blue:0.2 alpha:1] : [UIColor darkGrayColor];
-        
         [g_btnMini setTitle:[NSString stringWithFormat:@"🔥 Mini+Crazy: %s", g.mini?"BẬT":"TẮT"] forState:UIControlStateNormal];
         g_btnMini.backgroundColor = g.mini ? [UIColor colorWithRed:0.15 green:0.7 blue:0.2 alpha:1] : [UIColor darkGrayColor];
     });
 }
 
-void showDanceMenu() {
+static void toggleMenu() {
     dispatch_async(dispatch_get_main_queue(), ^{
-        g.showMenu = true;
-        if(g_panel) g_panel.hidden = false;
-        if(g_win) g_win.hidden = false;
+        g.menuVisible = !g.menuVisible;
+        if(g_menuPanel) g_menuPanel.hidden = !g.menuVisible;
+        if(g_menuWin) g_menuWin.hidden = !g.menuVisible;
+        NSLog(g.menuVisible ? @"✅ Hiện Menu" : @"✅ Ẩn Menu");
     });
 }
 
-static void buildMenu() {
+static UIWindow* makeWindow(CGRect f) {
+    UIApplication* app = [UIApplication sharedApplication];
+    if(@available(iOS 13.0, *)) {
+        UIWindowScene* s = app.keyWindow.windowScene;
+        if(s) { UIWindow* w = [[UIWindow alloc] initWithWindowScene:s]; w.frame=f; return w; }
+    }
+    return [[UIWindow alloc] initWithFrame:f];
+}
+
+static void buildIconAndMenu() {
     dispatch_async(dispatch_get_main_queue(), ^{
-        if(g_win)return;
+        if(g.didInitMenu) return;
+        UIApplication* app = [UIApplication sharedApplication];
+        if(!app.keyWindow) return;
+        g.didInitMenu = true;
         
-        // === Sửa deprecated: dùng style ===
-        UIWindowScene* scene = nil;
-        if(@available(iOS 13.0, *)) {
-            scene = [[UIApplication sharedApplication].windows.firstObject windowScene];
-        }
-        if(scene) {
-            g_win = [[UIWindow alloc] initWithWindowScene:scene];
-            g_win.frame = CGRectMake(10, 40, 290, 340);
-        } else {
-            g_win = [[UIWindow alloc] initWithFrame:CGRectMake(10, 40, 290, 340)];
-        }
+        // === ICON NỔI — Bấm để ẩn/hiện ===
+        g_iconWin = makeWindow(CGRectMake(10, 200, 50, 50));
+        g_iconWin.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.15 alpha:0.9];
+        g_iconWin.layer.cornerRadius = 25;
+        g_iconWin.layer.borderWidth = 2;
+        g_iconWin.layer.borderColor = [UIColor colorWithRed:1 green:0.2 blue:0.5 alpha:1].CGColor;
+        g_iconWin.windowLevel = UIWindowLevelAlert + 1001;
         
-        g_win.backgroundColor = [UIColor colorWithRed:0.05 green:0.05 blue:0.08 alpha:0.95];
-        g_win.layer.cornerRadius = 16;
-        g_win.layer.borderWidth = 2.5;
-        g_win.layer.borderColor = [UIColor colorWithRed:1 green:0.2 blue:0.5 alpha:1].CGColor;
-        g_win.windowLevel = UIWindowLevelAlert + 999;
+        UIButton* iconBtn = [[UIButton alloc] initWithFrame:CGRectMake(5, 5, 40, 40)];
+        [iconBtn setTitle:@"🎮" forState:UIControlStateNormal];
+        iconBtn.titleLabel.font = [UIFont systemFontOfSize:24];
+        [iconBtn addAction:[UIAction actionWithHandler:^(UIAction*){ toggleMenu(); }] forControlEvents:UIControlEventTouchUpInside];
+        [g_iconWin addSubview:iconBtn];
+        g_iconWin.hidden = NO;
+        [g_iconWin makeKeyAndVisible];
         
-        // === NÚT ẨN MENU ===
-        UIButton* btnHide = [[UIButton alloc] initWithFrame:CGRectMake(240, 8, 40, 30)];
-        [btnHide setTitle:@"✕" forState:UIControlStateNormal];
-        [btnHide setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        btnHide.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-        [btnHide addAction:[UIAction actionWithHandler:^(UIAction*){
-            g.showMenu = false;
-            g_panel.hidden = true;
-        }] forControlEvents:UIControlEventTouchUpInside];
-        [g_win addSubview:btnHide];
+        // === MENU CHÍNH ===
+        g_menuWin = makeWindow(CGRectMake(70, 100, 290, 340));
+        g_menuWin.backgroundColor = [UIColor colorWithRed:0.05 green:0.05 blue:0.08 alpha:0.95];
+        g_menuWin.layer.cornerRadius = 16;
+        g_menuWin.layer.borderWidth = 2.5;
+        g_menuWin.layer.borderColor = [UIColor colorWithRed:1 green:0.2 blue:0.5 alpha:1].CGColor;
+        g_menuWin.windowLevel = UIWindowLevelAlert + 1000;
+        
+        UIButton* btnClose = [[UIButton alloc] initWithFrame:CGRectMake(240, 8, 40, 30)];
+        [btnClose setTitle:@"✕" forState:UIControlStateNormal];
+        [btnClose setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        btnClose.titleLabel.font = [UIFont boldSystemFontOfSize:18];
+        [btnClose addAction:[UIAction actionWithHandler:^(UIAction*){ toggleMenu(); }] forControlEvents:UIControlEventTouchUpInside];
+        [g_menuWin addSubview:btnClose];
         
         UILabel* title = [[UILabel alloc] initWithFrame:CGRectMake(15, 10, 220, 28)];
-        title.text = @"🎮 AutoDance v7.2.6";
+        title.text = @"🎮 AutoDance v7.3";
         title.textColor = UIColor.whiteColor;
         title.font = [UIFont boldSystemFontOfSize:17];
-        [g_win addSubview:title];
+        [g_menuWin addSubview:title];
         
-        g_panel = [[UIView alloc] initWithFrame:CGRectMake(0, 45, 290, 295)];
+        g_menuPanel = [[UIView alloc] initWithFrame:CGRectMake(0, 45, 290, 295)];
         
-        // === NÚT BẬM — KHÔNG DÙNG __weak typeof ===
         g_btnArrow = [[UIButton alloc] initWithFrame:CGRectMake(15, 10, 260, 50)];
         [g_btnArrow setTitle:@"⚡ Auto Arrow: TẮT" forState:UIControlStateNormal];
         [g_btnArrow setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         g_btnArrow.backgroundColor = [UIColor darkGrayColor];
         g_btnArrow.layer.cornerRadius = 10;
         [g_btnArrow addAction:[UIAction actionWithHandler:^(UIAction*){
-            g.arrow = !g.arrow;
-            if(!g.arrow) restoreAll();
-            updateMenuUI();
+            g.arrow = !g.arrow; if(!g.arrow) restoreAll(); updateMenuUI();
         }] forControlEvents:UIControlEventTouchUpInside];
-        [g_panel addSubview:g_btnArrow];
+        [g_menuPanel addSubview:g_btnArrow];
         
         g_btnTaiko = [[UIButton alloc] initWithFrame:CGRectMake(15, 70, 260, 50)];
         [g_btnTaiko setTitle:@"🥁 Auto Taiko: TẮT" forState:UIControlStateNormal];
@@ -280,11 +289,9 @@ static void buildMenu() {
         g_btnTaiko.backgroundColor = [UIColor darkGrayColor];
         g_btnTaiko.layer.cornerRadius = 10;
         [g_btnTaiko addAction:[UIAction actionWithHandler:^(UIAction*){
-            g.taiko = !g.taiko;
-            if(!g.taiko) restoreAll();
-            updateMenuUI();
+            g.taiko = !g.taiko; if(!g.taiko) restoreAll(); updateMenuUI();
         }] forControlEvents:UIControlEventTouchUpInside];
-        [g_panel addSubview:g_btnTaiko];
+        [g_menuPanel addSubview:g_btnTaiko];
         
         g_btnMini = [[UIButton alloc] initWithFrame:CGRectMake(15, 130, 260, 50)];
         [g_btnMini setTitle:@"🔥 Mini+Crazy: TẮT" forState:UIControlStateNormal];
@@ -292,11 +299,9 @@ static void buildMenu() {
         g_btnMini.backgroundColor = [UIColor darkGrayColor];
         g_btnMini.layer.cornerRadius = 10;
         [g_btnMini addAction:[UIAction actionWithHandler:^(UIAction*){
-            g.mini = !g.mini;
-            if(!g.mini) { g.scored.clear(); restoreAll(); }
-            updateMenuUI();
+            g.mini = !g.mini; if(!g.mini) { g.scored.clear(); restoreAll(); } updateMenuUI();
         }] forControlEvents:UIControlEventTouchUpInside];
-        [g_panel addSubview:g_btnMini];
+        [g_menuPanel addSubview:g_btnMini];
         
         UIButton* bReset = [[UIButton alloc] initWithFrame:CGRectMake(15, 195, 260, 45)];
         [bReset setTitle:@"🔄 Tắt hết & Khôi phục" forState:UIControlStateNormal];
@@ -304,23 +309,21 @@ static void buildMenu() {
         bReset.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1];
         bReset.layer.cornerRadius = 10;
         [bReset addAction:[UIAction actionWithHandler:^(UIAction*){
-            g.arrow = g.taiko = g.mini = false;
-            restoreAll();
-            updateMenuUI();
+            g.arrow = g.taiko = g.mini = false; restoreAll(); updateMenuUI();
         }] forControlEvents:UIControlEventTouchUpInside];
-        [g_panel addSubview:bReset];
+        [g_menuPanel addSubview:bReset];
         
         UILabel* info = [[UILabel alloc] initWithFrame:CGRectMake(15, 250, 260, 40)];
-        info.text = @"Vào màn hình chơi → tự kích hoạt";
+        info.text = @"🎮 = Ẩn/Hiện Menu\nVào màn hình chơi → tự kích hoạt";
         info.textColor = [UIColor lightGrayColor];
         info.font = [UIFont systemFontOfSize:12];
         info.numberOfLines = 2;
         info.textAlignment = NSTextAlignmentCenter;
-        [g_panel addSubview:info];
+        [g_menuPanel addSubview:info];
         
-        [g_win addSubview:g_panel];
-        g_win.hidden = NO;
-        [g_win makeKeyAndVisible];
+        [g_menuWin addSubview:g_menuPanel];
+        g_menuWin.hidden = NO;
+        [g_menuWin makeKeyAndVisible];
     });
 }
 
@@ -332,11 +335,14 @@ extern "C" {
     void dance_set_ctrl_D(void* p) { g.pD = p; NSLog(@"✅ Dynamic: %p", p); }
 }
 
-#pragma mark - === VÒNG LẶP ===
+#pragma mark - === VÒNG LẶP + TRỄ TẠO MENU ===
 
 static void loopTick() {
     static time_t lA=0,lT=0,lM=0,lC=0;
     time_t now = time(nullptr);
+    
+    // Tạo Menu + Icon sau khi game ổn định
+    if(!g.didInitMenu) { buildIconAndMenu(); return; }
     
     if(g.arrow && g.pA && difftime(now,lA)>=1.5) { lA=now; doArrow(); }
     if(g.taiko && g.pT && difftime(now,lT)>=1.5) { lT=now; doTaiko(); }
@@ -349,16 +355,15 @@ static void loopTick() {
 __attribute__((constructor))
 static void initMod() {
     NSLog(@"========================================");
-    NSLog(@"  AutoDance HexControl v7.2.6 — BUILD OK");
-    NSLog(@"  ✅ Menu Ẩn/Hiện | ✅ Không văng | ✅ Không lỗi");
+    NSLog(@"  AutoDance v7.3 — ICON NỔI + KHÔNG VĂNG");
+    NSLog(@"  ✅ 🎮 góc trái = bấm ẩn/hiện Menu");
+    NSLog(@"  ✅ Vào game không văng");
     NSLog(@"========================================");
-    
-    buildMenu();
     
     dispatch_source_t t = dispatch_source_create(
         DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     dispatch_source_set_timer(t, DISPATCH_TIME_NOW,
-                              0.25 * NSEC_PER_SEC, 0.1 * NSEC_PER_SEC);
+                              0.5 * NSEC_PER_SEC, 0.5 * NSEC_PER_SEC);
     dispatch_source_set_event_handler(t, ^{ loopTick(); });
     dispatch_resume(t);
 }
