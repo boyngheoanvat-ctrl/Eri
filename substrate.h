@@ -3,7 +3,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <objc/runtime.h>
 
 #ifdef __cplusplus
 extern "C" {
