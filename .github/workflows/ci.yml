@@ -21,19 +21,17 @@ jobs:
 
     - name: Compile dynamic library (.dylib for iOS)
       run: |
-        # Lấy đường dẫn iOS SDK trên máy ảo macOS
         SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
         echo "Using iOS SDK: $SDK_PATH"
 
-        # 1. Biên dịch từng file C của Lua sang object file (.o) cho iOS arm64
-        # Thêm -Dl_system='(void)(0),-1' để loại bỏ hàm system() bị iOS chặn
+        # Định nghĩa l_system trả về kiểu int chuẩn (-1) để tương thích hoàn toàn với loslib.c
         for src in lua-5.4.6/src/*.c; do
           if [[ "$src" != *"lua.c"* && "$src" != *"luac.c"* ]]; then
-            xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDK_PATH -c "$src" -O2 -Dl_system='(void)(0),-1'
+            xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDK_PATH -c "$src" -O2 -Dl_system='(int)(__extension__({int __x = -1; __x;}))'
           fi
         done
 
-        # 2. Biên dịch main.mm kết hợp với các object files của Lua thành dylib cho iOS
+        # Biên dịch main.mm kết hợp với các object files của Lua thành dylib cho iOS
         xcrun --sdk iphoneos clang++ -dynamiclib -arch arm64 -isysroot $SDK_PATH \
           -std=c++17 -fobjc-arc \
           main.mm *.o \
