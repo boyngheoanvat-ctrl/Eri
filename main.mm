@@ -3,8 +3,8 @@
 #import <mach-o/dyld.h>
 #include <dlfcn.h>
 
-// Khai báo Weak Import để biên dịch trên macOS mà không cần file libsubstrate.dylib thực tế
-extern "C" void MSHookFunction(void *symbol, void *replace, void **result) __attribute__((weak_import));
+// Định nghĩa kiểu cho MSHookFunction
+typedef void (*MSHookFunctionType)(void *symbol, void *replace, void **result);
 
 @interface PassthroughWindow : UIWindow
 @end
@@ -230,17 +230,18 @@ __attribute__((constructor)) static void entryPoint() {
             if (base != 0) {
                 NSLog(@"[HexControl] Resolved HotFix base address: 0x%lx", (unsigned long)base);
                 
-                // Kiểm tra an toàn trước khi gọi hook
-                if (&MSHookFunction != NULL) {
+                // Lấy hàm MSHookFunction động qua dlsym để tránh lỗi Undefined symbols lúc build trên macOS
+                MSHookFunctionType hookFunc = (MSHookFunctionType)dlsym(RTLD_DEFAULT, "MSHookFunction");
+                if (hookFunc != NULL) {
                     void *addrGetJudge = (void *)(base + 0x16AEDEC);
-                    MSHookFunction(addrGetJudge, (void *)hooked_GetJudgeLevel, (void **)&orig_GetJudgeLevel);
+                    hookFunc(addrGetJudge, (void *)hooked_GetJudgeLevel, (void **)&orig_GetJudgeLevel);
                     
                     void *addrCheckHit = (void *)(base + 0x16D30B0);
-                    MSHookFunction(addrCheckHit, (void *)hooked_CheckHit, (void **)&orig_CheckHit);
+                    hookFunc(addrCheckHit, (void *)hooked_CheckHit, (void **)&orig_CheckHit);
                     
-                    NSLog(@"[HexControl] MSHookFunction applied successfully via RVA offsets!");
+                    NSLog(@"[HexControl] MSHookFunction applied dynamically via RVA offsets!");
                 } else {
-                    NSLog(@"[HexControl] Error: MSHookFunction is NULL (Substrate not present).");
+                    NSLog(@"[HexControl] Error: MSHookFunction symbol not found via dlsym.");
                 }
             } else {
                 NSLog(@"[HexControl] Error: Could not resolve base address!");
@@ -248,3 +249,4 @@ __attribute__((constructor)) static void entryPoint() {
         }
     });
 }
+
