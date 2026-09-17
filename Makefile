@@ -1,12 +1,16 @@
-TARGET := iphone:clang:latest:14.0
-ARCHS := arm64 arm64e
+# Makefile — Eri Mod
+SDK_PATH := $(shell xcrun --sdk iphoneos --show-sdk-path)
+CC := clang++
+CFLAGS := -isysroot $(SDK_PATH) -fobjc-arc -std=c++17 -O2 -Wall
+LDFLAGS := -framework Foundation -lsubstrate
 
-include $(THEOS)/makefiles/common.mk
+TARGET := EriMod.dylib
 
-TWEAK_NAME := AutoDanceHex
-AutoDanceHex_FILES = main.mm
-AutoDanceHex_FRAMEWORKS = UIKit Foundation Security QuartzCore
-AutoDanceHex_LIBRARIES = lua
-AutoDanceHex_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -I$(THEOS)/include -I$(THEOS)/vendor/include
+all: $(TARGET)
 
-include $(THEOS_MAKE_PATH)/tweak.mk
+$(TARGET): main.mm
+	$(CC) $(CFLAGS) -shared -o $@ $^ $(LDFLAGS)
+	@echo "✅ Biên dịch xong: $(TARGET)"
+
+clean:
+	rm -f $(TARGET)
