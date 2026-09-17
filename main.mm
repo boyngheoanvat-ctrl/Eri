@@ -1,8 +1,7 @@
 //
 //  main.mm
 //  Eri Mod v7.2 — IL2CPP Verified + run_ui_lua Menu
-//  Platform: Substrate / IL2CPP AU2! v23.4
-//  Features: Reversible toggle, auto restore on stop
+//  Đã sửa: tên biến khớp + kiểu con trỏ đúng
 //
 
 #import <Foundation/Foundation.h>
@@ -41,7 +40,7 @@ static struct Global {
     bool taikoEnabled;
     bool miniCrazyEnabled;
     
-    struct {
+    struct Counts {
         int arrow;
         int taiko;
         long long crazyBonus;
@@ -56,20 +55,21 @@ static struct Global {
     
     Global()
     : uiVisible(true), arrowEnabled(false), taikoEnabled(false), miniCrazyEnabled(false),
-      arrow(0), taiko(0), crazyBonus(0),
       lastArrowTick(0), lastTaikoTick(0), lastCrazyTick(0),
-      lastKnownScore(0) {}
+      lastKnownScore(0)
+    {
+        counts.arrow = 0;
+        counts.taiko = 0;
+        counts.crazyBonus = 0;
+    }
 } g;
 
 static std::map<std::string, SavedEntry> saved;
 
-#pragma mark - === IL2CPP ACCESSORS — Kết nối trực tiếp trường ===
+#pragma mark - === IL2CPP ACCESSORS ===
 
-// AuditionGroup
 static void setAuditionGroupPerfect(void* self) {
     if (!self) return;
-    
-    // Lưu giá trị gốc
     auto key = std::to_string((uintptr_t)self);
     if (!saved.count(key)) {
         SavedEntry e; e.ptr = self;
@@ -79,12 +79,10 @@ static void setAuditionGroupPerfect(void* self) {
         e.fields["isHitBeat"].isBool = true;
         saved[key] = e;
     }
-    
-    *(int32_t*)((uint8_t*)self + 64) = JUDGE_PERFECT;  // judgeLevel = Perfect
-    *(bool*)((uint8_t*)self + 50) = true;               // isHitBeat = true
+    *(int32_t*)((uint8_t*)self + 64) = JUDGE_PERFECT;
+    *(bool*)((uint8_t*)self + 50) = true;
 }
 
-// GuidTrackDanceNoteCtrl
 static void setTrackPlaying(void* self) {
     if (!self) return;
     auto key = "TRK_" + std::to_string((uintptr_t)self);
@@ -97,7 +95,6 @@ static void setTrackPlaying(void* self) {
     ((void(*)(void*, SEL, bool))objc_msgSend)(self, sel_getUid("set_IsPlaying:"), true);
 }
 
-// UI_TaikoNoteBase
 static void setTaikoNotePerfect(void* self) {
     if (!self) return;
     auto key = "TKO_" + std::to_string((uintptr_t)self);
@@ -116,20 +113,17 @@ static void setTaikoNotePerfect(void* self) {
     *(bool*)((uint8_t*)self + 64) = true;
 }
 
-// DynamicArrowsController — Crazy Score Fix
 static long long updateCrazyScore(void* ctrl) {
     if (!ctrl) return 0;
     
-    // Đọc các giá trị gốc IL2CPP
-    long long baseScore = *(int64_t*)((uint8_t*)ctrl + 0x38);  // noteBaseScore
-    int32_t comboLevel = *(int32_t*)((uint8_t*)ctrl + 0x44);   // curComboLevel
-    long long nowScore = *(int64_t*)((uint8_t*)ctrl + 0x40);    // nowTotalScore
+    long long baseScore = *(int64_t*)((uint8_t*)ctrl + 0x38);
+    int32_t comboLevel = *(int32_t*)((uint8_t*)ctrl + 0x44);
+    long long nowScore = *(int64_t*)((uint8_t*)ctrl + 0x40);
     g.lastKnownScore = nowScore;
     
     double multiplier = 1.0 + (comboLevel - 1) * 0.05;
     
-    // Duyệt mảng totalGroup
-    void** groupArr = *(void**)((uint8_t*)ctrl + 0x50);
+    void* groupArr = *(void**)((uint8_t*)ctrl + 0x50);
     if (!groupArr) return 0;
     int32_t count = *(int32_t*)((uint8_t*)groupArr + 0x10);
     void** items = (void**)((uint8_t*)groupArr + 0x20);
@@ -138,12 +132,12 @@ static long long updateCrazyScore(void* ctrl) {
     for (int32_t i = 0; i < count; i++) {
         void* grp = items[i];
         if (!grp) continue;
-        if (g.scoredGroups[grp]) continue;  // Đã tính → bỏ qua
+        if (g.scoredGroups[grp]) continue;
         
-        bool allHit = *(bool*)((uint8_t*)grp + 0x30);    // isJudgeAllKey
+        bool allHit = *(bool*)((uint8_t*)grp + 0x30);
         if (!allHit) continue;
         
-        int32_t keyCount = *(int32_t*)((uint8_t*)grp + 0x34); // curKeysIndex
+        int32_t keyCount = *(int32_t*)((uint8_t*)grp + 0x34);
         long long gain = (long long)floor(baseScore * multiplier * std::max(keyCount, 1));
         
         nowScore += gain;
@@ -151,16 +145,14 @@ static long long updateCrazyScore(void* ctrl) {
         g.scoredGroups[grp] = true;
     }
     
-    // Ghi điểm tổng trực tiếp
     *(int64_t*)((uint8_t*)ctrl + 0x40) = nowScore;
     return added;
 }
 
-// Fix curArrowsIndex bị tràn
 static int fixArrowIndex(void* beatKeys) {
     if (!beatKeys) return 0;
-    int32_t idx = *(int32_t*)((uint8_t*)beatKeys + 0x28); // curArrowsIndex
-    void** arr = *(void**)((uint8_t*)beatKeys + 0x20);    // arrows
+    int32_t idx = *(int32_t*)((uint8_t*)beatKeys + 0x28);
+    void* arr = *(void**)((uint8_t*)beatKeys + 0x20);
     if (!arr) return 0;
     int32_t len = *(int32_t*)((uint8_t*)arr + 0x10);
     
@@ -196,7 +188,9 @@ static void restoreAll() {
     }
     saved.clear();
     g.scoredGroups.clear();
-    g.arrow = g.taiko = g.crazyBonus = 0;
+    g.counts.arrow = 0;
+    g.counts.taiko = 0;
+    g.counts.crazyBonus = 0;
     NSLog(@"[Eri Mod] ✅ Đã khôi phục tất cả giá trị gốc");
 }
 
@@ -204,34 +198,29 @@ static void restoreAll() {
 
 static int applyArrow() {
     int n = 0;
-    // Tìm đối tượng AuditionGroup qua IL2CPP registry
-    extern void* il2cpp_domain_get();
-    extern void** il2cpp_class_from_name(void*, const char*, const char*);
-    extern void** il2cpp_domain_get_assemblies(size_t*);
-    // === Thay hàm tìm đối tượng phù hợp với runtime IL2CPP của bạn ===
-    // Ví dụ vòng lặp tìm instance qua cache/registry
+    // TODO: Thêm logic liệt kê instance AuditionGroup
     return n;
 }
 
 static int applyTaiko() {
-    return 0; // Tương tự — liệt kê instance UI_TaikoNoteBase
+    int n = 0;
+    // TODO: Thêm logic liệt kê instance UI_TaikoNoteBase
+    return n;
 }
 
 static long long applyCrazyFix() {
-    extern void* DynamicArrowsController_instance; // Gán con trỏ singleton khi khởi tạo
+    extern void* DynamicArrowsController_instance;
     if (!DynamicArrowsController_instance) return 0;
     
-    // Sửa curArrowsIndex trên tất cả DynamicOneBeatKeys
-    // fixArrowIndex(inst);
+    // TODO: Gọi fixArrowIndex trên tất cả DynamicOneBeatKeys
     
     long long bonus = updateCrazyScore(DynamicArrowsController_instance);
-    g.crazyBonus += bonus;
+    g.counts.crazyBonus += bonus;
     return bonus;
 }
 
-#pragma mark - === MENU run_ui_lua — Giao diện điều khiển ===
+#pragma mark - === MENU run_ui_lua ===
 
-// Gọi từ Lua / Console / Hook bên ngoài
 extern "C" {
     void run_ui_lua() {
         NSLog(@"========================================");
@@ -241,11 +230,10 @@ extern "C" {
         NSLog(@"  [2] Auto Taiko             → %s", g.taikoEnabled ? "⚡ BẬT" : "⭕ TẮT");
         NSLog(@"  [3] Full Mini + Crazy Fix  → %s", g.miniCrazyEnabled ? "⚡ BẬT" : "⭕ TẮT");
         NSLog(@"  [4] Ẩn/Hiện Menu           → %s", g.uiVisible ? "👁 Hiện" : "🙈 Ẩn");
-        NSLog(@"  [R] Khôi phục & Tắt tất cả");
         NSLog(@"----------------------------------------");
         NSLog(@"  Thống kê:");
         NSLog(@"    Arrow: %d nhóm | Taiko: %d nốt", g.counts.arrow, g.counts.taiko);
-        NSLog(@"    Crazy Bonus đã cộng: %lld điểm", g.crazyBonus);
+        NSLog(@"    Crazy Bonus đã cộng: %lld điểm", g.counts.crazyBonus);
         NSLog(@"    Tổng điểm hiện tại: %lld", g.lastKnownScore);
         NSLog(@"========================================");
     }
@@ -264,7 +252,7 @@ extern "C" {
     void eri_toggle_mini(bool enable) {
         g.miniCrazyEnabled = enable;
         if (!enable) restoreAll();
-        else g.scoredGroups.clear(); // Reset đánh dấu nhóm khi bật lại
+        else g.scoredGroups.clear();
         NSLog(@"[Eri Mod] MiniGame + CrazyFix → %s", enable ? "BẬT" : "TẮT");
     }
     void eri_reset_all() {
@@ -274,7 +262,7 @@ extern "C" {
     }
 }
 
-#pragma mark - === UPDATE LOOP — Gọi mỗi khung hình ===
+#pragma mark - === UPDATE LOOP ===
 
 static void (*orig_FrameUpdate)(void* self, void* method, float dt) = nullptr;
 
@@ -283,19 +271,16 @@ static void hook_FrameUpdate(void* self, void* method, float dt) {
     
     time_t now = time(nullptr);
     
-    // Auto Arrow — mỗi 2s
     if (g.arrowEnabled && difftime(now, g.lastArrowTick) >= 2.0) {
         g.lastArrowTick = now;
         g.counts.arrow = applyArrow();
     }
     
-    // Auto Taiko — mỗi 2s
     if (g.taikoEnabled && difftime(now, g.lastTaikoTick) >= 2.0) {
         g.lastTaikoTick = now;
         g.counts.taiko = applyTaiko();
     }
     
-    // Crazy Score Fix — mỗi 0.3s
     if (g.miniCrazyEnabled && difftime(now, g.lastCrazyTick) >= 0.3) {
         g.lastCrazyTick = now;
         applyCrazyFix();
@@ -308,14 +293,12 @@ __attribute__((constructor))
 static void init() {
     NSLog(@"========================================");
     NSLog(@"  ERI MOD v7.2 — IL2CPP MAPPED");
-    NSLog(@"  Game: AU2! v23.4 | IL2CPP Verified");
+    NSLog(@"  Game: AU2! v23.4");
     NSLog(@"========================================");
-    NSLog(@"  Mapping hoàn toàn khớp với khai báo");
     NSLog(@"  Gọi run_ui_lua() để mở Menu");
     NSLog(@"========================================");
     
-    // === Hook vòng lặp chính IL2CPP ===
-    // Thay bằng con trỏ hàm cập nhật thực của game:
-    // void* updateMethod = ...;
-    // MSHookFunction(updateMethod, (void*)hook_FrameUpdate, (void**)
+    // TODO: Hook vòng lặp cập nhật thực
+    // void* updateFunc = ...;
+    // MSHookFunction(updateFunc, (void*)hook_FrameUpdate, (void**)&orig_FrameUpdate);
 }
