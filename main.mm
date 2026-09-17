@@ -3,8 +3,8 @@
 #import <mach-o/dyld.h>
 #include <dlfcn.h>
 
-// Khai báo Substrate hook (Đảm bảo Makefile / build action có cờ -lsubstrate)
-extern "C" void MSHookFunction(void *symbol, void *replace, void **result);
+// Khai báo Weak Import để biên dịch trên macOS mà không cần file libsubstrate.dylib
+extern "C" void MSHookFunction(void *symbol, void *replace, void **result) __attribute__((weak_import));
 
 @interface PassthroughWindow : UIWindow
 @end
@@ -230,15 +230,18 @@ __attribute__((constructor)) static void entryPoint() {
             if (base != 0) {
                 NSLog(@"[HexControl] Resolved HotFix base address: 0x%lx", (unsigned long)base);
                 
-                // Hook GetJudgeLevel (RVA: 0x16AEDEC)
-                void *addrGetJudge = (void *)(base + 0x16AEDEC);
-                MSHookFunction(addrGetJudge, (void *)hooked_GetJudgeLevel, (void **)&orig_GetJudgeLevel);
-                
-                // Hook CheckHit (RVA: 0x16D30B0)
-                void *addrCheckHit = (void *)(base + 0x16D30B0);
-                MSHookFunction(addrCheckHit, (void *)hooked_CheckHit, (void **)&orig_CheckHit);
-                
-                NSLog(@"[HexControl] MSHookFunction applied successfully via RVA offsets!");
+                // Kiểm tra an toàn trước khi gọi MSHookFunction
+                if (&MSHookFunction != NULL) {
+                    void *addrGetJudge = (void *)(base + 0x16AEDEC);
+                    MSHookFunction(addrGetJudge, (void *)hooked_GetJudgeLevel, (void **)&orig_GetJudgeLevel);
+                    
+                    void *addrCheckHit = (void *)(base + 0x16D30B0);
+                    MSHookFunction(addrCheckHit, (void *)hooked_CheckHit, (void **)&orig_CheckHit);
+                    
+                    NSLog(@"[HexControl] MSHookFunction applied successfully via RVA offsets!");
+                } else {
+                    NSLog(@"[HexControl] Error: MSHookFunction is NULL (Substrate not loaded).");
+                }
             } else {
                 NSLog(@"[HexControl] Error: Could not resolve base address!");
             }
