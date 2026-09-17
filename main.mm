@@ -2,7 +2,7 @@
 //  main.mm
 //  Eri Mod — AutoDance HexControl v7.2
 //  Nền tảng: Substrate / iOS
-//  Không phụ thuộc ImGui
+//  Đã sửa lỗi: kiểm tra map + trùng tên biến
 //
 
 #import <Foundation/Foundation.h>
@@ -72,7 +72,7 @@ static bool setField(id obj, NSString* name, id val) {
     @catch (...) { return false; }
 }
 
-static bool setFieldInt(id obj, NSString* name, int v) { return setField(obj, name, @(v)); }
+static bool setFieldInt(id obj, NSString* name, int v)       { return setField(obj, name, @(v)); }
 static bool setFieldLong(id obj, NSString* name, long long v) { return setField(obj, name, @(v)); }
 static int getFieldInt(id obj, NSString* name, int def=0) {
     id v = getField(obj, name); return v ? [v intValue] : def;
@@ -93,8 +93,12 @@ static NSArray* findObjects(NSString* clsName) {
 static void capture(NSString* prefix, id obj, NSArray* fields) {
     if (!obj) return;
     NSString* key = [NSString stringWithFormat:@"%@%p", prefix, obj];
-    if (originals[[key UTF8String]]) return;
-    SavedState s; s.object = obj;
+    
+    // ✅ SỬA LỖI 1: dùng .find() để kiểm tra tồn tại
+    if (originals.find([key UTF8String]) != originals.end()) return;
+    
+    SavedState s;
+    s.object = obj;
     for (NSString* f in fields) {
         id v = getField(obj, f);
         if (v) s.originalValues[[f UTF8String]] = v;
@@ -121,13 +125,15 @@ static int restoreAll() {
 static int applyAudition() {
     int cnt = 0;
     @autoreleasepool {
-        for (id g in findObjects(@"Dance.AuditionGroup")) {
+        NSArray* groups = findObjects(@"Dance.AuditionGroup");
+        for (id g in groups) {
             capture(@"G:", g, @[@"judgeLevel", @"isHitBeat"]);
             setFieldInt(g, @"judgeLevel", JUDGE_PERFECT);
             setFieldInt(g, @"isHitBeat", 1);
             cnt++;
         }
-        for (id trk in findObjects(@"GuidTrackDanceNoteCtrl")) {
+        NSArray* tracks = findObjects(@"GuidTrackDanceNoteCtrl");
+        for (id trk in tracks) {
             capture(@"T:", trk, @[@"IsPlaying"]);
             setFieldInt(trk, @"IsPlaying", 1);
             cnt++;
@@ -139,9 +145,11 @@ static int applyAudition() {
 static int repairCrazyKeys() {
     int fixed = 0;
     @autoreleasepool {
-        for (id k in findObjects(@"DynamicOneBeatKeys")) {
+        NSArray* keys = findObjects(@"DynamicOneBeatKeys");
+        for (id k in keys) {
             int idx = getFieldInt(k, @"curArrowsIndex", -1);
-            NSUInteger len = [getField(k, @"arrows") count];
+            NSArray* arrows = getField(k, @"arrows");
+            NSUInteger len = arrows ? [arrows count] : 0;
             if (len > 0 && (idx < 0 || idx >= (int)len)) {
                 setFieldInt(k, @"curArrowsIndex", 0);
                 fixed++;
@@ -163,7 +171,8 @@ static long long applyCrazyScoreFix() {
         double mul = 1.0 + (combo - 1) * 0.05;
         long long score = getFieldLong(ctrl, @"nowTotalScore", 0);
         
-        for (id grp in getField(ctrl, @"totalGroup")) {
+        NSArray* groups = getField(ctrl, @"totalGroup");
+        for (id grp in groups) {
             NSString* gKey = [NSString stringWithFormat:@"CG:%p", grp];
             if (state.scoredGroups[[gKey UTF8String]]) continue;
             if (!getFieldInt(grp, @"isJudgeAllKey", 0)) continue;
@@ -182,21 +191,22 @@ static long long applyCrazyScoreFix() {
 
 #pragma mark - === SUBSTRATE HOOK / VÒNG LẶP ===
 
-static void orig_XXX(id self, SEL _cmd);
-static void (*orig_XXX)(id, SEL) = nullptr;
+// ✅ SỬA LỖI 2: ĐỔI TÊN để không trùng
+static void (*orig_GameUpdate)(id, SEL) = nullptr;
 
-static void hooked_XXX(id self, SEL _cmd) {
-    orig_XXX(self, _cmd);
+static void hook_GameUpdate(id self, SEL _cmd) {
+    // Gọi hàm gốc trước
+    if (orig_GameUpdate) orig_GameUpdate(self, _cmd);
     
     time_t now = time(nullptr);
     
-    // Auto Arrow — mỗi 2s
+    // Auto Arrow — mỗi 2 giây
     if (state.activeOn && difftime(now, state.lastCheck) >= 2) {
         state.lastCheck = now;
         state.lastCount = applyAudition();
     }
     
-    // Crazy Fix — mỗi 0.3s
+    // Crazy Score Fix — mỗi 0.3 giây
     if (state.miniOn && difftime(now, state.lastCrazyCheck) >= 0.3) {
         repairCrazyKeys();
         state.stats.crazy += applyCrazyScoreFix();
@@ -210,9 +220,12 @@ __attribute__((constructor))
 static void init(void) {
     NSLog(@"[Eri Mod] AutoDance v7.2 ĐANG TẢI...");
     
-    // Hook hàm cập nhật game (thay XXX bằng tên hàm thực)
-    // Class cls = NSClassFromString(@"GameUpdateClass");
-    // MSHookMessageEx(cls, @selector(updateLoop:), (IMP)&hooked_XXX, (IMP*)&orig_XXX);
+    // ===================== LƯU Ý =====================
+    // Thay "TênLớpCậpNhật" và "tênHàmCậpNhật" bằng tên thực của game!
+    // Ví dụ:
+    // Class cls = NSClassFromString(@"GameController");
+    // MSHookMessageEx(cls, @selector(update:), (IMP)&hook_GameUpdate, (IMP*)&orig_GameUpdate);
+    // ==================================================
     
     NSLog(@"[Eri Mod] Đã sẵn sàng ✅");
 }
