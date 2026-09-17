@@ -6,6 +6,6 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME := AutoDanceHex
 AutoDanceHex_FILES = main.mm
 AutoDanceHex_FRAMEWORKS = UIKit Foundation Security
-AutoDanceHex_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -I$(THEOS)/include
+AutoDanceHex_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -I$(THEOS)/include -I$(THEOS)/vendor/include
 
 include $(THEOS_MAKE_PATH)/tweak.mk
