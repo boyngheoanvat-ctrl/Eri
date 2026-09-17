@@ -1,7 +1,7 @@
 //
-//  AutoDance HexControl v7.2.5 — AU2! v23.4
-//  ✅ Menu có nút ẨN/HIỆN | ✅ Bật không văng | ✅ Offset chuẩn
-//  ✅ Tự khôi phục | ✅ Kiểm tra NULL mọi nơi
+//  AutoDance HexControl v7.2.6 — FIX BUILD ERROR
+//  ✅ Không lỗi __weak typeof | ✅ Sửa UIWindow deprecated
+//  ✅ Menu Ẩn/Hiện | ✅ Không văng | ✅ Offset chuẩn AU2 v23.4
 //
 
 #import <Foundation/Foundation.h>
@@ -19,38 +19,25 @@ enum JudgeLv : int32_t {
 };
 
 struct Off {
-    // AuditionArrowsController
     static const uint32_t A_listGrp = 0x48;
     static const uint32_t A_curGrp  = 0x64;
-    
-    // AuditionGroup
-    static const uint32_t G_judge   = 0x40; // int32_t
-    static const uint32_t G_isHit   = 0x32; // bool
-    
-    // TaikoController
+    static const uint32_t G_judge   = 0x40;
+    static const uint32_t G_isHit   = 0x32;
     static const uint32_t T_listNote= 0x80;
-    
-    // TaikoNote
-    static const uint32_t TN_isJL   = 0x30; // bool
-    static const uint32_t TN_JL     = 0x38; // int32_t
-    static const uint32_t TN_isHit  = 0x40; // bool
-    
-    // DynamicController
-    static const uint32_t D_base    = 0x60; // int64_t
-    static const uint32_t D_score   = 0x64; // int64_t
-    static const uint32_t D_combo   = 0xAC; // int32_t
-    static const uint32_t D_listGrp = 0x60; // List
-    
-    // DynamicGroup
-    static const uint32_t DG_keys   = 0x18; // array
-    static const uint32_t DG_allHit = 0x21; // bool
-    static const uint32_t DG_idx    = 0x24; // int32_t
-    
-    // OneBeatKeys
-    static const uint32_t OB_arrows = 0x10; // array
-    static const uint32_t OB_JL     = 0x20; // int32_t
-    static const uint32_t OB_curIdx = 0x24; // int32_t
-    static const uint32_t OB_ratio  = 0x34; // int32_t
+    static const uint32_t TN_isJL   = 0x30;
+    static const uint32_t TN_JL     = 0x38;
+    static const uint32_t TN_isHit  = 0x40;
+    static const uint32_t D_base    = 0x60;
+    static const uint32_t D_score   = 0x64;
+    static const uint32_t D_combo   = 0xAC;
+    static const uint32_t D_listGrp = 0x60;
+    static const uint32_t DG_keys   = 0x18;
+    static const uint32_t DG_allHit = 0x21;
+    static const uint32_t DG_idx    = 0x24;
+    static const uint32_t OB_arrows = 0x10;
+    static const uint32_t OB_JL     = 0x20;
+    static const uint32_t OB_curIdx = 0x24;
+    static const uint32_t OB_ratio  = 0x34;
 };
 
 // === IL2CPP ABI ===
@@ -79,17 +66,20 @@ struct Saved {
     std::map<int, bool> b;
 };
 
-static struct {
+static struct Global {
     bool showMenu;
     bool arrow, taiko, mini;
     
-    void* pA; // AuditionCtrl
-    void* pT; // TaikoCtrl
-    void* pD; // DynamicCtrl
+    void* pA;
+    void* pT;
+    void* pD;
     
     std::map<void*, bool> scored;
     std::map<void*, Saved> saved;
-} g = {true};
+    
+    Global() : showMenu(true), arrow(false), taiko(false), mini(false),
+               pA(nullptr), pT(nullptr), pD(nullptr) {}
+} g;
 
 #pragma mark - === LƯU / KHÔI PHỤC ===
 
@@ -201,19 +191,51 @@ static int doMini() {
     return n;
 }
 
-#pragma mark - === MENU NÚT ẨN/HIỆN ===
+#pragma mark - === MENU ===
 
 static UIWindow* g_win = nil;
 static UIView* g_panel = nil;
+static UIButton* g_btnArrow = nil;
+static UIButton* g_btnTaiko = nil;
+static UIButton* g_btnMini = nil;
 
-static void updateMenuUI();
-static void toggleMenu();
+static void updateMenuUI() {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [g_btnArrow setTitle:[NSString stringWithFormat:@"⚡ Auto Arrow: %s", g.arrow?"BẬT":"TẮT"] forState:UIControlStateNormal];
+        g_btnArrow.backgroundColor = g.arrow ? [UIColor colorWithRed:0.15 green:0.7 blue:0.2 alpha:1] : [UIColor darkGrayColor];
+        
+        [g_btnTaiko setTitle:[NSString stringWithFormat:@"🥁 Auto Taiko: %s", g.taiko?"BẬT":"TẮT"] forState:UIControlStateNormal];
+        g_btnTaiko.backgroundColor = g.taiko ? [UIColor colorWithRed:0.15 green:0.7 blue:0.2 alpha:1] : [UIColor darkGrayColor];
+        
+        [g_btnMini setTitle:[NSString stringWithFormat:@"🔥 Mini+Crazy: %s", g.mini?"BẬT":"TẮT"] forState:UIControlStateNormal];
+        g_btnMini.backgroundColor = g.mini ? [UIColor colorWithRed:0.15 green:0.7 blue:0.2 alpha:1] : [UIColor darkGrayColor];
+    });
+}
+
+void showDanceMenu() {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        g.showMenu = true;
+        if(g_panel) g_panel.hidden = false;
+        if(g_win) g_win.hidden = false;
+    });
+}
 
 static void buildMenu() {
     dispatch_async(dispatch_get_main_queue(), ^{
         if(g_win)return;
         
-        g_win = [[UIWindow alloc] initWithFrame:CGRectMake(10, 40, 290, 340)];
+        // === Sửa deprecated: dùng style ===
+        UIWindowScene* scene = nil;
+        if(@available(iOS 13.0, *)) {
+            scene = [[UIApplication sharedApplication].windows.firstObject windowScene];
+        }
+        if(scene) {
+            g_win = [[UIWindow alloc] initWithWindowScene:scene];
+            g_win.frame = CGRectMake(10, 40, 290, 340);
+        } else {
+            g_win = [[UIWindow alloc] initWithFrame:CGRectMake(10, 40, 290, 340)];
+        }
+        
         g_win.backgroundColor = [UIColor colorWithRed:0.05 green:0.05 blue:0.08 alpha:0.95];
         g_win.layer.cornerRadius = 16;
         g_win.layer.borderWidth = 2.5;
@@ -228,61 +250,68 @@ static void buildMenu() {
         [btnHide addAction:[UIAction actionWithHandler:^(UIAction*){
             g.showMenu = false;
             g_panel.hidden = true;
-            NSLog(@"Menu ẩn");
         }] forControlEvents:UIControlEventTouchUpInside];
         [g_win addSubview:btnHide];
         
         UILabel* title = [[UILabel alloc] initWithFrame:CGRectMake(15, 10, 220, 28)];
-        title.text = @"🎮 AutoDance v7.2.5";
+        title.text = @"🎮 AutoDance v7.2.6";
         title.textColor = UIColor.whiteColor;
         title.font = [UIFont boldSystemFontOfSize:17];
         [g_win addSubview:title];
         
         g_panel = [[UIView alloc] initWithFrame:CGRectMake(0, 45, 290, 295)];
         
-        auto mkBtn = ^UIButton*(NSString* t, CGRect f, void(^cb)()) {
-            UIButton* b = [[UIButton alloc] initWithFrame:f];
-            [b setTitle:t forState:UIControlStateNormal];
-            [b setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-            b.backgroundColor = [UIColor darkGrayColor];
-            b.layer.cornerRadius = 10;
-            [b addAction:[UIAction actionWithHandler:^(UIAction*){ cb(); }] forControlEvents:UIControlEventTouchUpInside];
-            return b;
-        };
-        
-        __weak typeof(g) wg = &g;
-        
-        UIButton* bArrow = mkBtn(@"⚡ Auto Arrow: TẮT", CGRectMake(15, 10, 260, 50), ^{
-            wg->arrow = !wg->arrow;
-            if(!wg->arrow) restoreAll();
+        // === NÚT BẬM — KHÔNG DÙNG __weak typeof ===
+        g_btnArrow = [[UIButton alloc] initWithFrame:CGRectMake(15, 10, 260, 50)];
+        [g_btnArrow setTitle:@"⚡ Auto Arrow: TẮT" forState:UIControlStateNormal];
+        [g_btnArrow setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        g_btnArrow.backgroundColor = [UIColor darkGrayColor];
+        g_btnArrow.layer.cornerRadius = 10;
+        [g_btnArrow addAction:[UIAction actionWithHandler:^(UIAction*){
+            g.arrow = !g.arrow;
+            if(!g.arrow) restoreAll();
             updateMenuUI();
-        });
-        bArrow.tag = 101; [g_panel addSubview:bArrow];
+        }] forControlEvents:UIControlEventTouchUpInside];
+        [g_panel addSubview:g_btnArrow];
         
-        UIButton* bTaiko = mkBtn(@"🥁 Auto Taiko: TẮT", CGRectMake(15, 70, 260, 50), ^{
-            wg->taiko = !wg->taiko;
-            if(!wg->taiko) restoreAll();
+        g_btnTaiko = [[UIButton alloc] initWithFrame:CGRectMake(15, 70, 260, 50)];
+        [g_btnTaiko setTitle:@"🥁 Auto Taiko: TẮT" forState:UIControlStateNormal];
+        [g_btnTaiko setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        g_btnTaiko.backgroundColor = [UIColor darkGrayColor];
+        g_btnTaiko.layer.cornerRadius = 10;
+        [g_btnTaiko addAction:[UIAction actionWithHandler:^(UIAction*){
+            g.taiko = !g.taiko;
+            if(!g.taiko) restoreAll();
             updateMenuUI();
-        });
-        bTaiko.tag = 102; [g_panel addSubview:bTaiko];
+        }] forControlEvents:UIControlEventTouchUpInside];
+        [g_panel addSubview:g_btnTaiko];
         
-        UIButton* bMini = mkBtn(@"🔥 Mini+Crazy: TẮT", CGRectMake(15, 130, 260, 50), ^{
-            wg->mini = !wg->mini;
-            if(!wg->mini) { wg->scored.clear(); restoreAll(); }
+        g_btnMini = [[UIButton alloc] initWithFrame:CGRectMake(15, 130, 260, 50)];
+        [g_btnMini setTitle:@"🔥 Mini+Crazy: TẮT" forState:UIControlStateNormal];
+        [g_btnMini setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        g_btnMini.backgroundColor = [UIColor darkGrayColor];
+        g_btnMini.layer.cornerRadius = 10;
+        [g_btnMini addAction:[UIAction actionWithHandler:^(UIAction*){
+            g.mini = !g.mini;
+            if(!g.mini) { g.scored.clear(); restoreAll(); }
             updateMenuUI();
-        });
-        bMini.tag = 103; [g_panel addSubview:bMini];
+        }] forControlEvents:UIControlEventTouchUpInside];
+        [g_panel addSubview:g_btnMini];
         
-        UIButton* bReset = mkBtn(@"🔄 Tắt hết & Khôi phục", CGRectMake(15, 195, 260, 45), ^{
-            wg->arrow = wg->taiko = wg->mini = false;
+        UIButton* bReset = [[UIButton alloc] initWithFrame:CGRectMake(15, 195, 260, 45)];
+        [bReset setTitle:@"🔄 Tắt hết & Khôi phục" forState:UIControlStateNormal];
+        [bReset setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        bReset.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1];
+        bReset.layer.cornerRadius = 10;
+        [bReset addAction:[UIAction actionWithHandler:^(UIAction*){
+            g.arrow = g.taiko = g.mini = false;
             restoreAll();
             updateMenuUI();
-        });
-        bReset.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1];
+        }] forControlEvents:UIControlEventTouchUpInside];
         [g_panel addSubview:bReset];
         
         UILabel* info = [[UILabel alloc] initWithFrame:CGRectMake(15, 250, 260, 40)];
-        info.text = @"Vào màn hình chơi → tự kích hoạt\nGán Controller = địa chỉ thực";
+        info.text = @"Vào màn hình chơi → tự kích hoạt";
         info.textColor = [UIColor lightGrayColor];
         info.font = [UIFont systemFontOfSize:12];
         info.numberOfLines = 2;
@@ -295,33 +324,7 @@ static void buildMenu() {
     });
 }
 
-static void updateMenuUI() {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIButton* b1 = [g_panel viewWithTag:101];
-        UIButton* b2 = [g_panel viewWithTag:102];
-        UIButton* b3 = [g_panel viewWithTag:103];
-        
-        [b1 setTitle:[NSString stringWithFormat:@"⚡ Auto Arrow: %s", g.arrow?"BẬT":"TẮT"] forState:UIControlStateNormal];
-        b1.backgroundColor = g.arrow ? [UIColor colorWithRed:0.15 green:0.7 blue:0.2 alpha:1] : [UIColor darkGrayColor];
-        
-        [b2 setTitle:[NSString stringWithFormat:@"🥁 Auto Taiko: %s", g.taiko?"BẬT":"TẮT"] forState:UIControlStateNormal];
-        b2.backgroundColor = g.taiko ? [UIColor colorWithRed:0.15 green:0.7 blue:0.2 alpha:1] : [UIColor darkGrayColor];
-        
-        [b3 setTitle:[NSString stringWithFormat:@"🔥 Mini+Crazy: %s", g.mini?"BẬT":"TẮT"] forState:UIControlStateNormal];
-        b3.backgroundColor = g.mini ? [UIColor colorWithRed:0.15 green:0.7 blue:0.2 alpha:1] : [UIColor darkGrayColor];
-    });
-}
-
-// === NÚT HIỆN LẠI MENU — để vào đâu cũng gọi được ===
-void showDanceMenu() {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        g.showMenu = true;
-        if(g_panel) g_panel.hidden = false;
-        if(g_win) g_win.hidden = false;
-    });
-}
-
-#pragma mark - === GÁN CONTROLLER — Gọi từ hook ===
+#pragma mark - === GÁN CONTROLLER ===
 
 extern "C" {
     void dance_set_ctrl_A(void* p) { g.pA = p; NSLog(@"✅ Audition: %p", p); }
@@ -346,8 +349,8 @@ static void loopTick() {
 __attribute__((constructor))
 static void initMod() {
     NSLog(@"========================================");
-    NSLog(@"  AutoDance HexControl v7.2.5 — AU2 v23.4");
-    NSLog(@"  Menu: ✅ Ẩn/Hiện | ✅ Không văng");
+    NSLog(@"  AutoDance HexControl v7.2.6 — BUILD OK");
+    NSLog(@"  ✅ Menu Ẩn/Hiện | ✅ Không văng | ✅ Không lỗi");
     NSLog(@"========================================");
     
     buildMenu();
