@@ -37,7 +37,7 @@ static void initLuaScriptEmbedded() {
     }
 }
 
-// 2. Vòng lặp gọi hàm Lua liên tục (~20 lần/giây) khi tính năng được bật
+// 2. Vòng lặp gọi hàm Lua liên tục
 static void executeLuaModLoop() {
     if (!isLuaLoaded || !L) return;
 
@@ -108,9 +108,9 @@ static UIWindow *getCurrentWindow() {
     return foundWindow;
 }
 
-// Khai báo trước hàm showMenu để gọi lại dạng Checkbox tương tác
 @interface AutoDanceMenuController : NSObject
 + (void)showMenu;
++ (void)showToast:(NSString *)message;
 @end
 
 @implementation AutoDanceMenuController
@@ -125,83 +125,71 @@ static UIWindow *getCurrentWindow() {
             rootVC = rootVC.presentedViewController;
         }
 
-        // Đọc trạng thái hiện tại từ Lua state
-        BOOL activeOn = NO;
-        BOOL taikoOn = NO;
-        BOOL miniOn = NO;
-
+        // Đọc trạng thái từ Lua state để hiển thị tiêu đề menu chuẩn xác
+        BOOL activeOn = NO, taikoOn = NO, miniOn = NO;
         if (L) {
             lua_getglobal(L, "state");
             if (lua_istable(L, -1)) {
-                lua_getfield(L, -1, "activeOn");
-                activeOn = lua_toboolean(L, -1);
-                lua_pop(L, 1);
-
-                lua_getfield(L, -1, "taikoOn");
-                taikoOn = lua_toboolean(L, -1);
-                lua_pop(L, 1);
-
-                lua_getfield(L, -1, "miniOn");
-                miniOn = lua_toboolean(L, -1);
-                lua_pop(L, 1);
+                lua_getfield(L, -1, "activeOn"); activeOn = lua_toboolean(L, -1); lua_pop(L, 1);
+                lua_getfield(L, -1, "taikoOn"); taikoOn = lua_toboolean(L, -1); lua_pop(L, 1);
+                lua_getfield(L, -1, "miniOn"); miniOn = lua_toboolean(L, -1); lua_pop(L, 1);
             }
             lua_pop(L, 1);
         }
 
-        // Tạo tiêu đề Checkbox trực quan
-        NSString *titleArrow = activeOn ? @"[ ✅ ] Bật Auto Arrow" : @"[ ❌ ] Bật Auto Arrow";
-        NSString *titleTaiko = taikoOn ? @"[ ✅ ] Bật Taiko Mode" : @"[ ❌ ] Bật Taiko Mode";
-        NSString *titleMini  = miniOn ?  @"[ ✅ ] Bật Full Mini Game" : @"[ ❌ ] Bật Full Mini Game";
+        NSString *msg = [NSString stringWithFormat:@"Trạng thái hiện tại:\n• Auto Arrow: %@\n• Taiko Mode: %@\n• Full Mini Game: %@",
+                         activeOn ? @"🟢 BẬT" : @"🔴 TẮT",
+                         taikoOn ? @"🟢 BẬT" : @"🔴 TẮT",
+                         miniOn ? @"🟢 BẬT" : @"🔴 TẮT"];
 
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"AutoDance Hex v7.2"
-                                                                     message:@"Chọn trạng thái Bật/Tắt tính năng:"
+                                                                     message:msg
                                                               preferredStyle:UIAlertControllerStyleAlert];
 
-        // 1. Nút Auto Arrow Checkbox
-        [alert addAction:[UIAlertAction actionWithTitle:titleArrow style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        // Nút chuyển đổi Auto Arrow
+        [alert addAction:[UIAlertAction actionWithTitle:activeOn ? @"🔴 Tắt Auto Arrow" : @"🟢 Bật Auto Arrow" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            BOOL newState = !activeOn;
             if (L) {
                 lua_getglobal(L, "state");
                 if (lua_istable(L, -1)) {
-                    lua_pushboolean(L, !activeOn);
+                    lua_pushboolean(L, newState);
                     lua_setfield(L, -2, "activeOn");
                 }
                 lua_pop(L, 1);
             }
-            [self showToast:activeOn ? @"Đã Tắt Auto Arrow" : @"Đã Bật Auto Arrow"];
-            // Tự động bật lại menu để cập nhật dấu check mới
-            [self showMenu];
+            [self showToast:newState ? @"Đã Bật Auto Arrow!" : @"Đã Tắt Auto Arrow!"];
         }]];
 
-        // 2. Nút Taiko Mode Checkbox
-        [alert addAction:[UIAlertAction actionWithTitle:titleTaiko style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        // Nút chuyển đổi Taiko Mode
+        [alert addAction:[UIAlertAction actionWithTitle:taikoOn ? @"🔴 Tắt Taiko Mode" : @"🟢 Bật Taiko Mode" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            BOOL newState = !taikoOn;
             if (L) {
                 lua_getglobal(L, "state");
                 if (lua_istable(L, -1)) {
-                    lua_pushboolean(L, !taikoOn);
+                    lua_pushboolean(L, newState);
                     lua_setfield(L, -2, "taikoOn");
                 }
                 lua_pop(L, 1);
             }
-            [self showToast:taikoOn ? @"Đã Tắt Taiko Mode" : @"Đã Bật Taiko Mode"];
-            [self showMenu];
+            [self showToast:newState ? @"Đã Bật Taiko Mode!" : @"Đã Tắt Taiko Mode!"];
         }]];
 
-        // 3. Nút Full Mini Game Checkbox
-        [alert addAction:[UIAlertAction actionWithTitle:titleMini style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        // Nút chuyển đổi Full Mini Game
+        [alert addAction:[UIAlertAction actionWithTitle:miniOn ? @"🔴 Tắt Full Mini Game" : @"🟢 Bật Full Mini Game" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            BOOL newState = !miniOn;
             if (L) {
                 lua_getglobal(L, "state");
                 if (lua_istable(L, -1)) {
-                    lua_pushboolean(L, !miniOn);
+                    lua_pushboolean(L, newState);
                     lua_setfield(L, -2, "miniOn");
                 }
                 lua_pop(L, 1);
             }
-            [self showToast:miniOn ? @"Đã Tắt Full Mini Game" : @"Đã Bật Full Mini Game"];
-            [self showMenu];
+            [self showToast:newState ? @"Đã Bật Full Mini Game!" : @"Đã Tắt Full Mini Game!"];
         }]];
 
-        // Nút Đóng Menu
-        [alert addAction:[UIAlertAction actionWithTitle:@"Đóng Menu" style:UIAlertActionStyleCancel handler:nil]];
+        // Nút Đóng
+        [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
 
         [rootVC presentViewController:alert animated:YES completion:nil];
     });
@@ -211,17 +199,17 @@ static UIWindow *getCurrentWindow() {
     UIWindow *window = getCurrentWindow();
     if (!window) return;
     
-    UILabel *toast = [[UILabel alloc] initWithFrame:CGRectMake(50, window.frame.size.height - 150, window.frame.size.width - 100, 40)];
-    toast.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.8];
+    UILabel *toast = [[UILabel alloc] initWithFrame:CGRectMake(40, window.frame.size.height - 160, window.frame.size.width - 80, 45)];
+    toast.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:0.9];
     toast.textColor = [UIColor whiteColor];
     toast.textAlignment = NSTextAlignmentCenter;
-    toast.font = [UIFont boldSystemFontOfSize:14];
+    toast.font = [UIFont boldSystemFontOfSize:15];
     toast.text = message;
-    toast.layer.cornerRadius = 10;
+    toast.layer.cornerRadius = 12;
     toast.clipsToBounds = YES;
     [window addSubview:toast];
     
-    [UIView animateWithDuration:2.0 animations:^{
+    [UIView animateWithDuration:2.5 animations:^{
         toast.alpha = 0.0;
     } completion:^(BOOL finished) {
         [toast removeFromSuperview];
