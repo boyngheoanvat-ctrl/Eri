@@ -8,13 +8,13 @@ CFLAGS := -isysroot $(SDK_PATH) \
 
 LDFLAGS := -framework Foundation \
           -framework UIKit \
-          -lsubstrate
+          -L. -lsubstrate
 
 TARGET := EriMod.dylib
 
 all: $(TARGET)
 
-$(TARGET): Tweak.xm
+$(TARGET): Tweak.xm substrate.h
 	$(CC) $(CFLAGS) -shared -o $@ $^ $(LDFLAGS)
 	@echo "✅ Build xong: $(TARGET)"
 
