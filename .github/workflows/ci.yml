@@ -1,4 +1,4 @@
-name: C++ / Objective-C++ CI
+name: Build dylib CI
 
 on:
   push:
@@ -7,27 +7,21 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  build-and-run:
-    # Chọn hệ điều hành macOS để có sẵn Xcode và các thư viện Apple (Foundation)
+  build:
     runs-on: macos-latest
 
     steps:
-    # 1. Checkout mã nguồn từ repository về runner
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # 2. Kiểm tra phiên bản Clang/Xcode (tùy chọn)
-    - name: Check tools
+    - name: Compile as Dynamic Library (.dylib)
       run: |
-        clang++ --version
-        xcodebuild -version
+        # Biên dịch file main.mm thành libmain.dylib
+        clang++ -shared -undefined dynamic_lookup -x objective-c++ -std=c++17 -fobjc-arc main.mm -framework Foundation -o libmain.dylib
 
-    # 3. Biên dịch file main.mm sử dụng lệnh Clang++ tương tự Makefile
-    - name: Compile Objective-C++
-      run: |
-        clang++ -x objective-c++ -std=c++17 -fobjc-arc main.mm -framework Foundation -o main_app
-
-    # 4. Chạy thử chương trình sau khi build thành công
-    - name: Run executable
-      run: |
-        ./main_app
+    # Thêm bước này để lưu file .dylib thành artifact có thể tải về
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: compiled-dylib
+        path: libmain.dylib
