@@ -1,4 +1,3 @@
-# Makefile — Eri Mod | FIXED BUILD
 SDK_PATH := $(shell xcrun --sdk iphoneos --show-sdk-path)
 CC := clang++
 
@@ -9,17 +8,15 @@ CFLAGS := -isysroot $(SDK_PATH) \
 
 LDFLAGS := -framework Foundation \
           -framework UIKit \
-          -framework CoreGraphics \
-          -framework Dispatch \
           -lsubstrate
 
 TARGET := EriMod.dylib
 
 all: $(TARGET)
 
-$(TARGET): main.mm
+$(TARGET): Tweak.xm
 	$(CC) $(CFLAGS) -shared -o $@ $^ $(LDFLAGS)
-	@echo "✅ Biên dịch xong: $(TARGET)"
+	@echo "✅ Build xong: $(TARGET)"
 
 clean:
 	rm -f $(TARGET)
