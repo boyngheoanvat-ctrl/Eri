@@ -14,8 +14,8 @@ TARGET := EriMod.dylib
 
 all: $(TARGET)
 
-$(TARGET): Tweak.xm substrate.h
-	$(CC) $(CFLAGS) -shared -o $@ $< $(LDFLAGS)
+$(TARGET): Tweak.xm
+	$(CC) $(CFLAGS) -shared -o $@ -x objective-c++ $< $(LDFLAGS)
 	@echo "✅ Build xong: $(TARGET)"
 
 clean:
