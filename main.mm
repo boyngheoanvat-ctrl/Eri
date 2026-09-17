@@ -3,10 +3,8 @@
 #import <mach-o/dyld.h>
 #include <dlfcn.h>
 
-// Substrate framework để hook hàm (tương thích Cydia Substrate / Logos)
 extern "C" void MSHookFunction(void *symbol, void *replace, void **result);
 
-// --- Định nghĩa Window và UI ---
 @interface PassthroughWindow : UIWindow
 @end
 
@@ -25,16 +23,13 @@ static UIButton *floatingBtn = nil;
 static UIView *menuView = nil;
 static BOOL isMenuOpen = NO;
 
-// --- Trạng thái các Toggle ---
 static BOOL autoDanceEnabled = NO;
 static BOOL taikoEnabled = NO;
 static BOOL fullMiniGameEnabled = NO;
 
-// --- Định nghĩa hàm gốc (Original Function Pointers) ---
 static int (*orig_GetJudgeLevel)(void *self, float now, float judge) = NULL;
 static bool (*orig_CheckHit)(void *self, int direction, bool isRight) = NULL;
 
-// --- Hàm tính base động của HotFix.dll tránh lỗi ASLR ---
 uintptr_t get_hotfix_base() {
     uint32_t count = _dyld_image_count();
     for (uint32_t i = 0; i < count; i++) {
@@ -42,34 +37,29 @@ uintptr_t get_hotfix_base() {
         if (name && strstr(name, "HotFix.dll")) {
             const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(i);
             intptr_t slide = _dyld_get_image_vmaddr_slide(i);
-            // Tìm slide thực tế cộng với load address
-            return (uintptr_t)header + slide; // Hoặc dùng trực tiếp slide tùy cấu trúc image
+            return (uintptr_t)header + slide;
         }
     }
-    // Fallback: nếu không tìm thấy HotFix.dll riêng lẻ, lấy Image 0 (Main binary)
     if (count > 0) {
         return (uintptr_t)_dyld_get_image_header(0) + _dyld_get_image_vmaddr_slide(0);
     }
     return 0;
 }
 
-// --- Hàm Hook: DanceTaikoController::GetJudgeLevel (RVA: 0x16AEDEC) ---
 int hooked_GetJudgeLevel(void *self, float now, float judge) {
     if (autoDanceEnabled) {
-        return 4; // 4 = Perfect (Miss=0, Bad=1, Cool=2, Great=3, Perfect=4)
+        return 4; // Perfect
     }
     return orig_GetJudgeLevel(self, now, judge);
 }
 
-// --- Hàm Hook: DanceTaikoController::CheckHit (RVA: 0x16D30B0) ---
 bool hooked_CheckHit(void *self, int direction, bool isRight) {
     if (taikoEnabled) {
-        return true; // Ép luôn luôn chuẩn xác
+        return true;
     }
     return orig_CheckHit(self, direction, isRight);
 }
 
-// --- Quản lý sự kiện nút nổi ---
 @interface FloatButtonHandler : NSObject
 + (instancetype)sharedInstance;
 - (void)onFloatingButtonClicked:(UIButton *)sender;
@@ -103,7 +93,6 @@ bool hooked_CheckHit(void *self, int direction, bool isRight) {
 }
 @end
 
-// --- Giao diện Menu Controller ---
 @interface ModMenuController : UIViewController
 @end
 
@@ -120,7 +109,6 @@ bool hooked_CheckHit(void *self, int direction, bool isRight) {
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.view addSubview:titleLabel];
     
-    // Toggle 1: Auto Dance / Perfect
     UISwitch *switch1 = [[UISwitch alloc] initWithFrame:CGRectMake(20, 65, 0, 0)];
     switch1.on = autoDanceEnabled;
     [switch1 addTarget:self action:@selector(toggleAutoDance:) forControlEvents:UIControlEventValueChanged];
@@ -132,7 +120,6 @@ bool hooked_CheckHit(void *self, int direction, bool isRight) {
     label1.font = [UIFont systemFontOfSize:13];
     [self.view addSubview:label1];
     
-    // Toggle 2: Taiko Mode
     UISwitch *switch2 = [[UISwitch alloc] initWithFrame:CGRectMake(20, 115, 0, 0)];
     switch2.on = taikoEnabled;
     [switch2 addTarget:self action:@selector(toggleTaiko:) forControlEvents:UIControlEventValueChanged];
@@ -144,7 +131,6 @@ bool hooked_CheckHit(void *self, int direction, bool isRight) {
     label2.font = [UIFont systemFontOfSize:13];
     [self.view addSubview:label2];
 
-    // Toggle 3: Full Mini Game
     UISwitch *switch3 = [[UISwitch alloc] initWithFrame:CGRectMake(20, 165, 0, 0)];
     switch3.on = fullMiniGameEnabled;
     [switch3 addTarget:self action:@selector(toggleMiniGame:) forControlEvents:UIControlEventValueChanged];
@@ -191,7 +177,6 @@ bool hooked_CheckHit(void *self, int direction, bool isRight) {
 }
 @end
 
-// --- Khởi chạy Dylib & Thiết lập Hook thông minh ---
 __attribute__((constructor)) static void entryPoint() {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         @autoreleasepool {
@@ -204,9 +189,8 @@ __attribute__((constructor)) static void entryPoint() {
             }
             if (!windowScene) return;
             
-            // 1. Dựng UI nổi không chặn cảm ứng game
             modWindow = [[PassthroughWindow alloc] initWithWindowScene:windowScene];
-            modWindow.frame = windowScene.coordinateSpace.bounds;
+            modWindow.frame = windowScene.effectiveGeometry.coordinateSpace.bounds;
             modWindow.windowLevel = UIWindowLevelAlert + 1000;
             modWindow.hidden = NO;
             modWindow.backgroundColor = [UIColor clearColor];
@@ -225,9 +209,11 @@ __attribute__((constructor)) static void entryPoint() {
             floatingBtn.layer.borderColor = [UIColor cyanColor].CGColor;
             
             [floatingBtn addTarget:[FloatButtonHandler sharedInstance] action:@selector(onFloatingButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
-            [rootVC.view.addSubview:floatingBtn];
             
-            CGRect screenBounds = windowScene.coordinateSpace.bounds;
+            // Đã sửa cú pháp addSubview chuẩn xác
+            [rootVC.view addSubview:floatingBtn];
+            
+            CGRect screenBounds = windowScene.effectiveGeometry.coordinateSpace.bounds;
             menuView = [[UIView alloc] initWithFrame:CGRectMake((screenBounds.size.width - 300)/2, (screenBounds.size.height - 270)/2, 300, 270)];
             menuView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.9];
             menuView.layer.cornerRadius = 14;
@@ -241,7 +227,6 @@ __attribute__((constructor)) static void entryPoint() {
             [menuView addSubview:menuVC.view];
             [rootVC.view addSubview:menuView];
 
-            // 2. Thiết lập MSHookFunction dựa trên RVA và Base động (Chống ASLR)
             uintptr_t base = get_hotfix_base();
             if (base != 0) {
                 NSLog(@"[HexControl] Resolved HotFix base address: 0x%lx", (unsigned long)base);
@@ -252,7 +237,7 @@ __attribute__((constructor)) static void entryPoint() {
                 
                 // Hook CheckHit (RVA: 0x16D30B0)
                 void *addrCheckHit = (void *)(base + 0x16D30B0);
-                MSHookFunction(addrCheckHit, (void *)hooked_CheckCheckHit_placeholder_fix ? : (void *)hooked_CheckHit, (void **)&orig_CheckHit);
+                MSHookFunction(addrCheckHit, (void *)hooked_CheckHit, (void **)&orig_CheckHit);
                 
                 NSLog(@"[HexControl] MSHookFunction applied successfully via RVA offsets!");
             } else {
