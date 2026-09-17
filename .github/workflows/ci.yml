@@ -3,6 +3,8 @@ name: Build dylib CI
 on:
   push:
     branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
 
 jobs:
   build:
@@ -12,10 +14,22 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Install dependencies (Lua)
+      run: |
+        brew install lua
+
     - name: Compile dynamic library (.dylib)
       run: |
-        # Biên dịch main.mm thành libautodance.dylib (cần trỏ include/lib lua nếu có)
-        clang++ -shared -undefined dynamic_lookup -x objective-c++ -std=c++17 -fobjc-arc main.mm -framework Foundation -framework UIKit -o libautodance.dylib
+        # Biên dịch main.mm thành libautodance.dylib bao gồm cả đường dẫn include/lib của Lua từ Homebrew
+        clang++ -shared -undefined dynamic_lookup \
+          -x objective-c++ -std=c++17 -fobjc-arc \
+          main.mm \
+          -framework Foundation \
+          -framework UIKit \
+          -I$(brew --prefix lua)/include \
+          -L$(brew --prefix lua)/lib \
+          -llua \
+          -o libautodance.dylib
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
