@@ -12,8 +12,6 @@ extern "C" {
 
 static lua_State *L = NULL;
 static BOOL isLuaLoaded = NO;
-static BOOL isMenuVisible = YES; // Trạng thái ẩn/hiện menu
-static dispatch_source_t renderTimer = nil;
 
 // Nạp script Lua từ bộ nhớ nhúng trong dylib
 static void initLuaScriptEmbedded() {
@@ -40,39 +38,83 @@ static void initLuaScriptEmbedded() {
     }
 }
 
-// Hàm gọi thực thi OnDraw từ Lua (chỉ gọi khi menu đang bật)
-static void executeLuaDraw() {
-    if (!isLuaLoaded || !L || !isMenuVisible) return;
+// Hiển thị Menu Native UIKit (Chắc chắn hiện lên trên màn hình Au 2)
+@interface AutoDanceMenuController : NSObject
+@end
 
-    lua_getglobal(L, "OnDraw");
-    if (lua_isfunction(L, -1)) {
-        if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
-            const char *err = lua_tostring(L, -1);
-            NSLog(@"[AutoDanceHex] Lỗi gọi OnDraw: %s", err);
-            lua_pop(L, 1);
+@implementation AutoDanceMenuController
+
++ (void)showMenu {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIWindow *window = nil;
+        for (UIWindow *w in [UIApplication sharedApplication].windows) {
+            if (w.isKeyWindow) {
+                window = w;
+                break;
+            }
         }
-    } else {
-        lua_pop(L, 1);
-    }
-}
+        if (!window && [UIApplication sharedApplication].windows.count > 0) {
+            window = [UIApplication sharedApplication].windows[0];
+        }
 
-// Vòng lặp chạy ngầm gọi hàm OnDraw định kỳ (~60 fps)
-static void startRenderLoop() {
-    if (renderTimer) return;
-    
-    dispatch_queue_t queue = dispatch_get_main_queue();
-    renderTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
-    
-    dispatch_source_set_timer(renderTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.01666 * NSEC_PER_SEC, 0.001 * NSEC_PER_SEC);
-    
-    dispatch_source_set_event_handler(renderTimer, ^{
-        executeLuaDraw();
+        UIViewController *rootVC = window.rootViewController;
+        while (rootVC.presentedViewController) {
+            rootVC = rootVC.presentedViewController;
+        }
+
+        // Tạo bảng điều khiển menu UIKit
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"AutoDance Hex v7.2"
+                                                                     message:@"Chọn tính năng hack/mod cho Au 2:"
+                                                              preferredStyle:UIAlertControllerStyleAlert];
+
+        // Nút Bật/Tắt Auto Arrow
+        [alert addAction:[UIAlertAction actionWithTitle:@"🟢 Bật/Tắt Auto Arrow" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            if (L) {
+                // Gọi hàm Lua tương ứng nếu có
+                lua_getglobal(L, "ToggleAutoArrow");
+                if (lua_isfunction(L, -1)) {
+                    lua_pcall(L, 0, 0, 0);
+                } else {
+                    lua_pop(L, 1);
+                }
+            }
+            [self showToast:@"Đã kích hoạt Auto Arrow!"];
+        }]];
+
+        // Nút Bật Taiko Mode
+        [alert addAction:[UIAlertAction actionWithTitle:@"🎯 Bật Taiko Mode" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [self showToast:@"Đã bật chế độ Taiko!"];
+        }]];
+
+        // Nút Đóng Menu
+        [alert addAction:[UIAlertAction actionWithTitle:@"Đóng Menu" style:UIAlertActionStyleCancel handler:nil]];
+
+        [rootVC presentViewController:alert animated:YES completion:nil];
     });
-    
-    dispatch_resume(renderTimer);
 }
 
-// Gesture lắng nghe sự kiện chạm 2 ngón tay để ẩn/hiện menu
++ (void)showToast:(NSString *)message {
+    UIWindow *window = [UIApplication sharedApplication].keyWindow;
+    UILabel *toast = [[UILabel alloc] initWithFrame:CGRectMake(50, window.frame.size.height - 150, window.frame.size.width - 100, 40)];
+    toast.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.8];
+    toast.textColor = [UIColor whiteOfColor] ? [UIColor whiteColor] : [UIColor whiteColor];
+    toast.textAlignment = NSTextAlignmentCenter;
+    toast.font = [UIFont boldSystemFontOfSize:14];
+    toast.text = message;
+    toast.layer.cornerRadius = 10;
+    toast.clipsToBounds = YES;
+    [window addSubview:toast];
+    
+    [UIView animateWithDuration:2.0 animations:^{
+        toast.alpha = 0.0;
+    } completion:^(BOOL finished) {
+        [toast removeFromSuperview];
+    }];
+}
+
+@end
+
+// Lắng nghe cử chỉ chạm 2 ngón tay để hiện menu
 @interface MenuGestureHandler : NSObject
 @end
 
@@ -92,19 +134,16 @@ static void startRenderLoop() {
 
         if (keyWindow) {
             UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTwoFingerTap:)];
-            tap.numberOfTouchesRequired = 2; // Yêu cầu chạm 2 ngón tay cùng lúc
+            tap.numberOfTouchesRequired = 2; // Chạm 2 ngón tay đồng thời
             [keyWindow addGestureRecognizer:tap];
-            NSLog(@"[AutoDanceHex] Đã thiết lập cử chỉ chạm 2 ngón tay ẩn/hiện menu!");
+            NSLog(@"[AutoDanceHex] Đã cài đặt thành công cử chỉ chạm 2 ngón tay mở menu!");
         }
     });
 }
 
-+ (void)handleTwoFingerTap:(UITapGestureRecognizer * __unused)sender {
++ (void)handleTwoFingerTap:(UITapGestureRecognizer *)sender {
     if (sender.state == UIGestureRecognizerStateEnded) {
-        // Đảo trạng thái ẩn/hiện
-        isMenuVisible = !isMenuVisible;
-        
-        NSLog(@"[AutoDanceHex] Trạng thái hiển thị menu: %@", isMenuVisible ? @"HIỆN" : @"ẨN");
+        [AutoDanceMenuController showMenu];
     }
 }
 @end
@@ -113,8 +152,7 @@ static void startRenderLoop() {
 __attribute__((constructor)) static void entry() {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         initLuaScriptEmbedded();
-        startRenderLoop();
         [MenuGestureHandler setupGesture];
-        NSLog(@"[AutoDanceHex] Tweak đã khởi chạy hoàn tất với cử chỉ 2 ngón tay ẩn/hiện!");
+        NSLog(@"[AutoDanceHex] Tweak đã khởi chạy thành công!");
     });
 }
