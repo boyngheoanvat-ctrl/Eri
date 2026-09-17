@@ -3,8 +3,6 @@ name: Build dylib CI
 on:
   push:
     branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
 
 jobs:
   build:
@@ -14,14 +12,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Compile as Dynamic Library (.dylib)
+    - name: Compile dynamic library (.dylib)
       run: |
-        # Biên dịch file main.mm thành libmain.dylib
-        clang++ -shared -undefined dynamic_lookup -x objective-c++ -std=c++17 -fobjc-arc main.mm -framework Foundation -o libmain.dylib
+        # Biên dịch main.mm thành libautodance.dylib (cần trỏ include/lib lua nếu có)
+        clang++ -shared -undefined dynamic_lookup -x objective-c++ -std=c++17 -fobjc-arc main.mm -framework Foundation -framework UIKit -o libautodance.dylib
 
-    # Thêm bước này để lưu file .dylib thành artifact có thể tải về
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: compiled-dylib
-        path: libmain.dylib
+        name: autodance-dylib
+        path: libautodance.dylib
