@@ -39,14 +39,13 @@ static void initLuaScriptEmbedded() {
     }
 }
 
-// Sử dụng Grand Central Dispatch (GCD Timer) thay cho CADisplayLink để gọi OnDraw định kỳ (~60fps)
+// Vòng lặp chạy ngầm gọi hàm OnDraw định kỳ (~60 fps)
 static void startRenderLoop() {
     if (renderTimer) return;
     
     dispatch_queue_t queue = dispatch_get_main_queue();
     renderTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
     
-    // Thực thi mỗi 0.016 giây (~60 khung hình/giây)
     dispatch_source_set_timer(renderTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.01666 * NSEC_PER_SEC, 0.001 * NSEC_PER_SEC);
     
     dispatch_source_set_event_handler(renderTimer, ^{
@@ -70,6 +69,6 @@ __attribute__((constructor)) static void entry() {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         initLuaScriptEmbedded();
         startRenderLoop();
-        NSLog(@"[AutoDanceHex] Tweak đã khởi chạy thành công hoàn toàn bằng GCD Timer!");
+        NSLog(@"[AutoDanceHex] Tweak đã khởi chạy thành công hoàn toàn!");
     });
 }
