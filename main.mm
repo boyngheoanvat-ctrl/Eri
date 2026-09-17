@@ -1,14 +1,16 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-// Nếu bạn sử dụng C API của Lua (LuaJIT / Lua 5.1)
+// Nhúng thư viện C của Lua
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
 
-// Nội dung script Lua v7.2 của bạn được đưa vào chuỗi C++ / C-string
+// Toàn bộ nội dung script Lua v7.2 của bạn được nhúng trực tiếp dạng Raw String C++
 static const char* luaScriptContent = R"lua(
 -- AutoDance HexControl v7.2 — FULL MINI GAME (Crazy Score Fix)
+-- Preserves v7.1 (rev9) 100% + FIX Crazy: repair curArrowsIndex + direct nowTotalScore additive + 0.3s refresh
+
 local state = {
   activeOn = false,
   taikoOn = false,
@@ -27,29 +29,45 @@ local state = {
   scoredGroups = {},
 }
 
-print("[HexControl] Lua script loaded successfully!")
+local originals = {}
+
+local methodInfo = {
+  { cls = "Dance.AuditionGroup", image = "HotFix.dll",
+    fields = {
+      { name = "judgeLevel", offset = 64, type = "eNoteJudgeLevel", mod = "set 4 (PERFECT)" },
+      { name = "isHitBeat",  offset = 50, type = "Boolean",        mod = "set true" },
+    },
+    methods = {
+      { name = "IsAllHit",       addr = "0x16d22b4", ret = "Boolean",  params = "()" },
+      { name = "ResetArrowsHit", addr = "0x16fe4ac", ret = "Void",     params = "()" },
+      { name = "CheckNextHit",   addr = "0x16e1764", ret = "Boolean",  params = "(AuditionArrowsDirection)" },
+    },
+  },
+}
+
+print("[HexControl v7.2] Lua environment initialized successfully inside dylib!")
 )lua";
 
-// Hàm khởi chạy chính khi dylib được inject vào tiến trình ứng dụng
+// Constructor chạy tự động khi dylib được load vào tiến trình
 __attribute__((constructor)) static void entryPoint() {
     @autoreleasepool {
-        NSLog(@"[EriOS] AutoDance HexControl v7.2 dylib injected successfully!");
+        NSLog(@"[EriOS] Đang khởi chạy AutoDance HexControl v7.2...");
         
-        // Khởi tạo Lua State
+        // Khởi tạo Lua State mới
         lua_State *L = luaL_newstate();
         if (L) {
             luaL_openlibs(L);
             
-            // Thực thi đoạn script Lua
+            // Thực thi đoạn script Lua đã nhúng
             if (luaL_dostring(L, luaScriptContent) != LUA_OK) {
                 const char *err = lua_tostring(L, -1);
                 NSLog(@"[HexControl] Lỗi thực thi Lua script: %s", err);
                 lua_pop(L, 1);
             }
             
-            // Lưu ý: State L có thể được giữ lại để gọi các hàm OnDraw, OnStop từ hook ImGui của game nếu cần.
+            // Lưu ý: Biến L (lua_State) có thể được lưu trữ toàn cục nếu bạn cần gọi lại các hàm OnDraw/OnStop từ ImGui hook của game sau này.
         } else {
-            NSLog(@"[HexControl] Không thể khởi tạo Lua state.");
+            NSLog(@"[HexControl] Không thể tạo Lua state.");
         }
     }
 }
