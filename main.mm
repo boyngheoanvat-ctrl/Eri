@@ -1,16 +1,16 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-// Nhúng thư viện C của Lua
+// Bọc toàn bộ header của Lua trong extern "C" để C++ nhận diện đúng tên hàm C chuẩn
+extern "C" {
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
+}
 
 // Nội dung script Lua v7.2 được nhúng trực tiếp dạng Raw String C++
 static const char* luaScriptContent = R"lua(
 -- AutoDance HexControl v7.2 — FULL MINI GAME (Crazy Score Fix)
--- Preserves v7.1 (rev9) 100% + FIX Crazy: repair curArrowsIndex + direct nowTotalScore additive + 0.3s refresh
-
 local state = {
   activeOn = false,
   taikoOn = false,
@@ -48,7 +48,7 @@ local methodInfo = {
 print("[HexControl v7.2] Lua environment initialized successfully inside dylib!")
 )lua";
 
-// Constructor chạy tự động khi dylib được inject vào tiến trình ứng dụng iOS
+// Constructor chạy tự động khi dylib được load vào tiến trình ứng dụng iOS
 __attribute__((constructor)) static void entryPoint() {
     @autoreleasepool {
         NSLog(@"[EriOS] Đang khởi chạy AutoDance HexControl v7.2...");
