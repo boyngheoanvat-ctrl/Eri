@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #include "substrate.h"
+#include "lua_script.h"
 
 // Khai báo thư viện Lua
 extern "C" {
@@ -12,8 +13,8 @@ extern "C" {
 static lua_State *L = NULL;
 static BOOL isLuaLoaded = NO;
 
-// Hàm nạp file Lua từ thư mục chứa tweak trên thiết bị
-static void initLuaScript() {
+// Nạp script Lua từ bộ nhớ nhúng trong dylib
+static void initLuaScriptEmbedded() {
     if (isLuaLoaded) return;
 
     L = luaL_newstate();
@@ -21,30 +22,23 @@ static void initLuaScript() {
 
     luaL_openlibs(L);
 
-    // Tìm file AutoDanceHex.lua chung thư mục với dylib tweak (hoặc đường dẫn rootless chuẩn)
-    NSString *scriptPath = @"/Library/MobileSubstrate/DynamicLibraries/AutoDanceHex.lua";
-    
-    // Nếu không tìm thấy, thử tìm trong thư mục ứng dụng hiện tại
-    if (![[NSFileManager defaultManager] fileExistsAtPath:scriptPath]) {
-        NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
-        scriptPath = [bundlePath stringByAppendingPathComponent:@"AutoDanceHex.lua"];
-    }
-
-    if (scriptPath && [[NSFileManager defaultManager] fileExistsAtPath:scriptPath]) {
-        if (luaL_dofile(L, [scriptPath UTF8String]) == LUA_OK) {
+    if (luaL_loadbuffer(L, (const char *)Autodancehex_lua, Autodancehex_lua_len, "AutoDanceHex.lua") == LUA_OK) {
+        if (lua_pcall(L, 0, LUA_MULTRET, 0) == LUA_OK) {
             isLuaLoaded = YES;
-            NSLog(@"[AutoDanceHex] Đã nạp script Lua thành công từ: %@", scriptPath);
+            NSLog(@"[AutoDanceHex] Đã nạp script Lua nhúng thành công!");
         } else {
             const char *err = lua_tostring(L, -1);
-            NSLog(@"[AutoDanceHex] Lỗi Lua: %s", err);
+            NSLog(@"[AutoDanceHex] Lỗi chạy script Lua: %s", err);
             lua_pop(L, 1);
         }
     } else {
-        NSLog(@"[AutoDanceHex] Không tìm thấy file AutoDanceHex.lua! Hãy chắc chắn bạn đã copy file này vào chung thư mục chứa dylib.");
+        const char *err = lua_tostring(L, -1);
+        NSLog(@"[AutoDanceHex] Lỗi load buffer Lua: %s", err);
+        lua_pop(L, 1);
     }
 }
 
-// Vòng lặp gọi hàm OnDraw từ Lua mỗi khung hình (Frame)
+// Vòng lặp render tự động hiển thị mỗi khung hình
 @interface LuaRenderLoop : NSObject
 @end
 
@@ -68,11 +62,11 @@ static void initLuaScript() {
 }
 @end
 
-// Khởi chạy ngay khi tweak được inject vào game
+// Khởi chạy khi dylib được tiêm vào game
 __attribute__((constructor)) static void entry() {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        initLuaScript();
+        initLuaScriptEmbedded();
         [LuaRenderLoop setupDisplayLink];
-        NSLog(@"[AutoDanceHex] Đã khởi chạy vòng lặp render trực tiếp!");
+        NSLog(@"[AutoDanceHex] Tweak đã khởi chạy thành công hoàn toàn!");
     });
 }
