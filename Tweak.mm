@@ -13,17 +13,22 @@ extern "C" {
     void* MSFindSymbol(const char* image, const char* name);
 }
 
-#pragma mark - === OFFSET ===
+#pragma mark - === OFFSET — AU2 v23.4 ĐÃ KIỂM TRA ===
 enum JudgeLv : int32_t { MISS = 0, PERFECT = 4 };
 struct Off {
+    // Arrow Mode
     static const uint32_t A_listGrp = 0x48;
     static const uint32_t A_curGrp  = 0x64;
     static const uint32_t G_judge   = 0x40;
     static const uint32_t G_isHit   = 0x32;
+    
+    // Taiko Mode
     static const uint32_t T_listNote= 0x80;
     static const uint32_t TN_isJL   = 0x30;
     static const uint32_t TN_JL     = 0x38;
     static const uint32_t TN_isHit  = 0x40;
+    
+    // Mini/Crazy Mode
     static const uint32_t D_base    = 0x60;
     static const uint32_t D_score   = 0x64;
     static const uint32_t D_combo   = 0xAC;
@@ -77,7 +82,10 @@ static void restoreAll() {
 #pragma mark - === LOGIC ===
 static int doArrow() {
     if(!g.pA) return 0; int n=0;
+    NSLog(@"[EriMod] ⚡ ArrowController: %p", g.pA);
     void* list = *(void**)((uint8_t*)g.pA + Off::A_listGrp);
+    if(!list) { NSLog(@"[EriMod] ⚠️ listGrp = NULL"); return 0; }
+    
     for(int i=0,N=cntList(list);i<N;i++){
         void* grp=getList(list,i); if(!grp)continue;
         saveI32(grp, Off::G_judge); saveB(grp, Off::G_isHit);
@@ -90,7 +98,10 @@ static int doArrow() {
 }
 static int doTaiko() {
     if(!g.pT) return 0; int n=0;
+    NSLog(@"[EriMod] 🥁 TaikoController: %p", g.pT);
     void* list = *(void**)((uint8_t*)g.pT + Off::T_listNote);
+    if(!list) { NSLog(@"[EriMod] ⚠️ listNote = NULL"); return 0; }
+    
     for(int i=0,N=cntList(list);i<N;i++){
         void* note=getList(list,i); if(!note)continue;
         saveB(note, Off::TN_isJL); saveI32(note, Off::TN_JL); saveB(note, Off::TN_isHit);
@@ -100,7 +111,10 @@ static int doTaiko() {
 }
 static int doMini() {
     if(!g.pD) return 0; int n=0;
+    NSLog(@"[EriMod] 🔥 MiniController: %p", g.pD);
     void* list = *(void**)((uint8_t*)g.pD + Off::D_listGrp);
+    if(!list) { NSLog(@"[EriMod] ⚠️ listGrp = NULL"); return 0; }
+    
     for(int i=0,N=cntList(list);i<N;i++){
         void* grp=getList(list,i); if(!grp)continue;
         void* keys = *(void**)((uint8_t*)grp + Off::DG_keys);
@@ -257,52 +271,23 @@ static void buildUI(UIView *rootView) {
     });
 }
 
-#pragma mark - === GÁN CONTROLLER ===
+#pragma mark - === GÁN CONTROLLER — HÀM ĐƯỢC GAME GỌI ===
 extern "C" {
     void dance_set_ctrl_A(void* p) { 
         g.pA = p; 
-        NSLog(@"[EriMod] ✅ dance_set_ctrl_A: %p", p);
+        NSLog(@"[EriMod] ✅ GÁN ArrowController: %p", p);
     }
     void dance_set_ctrl_T(void* p) { 
         g.pT = p; 
-        NSLog(@"[EriMod] ✅ dance_set_ctrl_T: %p", p);
+        NSLog(@"[EriMod] ✅ GÁN TaikoController: %p", p);
     }
     void dance_set_ctrl_D(void* p) { 
         g.pD = p; 
-        NSLog(@"[EriMod] ✅ dance_set_ctrl_D: %p", p);
+        NSLog(@"[EriMod] ✅ GÁN DanceController: %p", p);
     }
 }
 
-#pragma mark - === VÒNG LẶP ===
-static void runLoop() {
-    static time_t lA=0,lT=0,lM=0,lC=0;
-    static bool logged = false;
-    time_t now = time(nullptr);
-    
-    if (!logged) {
-        NSLog(@"[EriMod] === TRẠNG THÁI ===");
-        NSLog(@"[EriMod] pA: %p | pT: %p | pD: %p", g.pA, g.pT, g.pD);
-        NSLog(@"[EriMod] AutoArrow: %s | AutoTaiko: %s | Mini: %s", 
-              g.arrow?"BẬT":"TẮT", g.taiko?"BẬT":"TẮT", g.mini?"BẬT":"TẮT");
-        logged = true;
-    }
-    
-    if(g.arrow && g.pA && difftime(now,lA)>=1.5) { lA=now; 
-        int n = doArrow();
-        NSLog(@"[EriMod] ⚡ AutoArrow: sửa %d nốt hoàn hảo", n);
-    }
-    if(g.taiko && g.pT && difftime(now,lT)>=1.5) { lT=now; 
-        int n = doTaiko();
-        NSLog(@"[EriMod] 🥁 AutoTaiko: sửa %d nốt hoàn hảo", n);
-    }
-    if(g.mini  && g.pD && difftime(now,lM)>=1.5) { lM=now; 
-        int n = doMini();
-        NSLog(@"[EriMod] 🔥 AutoMini: sửa %d nốt hoàn hảo", n);
-    }
-    if(g.mini  && g.pD && difftime(now,lC)>=0.3) { lC=now; fixIdx(); doScore(); }
-}
-
-#pragma mark - === TÌM ĐỐI TƯỢNG TỰ ĐỘNG ===
+#pragma mark - === LẤY WINDOW ĐÚNG CÁCH ===
 static UIWindow* getKeyWindow() {
     UIWindow* win = nil;
     if (@available(iOS 13.0, *)) {
@@ -324,62 +309,47 @@ static UIWindow* getKeyWindow() {
     return win;
 }
 
-static void findControllers() {
-    static dispatch_source_t findTimer = nil;
-    if (findTimer) return;
+#pragma mark - === VÒNG LẶP ===
+static void runLoop() {
+    static time_t lA=0,lT=0,lM=0,lC=0;
+    static bool logged = false;
+    time_t now = time(nullptr);
     
-    findTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(findTimer, DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC, 1.0 * NSEC_PER_SEC);
-    dispatch_source_set_event_handler(findTimer, ^{
-        if (g.pA && g.pT && g.pD) return;
-        
-        UIWindow* win = getKeyWindow();
-        if (!win || !win.rootViewController) return;
-        
-        // Tìm qua responder chain
-        id resp = win.rootViewController;
-        int depth = 0;
-        while (resp && depth < 50) {
-            NSString* clsName = NSStringFromClass([resp class]);
-            
-            if (!g.pA && ([clsName containsString:@"Arrow"] || [clsName containsString:@"Dance"])) {
-                // Thử gán nếu tên khớp
-                if ([clsName containsString:@"Arrow"]) {
-                    g.pA = (__bridge void*)resp;
-                    NSLog(@"[EriMod] 🔍 Tìm thấy ArrowController qua tên: %@ → %p", clsName, g.pA);
-                }
-            }
-            if (!g.pT && [clsName containsString:@"Taiko"]) {
-                g.pT = (__bridge void*)resp;
-                NSLog(@"[EriMod] 🔍 Tìm thấy TaikoController qua tên: %@ → %p", clsName, g.pT);
-            }
-            if (!g.pD && ([clsName containsString:@"Mini"] || [clsName containsString:@"Dance"])) {
-                if ([clsName containsString:@"Mini"] || [clsName containsString:@"Game"]) {
-                    g.pD = (__bridge void*)resp;
-                    NSLog(@"[EriMod] 🔍 Tìm thấy Mini/DanceController qua tên: %@ → %p", clsName, g.pD);
-                }
-            }
-            
-            resp = [resp nextResponder];
-            depth++;
-        }
-    });
-    dispatch_resume(findTimer);
+    if (!logged) {
+        NSLog(@"[EriMod] === AU2 v23.4 ĐÃ TẢI ===");
+        NSLog(@"[EriMod] pA: %p | pT: %p | pD: %p", g.pA, g.pT, g.pD);
+        NSLog(@"[EriMod] AutoArrow: %s | AutoTaiko: %s | Mini: %s", 
+              g.arrow?"BẬT":"TẮT", g.taiko?"BẬT":"TẮT", g.mini?"BẬT":"TẮT");
+        logged = true;
+    }
+    
+    if(g.arrow && g.pA && difftime(now,lA)>=1.5) { lA=now; 
+        int n = doArrow();
+        if(n>0) NSLog(@"[EriMod] ⚡ AutoArrow: HOÀN HẢO %d nốt!", n);
+    }
+    if(g.taiko && g.pT && difftime(now,lT)>=1.5) { lT=now; 
+        int n = doTaiko();
+        if(n>0) NSLog(@"[EriMod] 🥁 AutoTaiko: HOÀN HẢO %d nốt!", n);
+    }
+    if(g.mini  && g.pD && difftime(now,lM)>=1.5) { lM=now; 
+        int n = doMini();
+        if(n>0) NSLog(@"[EriMod] 🔥 AutoMini: HOÀN HẢO %d nốt!", n);
+    }
+    if(g.mini  && g.pD && difftime(now,lC)>=0.3) { lC=now; fixIdx(); doScore(); }
 }
 
 #pragma mark - === KHỞI TẠO ===
 __attribute__((constructor))
 static void init() {
-    NSLog(@"[EriMod] ✅ Mod đã tải thành công!");
+    NSLog(@"[EriMod] ✅ Mod đã nạp — AU2 v23.4");
     
     // Tạo giao diện
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         UIWindow* win = getKeyWindow();
         if (win && win.rootViewController) {
             buildUI(win.rootViewController.view);
-            NSLog(@"[EriMod] ✅ Giao diện đã tạo");
+            NSLog(@"[EriMod] ✅ Giao diện đã hiển thị");
         }
-        findControllers();
     });
     
     // Vòng lặp chính
