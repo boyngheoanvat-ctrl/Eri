@@ -7,7 +7,7 @@
 #include <ctime>
 #include <mach/mach.h>
 
-#pragma mark - === SUBSTRATE DECLARE ===
+#pragma mark - === SUBSTRATE ===
 extern "C" {
     void MSHookFunction(void* symbol, void* replacement, void** storage);
     void* MSFindSymbol(const char* image, const char* name);
@@ -259,53 +259,130 @@ static void buildUI(UIView *rootView) {
 
 #pragma mark - === GÁN CONTROLLER ===
 extern "C" {
-    void dance_set_ctrl_A(void* p) { g.pA = p; }
-    void dance_set_ctrl_T(void* p) { g.pT = p; }
-    void dance_set_ctrl_D(void* p) { g.pD = p; }
+    void dance_set_ctrl_A(void* p) { 
+        g.pA = p; 
+        NSLog(@"[EriMod] ✅ dance_set_ctrl_A: %p", p);
+    }
+    void dance_set_ctrl_T(void* p) { 
+        g.pT = p; 
+        NSLog(@"[EriMod] ✅ dance_set_ctrl_T: %p", p);
+    }
+    void dance_set_ctrl_D(void* p) { 
+        g.pD = p; 
+        NSLog(@"[EriMod] ✅ dance_set_ctrl_D: %p", p);
+    }
 }
 
 #pragma mark - === VÒNG LẶP ===
 static void runLoop() {
     static time_t lA=0,lT=0,lM=0,lC=0;
+    static bool logged = false;
     time_t now = time(nullptr);
     
-    if(g.arrow && g.pA && difftime(now,lA)>=1.5) { lA=now; doArrow(); }
-    if(g.taiko && g.pT && difftime(now,lT)>=1.5) { lT=now; doTaiko(); }
-    if(g.mini  && g.pD && difftime(now,lM)>=1.5) { lM=now; doMini(); }
+    if (!logged) {
+        NSLog(@"[EriMod] === TRẠNG THÁI ===");
+        NSLog(@"[EriMod] pA: %p | pT: %p | pD: %p", g.pA, g.pT, g.pD);
+        NSLog(@"[EriMod] AutoArrow: %s | AutoTaiko: %s | Mini: %s", 
+              g.arrow?"BẬT":"TẮT", g.taiko?"BẬT":"TẮT", g.mini?"BẬT":"TẮT");
+        logged = true;
+    }
+    
+    if(g.arrow && g.pA && difftime(now,lA)>=1.5) { lA=now; 
+        int n = doArrow();
+        NSLog(@"[EriMod] ⚡ AutoArrow: sửa %d nốt hoàn hảo", n);
+    }
+    if(g.taiko && g.pT && difftime(now,lT)>=1.5) { lT=now; 
+        int n = doTaiko();
+        NSLog(@"[EriMod] 🥁 AutoTaiko: sửa %d nốt hoàn hảo", n);
+    }
+    if(g.mini  && g.pD && difftime(now,lM)>=1.5) { lM=now; 
+        int n = doMini();
+        NSLog(@"[EriMod] 🔥 AutoMini: sửa %d nốt hoàn hảo", n);
+    }
     if(g.mini  && g.pD && difftime(now,lC)>=0.3) { lC=now; fixIdx(); doScore(); }
+}
+
+#pragma mark - === TÌM ĐỐI TƯỢNG TỰ ĐỘNG ===
+static UIWindow* getKeyWindow() {
+    UIWindow* win = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIScene* s in [UIApplication sharedApplication].connectedScenes) {
+            if ([s isKindOfClass:[UIWindowScene class]]) {
+                for (UIWindow* w in [(UIWindowScene*)s windows]) {
+                    if (w.isKeyWindow) return w;
+                    if (!win) win = w;
+                }
+            }
+        }
+    }
+    if (!win) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        win = [UIApplication sharedApplication].keyWindow;
+#pragma clang diagnostic pop
+    }
+    return win;
+}
+
+static void findControllers() {
+    static dispatch_source_t findTimer = nil;
+    if (findTimer) return;
+    
+    findTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+    dispatch_source_set_timer(findTimer, DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC, 1.0 * NSEC_PER_SEC);
+    dispatch_source_set_event_handler(findTimer, ^{
+        if (g.pA && g.pT && g.pD) return;
+        
+        UIWindow* win = getKeyWindow();
+        if (!win || !win.rootViewController) return;
+        
+        // Tìm qua responder chain
+        id resp = win.rootViewController;
+        int depth = 0;
+        while (resp && depth < 50) {
+            NSString* clsName = NSStringFromClass([resp class]);
+            
+            if (!g.pA && ([clsName containsString:@"Arrow"] || [clsName containsString:@"Dance"])) {
+                // Thử gán nếu tên khớp
+                if ([clsName containsString:@"Arrow"]) {
+                    g.pA = (__bridge void*)resp;
+                    NSLog(@"[EriMod] 🔍 Tìm thấy ArrowController qua tên: %@ → %p", clsName, g.pA);
+                }
+            }
+            if (!g.pT && [clsName containsString:@"Taiko"]) {
+                g.pT = (__bridge void*)resp;
+                NSLog(@"[EriMod] 🔍 Tìm thấy TaikoController qua tên: %@ → %p", clsName, g.pT);
+            }
+            if (!g.pD && ([clsName containsString:@"Mini"] || [clsName containsString:@"Dance"])) {
+                if ([clsName containsString:@"Mini"] || [clsName containsString:@"Game"]) {
+                    g.pD = (__bridge void*)resp;
+                    NSLog(@"[EriMod] 🔍 Tìm thấy Mini/DanceController qua tên: %@ → %p", clsName, g.pD);
+                }
+            }
+            
+            resp = [resp nextResponder];
+            depth++;
+        }
+    });
+    dispatch_resume(findTimer);
 }
 
 #pragma mark - === KHỞI TẠO ===
 __attribute__((constructor))
 static void init() {
-    // Tạo giao diện khi app sẵn sàng
+    NSLog(@"[EriMod] ✅ Mod đã tải thành công!");
+    
+    // Tạo giao diện
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow* keyWin = nil;
-        if (@available(iOS 13.0, *)) {
-            NSSet<UIScene*>* connectedScenes = [[UIApplication sharedApplication] connectedScenes];
-            for (UIScene* scene in connectedScenes) {
-                if ([scene isKindOfClass:[UIWindowScene class]]) {
-                    UIWindowScene* ws = (UIWindowScene*)scene;
-                    for (UIWindow* win in ws.windows) {
-                        if (win.isKeyWindow) { keyWin = win; break; }
-                    }
-                    if (!keyWin) keyWin = ws.windows.firstObject;
-                }
-                if (keyWin) break;
-            }
+        UIWindow* win = getKeyWindow();
+        if (win && win.rootViewController) {
+            buildUI(win.rootViewController.view);
+            NSLog(@"[EriMod] ✅ Giao diện đã tạo");
         }
-        if (!keyWin) {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            keyWin = [UIApplication sharedApplication].keyWindow;
-#pragma clang diagnostic pop
-        }
-        if (keyWin && keyWin.rootViewController) {
-            buildUI(keyWin.rootViewController.view);
-        }
+        findControllers();
     });
     
-    // Timer chính
+    // Vòng lặp chính
     dispatch_source_t timer = dispatch_source_create(
         DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     dispatch_source_set_timer(timer, DISPATCH_TIME_NOW,
