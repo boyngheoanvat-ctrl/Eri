@@ -24,14 +24,14 @@ jobs:
         SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
         echo "Using iOS SDK: $SDK_PATH"
 
-        # Định nghĩa l_system dưới dạng macro nhận tham số x
+        # Định nghĩa l_system dưới dạng macro an toàn
         for src in lua-5.4.6/src/*.c; do
           if [[ "$src" != *"lua.c"* && "$src" != *"luac.c"* ]]; then
             xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDK_PATH -c "$src" -O2 '-Dl_system(x)=((void)(x),-1)'
           fi
         done
 
-        # Biên dịch thành công mà không cần file libsubstrate trên server macOS
+        # Biên dịch dylib thành công không phụ thuộc libsubstrate trên macOS runner
         xcrun --sdk iphoneos clang++ -dynamiclib -arch arm64 -isysroot $SDK_PATH \
           -std=c++17 -fobjc-arc \
           main.mm *.o \
