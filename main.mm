@@ -3,6 +3,7 @@
 #import <mach-o/dyld.h>
 #include <dlfcn.h>
 
+// Khai báo Substrate hook (Đảm bảo Makefile / build action có cờ -lsubstrate)
 extern "C" void MSHookFunction(void *symbol, void *replace, void **result);
 
 @interface PassthroughWindow : UIWindow
@@ -209,8 +210,6 @@ __attribute__((constructor)) static void entryPoint() {
             floatingBtn.layer.borderColor = [UIColor cyanColor].CGColor;
             
             [floatingBtn addTarget:[FloatButtonHandler sharedInstance] action:@selector(onFloatingButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
-            
-            // Đã sửa cú pháp addSubview chuẩn xác
             [rootVC.view addSubview:floatingBtn];
             
             CGRect screenBounds = windowScene.effectiveGeometry.coordinateSpace.bounds;
