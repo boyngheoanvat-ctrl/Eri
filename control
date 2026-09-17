@@ -1,0 +1,8 @@
+Package: com.erimod.au2
+Name: EriMod
+Depends: mobilesubstrate
+Version: 1.0
+Architecture: iphoneos-arm64 iphoneos-arm64e
+Description: AutoDance AU2 Mod
+Maintainer: You
+Section: Tweaks
