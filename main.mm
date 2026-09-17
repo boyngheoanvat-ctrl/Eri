@@ -3,7 +3,7 @@
 #import <mach-o/dyld.h>
 #include <dlfcn.h>
 
-// Khai báo Weak Import để biên dịch trên macOS mà không cần file libsubstrate.dylib
+// Khai báo Weak Import để biên dịch trên macOS mà không cần file libsubstrate.dylib thực tế
 extern "C" void MSHookFunction(void *symbol, void *replace, void **result) __attribute__((weak_import));
 
 @interface PassthroughWindow : UIWindow
@@ -230,7 +230,7 @@ __attribute__((constructor)) static void entryPoint() {
             if (base != 0) {
                 NSLog(@"[HexControl] Resolved HotFix base address: 0x%lx", (unsigned long)base);
                 
-                // Kiểm tra an toàn trước khi gọi MSHookFunction
+                // Kiểm tra an toàn trước khi gọi hook
                 if (&MSHookFunction != NULL) {
                     void *addrGetJudge = (void *)(base + 0x16AEDEC);
                     MSHookFunction(addrGetJudge, (void *)hooked_GetJudgeLevel, (void **)&orig_GetJudgeLevel);
@@ -240,7 +240,7 @@ __attribute__((constructor)) static void entryPoint() {
                     
                     NSLog(@"[HexControl] MSHookFunction applied successfully via RVA offsets!");
                 } else {
-                    NSLog(@"[HexControl] Error: MSHookFunction is NULL (Substrate not loaded).");
+                    NSLog(@"[HexControl] Error: MSHookFunction is NULL (Substrate not present).");
                 }
             } else {
                 NSLog(@"[HexControl] Error: Could not resolve base address!");
