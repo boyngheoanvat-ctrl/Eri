@@ -1,7 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #include <mach-o/dyld.h>
-#include <substrate.h>
+#include "substrate.h"
 #include <iostream>
 #include <string>
 #include <map>
