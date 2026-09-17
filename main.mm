@@ -38,7 +38,26 @@ static void initLuaScriptEmbedded() {
     }
 }
 
-// Hiển thị Menu Native UIKit (Chắc chắn hiện lên trên màn hình Au 2)
+// Lấy cửa sổ chính an toàn tương thích iOS mới nhất
+static UIWindow *getCurrentWindow() {
+    UIWindow *foundWindow = nil;
+    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+        if ([scene isKindOfClass:[UIWindowScene class]]) {
+            UIWindowScene *windowScene = (UIWindowScene *)scene;
+            for (UIWindow *window in windowScene.windows) {
+                if (window.isKeyWindow) {
+                    return window;
+                }
+                if (!foundWindow) {
+                    foundWindow = window;
+                }
+            }
+        }
+    }
+    return foundWindow;
+}
+
+// Hiển thị Menu Native UIKit
 @interface AutoDanceMenuController : NSObject
 @end
 
@@ -46,16 +65,8 @@ static void initLuaScriptEmbedded() {
 
 + (void)showMenu {
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *window = nil;
-        for (UIWindow *w in [UIApplication sharedApplication].windows) {
-            if (w.isKeyWindow) {
-                window = w;
-                break;
-            }
-        }
-        if (!window && [UIApplication sharedApplication].windows.count > 0) {
-            window = [UIApplication sharedApplication].windows[0];
-        }
+        UIWindow *window = getCurrentWindow();
+        if (!window) return;
 
         UIViewController *rootVC = window.rootViewController;
         while (rootVC.presentedViewController) {
@@ -70,7 +81,6 @@ static void initLuaScriptEmbedded() {
         // Nút Bật/Tắt Auto Arrow
         [alert addAction:[UIAlertAction actionWithTitle:@"🟢 Bật/Tắt Auto Arrow" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             if (L) {
-                // Gọi hàm Lua tương ứng nếu có
                 lua_getglobal(L, "ToggleAutoArrow");
                 if (lua_isfunction(L, -1)) {
                     lua_pcall(L, 0, 0, 0);
@@ -94,10 +104,12 @@ static void initLuaScriptEmbedded() {
 }
 
 + (void)showToast:(NSString *)message {
-    UIWindow *window = [UIApplication sharedApplication].keyWindow;
+    UIWindow *window = getCurrentWindow();
+    if (!window) return;
+    
     UILabel *toast = [[UILabel alloc] initWithFrame:CGRectMake(50, window.frame.size.height - 150, window.frame.size.width - 100, 40)];
     toast.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.8];
-    toast.textColor = [UIColor whiteOfColor] ? [UIColor whiteColor] : [UIColor whiteColor];
+    toast.textColor = [UIColor whiteColor]; // Đã sửa lỗi whiteOfColor thành whiteColor chuẩn
     toast.textAlignment = NSTextAlignmentCenter;
     toast.font = [UIFont boldSystemFontOfSize:14];
     toast.text = message;
@@ -121,21 +133,11 @@ static void initLuaScriptEmbedded() {
 @implementation MenuGestureHandler
 + (void)setupGesture {
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *keyWindow = nil;
-        for (UIWindow *window in [UIApplication sharedApplication].windows) {
-            if (window.isKeyWindow) {
-                keyWindow = window;
-                break;
-            }
-        }
-        if (!keyWindow && [UIApplication sharedApplication].windows.count > 0) {
-            keyWindow = [UIApplication sharedApplication].windows[0];
-        }
-
-        if (keyWindow) {
+        UIWindow *window = getCurrentWindow();
+        if (window) {
             UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTwoFingerTap:)];
             tap.numberOfTouchesRequired = 2; // Chạm 2 ngón tay đồng thời
-            [keyWindow addGestureRecognizer:tap];
+            [window addGestureRecognizer:tap];
             NSLog(@"[AutoDanceHex] Đã cài đặt thành công cử chỉ chạm 2 ngón tay mở menu!");
         }
     });
