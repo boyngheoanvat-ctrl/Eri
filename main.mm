@@ -1,343 +1,592 @@
+//
+//  main.mm
+//  AutoDance HexControl v7.2 — FULL MINI GAME (Crazy Score Fix)
+//  Định dạng: Objective-C++ / C++
+//  Nguyên bản: autodance_hexcontrol_v4.txt
+//
+
 #import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
-#include "substrate.h"
+#import <ImGui/ImGui.h>
+#include <cmath>
+#include <cstdint>
+#include <map>
+#include <string>
+#include <vector>
+#include <ctime>
 
-extern "C" {
-#include <lua.h>
-#include <lualib.h>
-#include <lauxlib.h>
-}
+#pragma mark - === KHAI BÁO KIỂU DỮ LIỆU ===
 
-static lua_State *L = NULL;
-static BOOL isLuaLoaded = NO;
-static dispatch_source_t modLoopTimer = nil;
+enum eNoteJudgeLevel {
+    JUDGE_MISS = 0,
+    JUDGE_PERFECT = 4
+};
 
-// Script Lua chuẩn v7.2 đã được tinh chỉnh lại cơ chế bắt lỗi class an toàn tuyệt đối
-static const char *kLuaScriptContent = R"lua(
-local state = {
-  activeOn = false,
-  taikoOn = false,
-  miniOn = false,
-  status = "Đã kích hoạt Lua Engine chuẩn v7.2",
-  PERFECT = 4,
-  stats = { modified = 0, taiko = 0, mini = 0, crazy = 0 },
-  lastCheck = 0,
-  lastTaikoCheck = 0,
-  lastMiniCheck = 0,
-}
+struct FieldInfo {
+    const char* name;
+    size_t offset;
+    const char* type;
+    const char* mod;
+};
 
-local originals = {}
+struct MethodInfo {
+    const char* name;
+    const char* addr;
+    const char* ret;
+    const char* params;
+};
 
-local function safeLog(msg)
-  pcall(function() print("[Lua Debug] " .. tostring(msg)) end)
-end
+struct ClassInfo {
+    const char* clsName;
+    const char* image;
+    std::vector<FieldInfo> fields;
+    std::vector<MethodInfo> methods;
+};
 
-local function restoreOriginal()
-  local restored = 0
-  for _, rec in pairs(originals) do
-    local o = rec.obj
-    if o then
-      pcall(function()
-        for f, v in pairs(rec.vals) do
-          if v ~= nil then o[f] = v end
-        end
-      end)
-      restored = restored + 1
-    end
-  end
-  originals = {}
-  return restored
-end
+struct MiniModeDef {
+    const char* label;
+    int judgeValue;
+    std::vector<std::pair<const char*, std::vector<const char*>>> classes;
+    std::vector<const char*> methodClasses;
+};
 
--- 1. Auto Audition Hook an toàn
-local function applyAuditionMod()
-  local count = 0
-  local success, err = pcall(function()
-    if not Class or not Class.fromName then return end
-    local cls = Class.fromName("Dance.AuditionGroup")
-    if cls and cls.findObjects then
-      local objs = cls:findObjects()
-      if objs and objs.count and objs.count > 0 then
-        for i = 1, objs.count do
-          local g = objs[i]
-          if g then
-            local gkey = "group:" .. tostring(g)
-            if not originals[gkey] then
-              originals[gkey] = { obj = g, vals = { judgeLevel = g.judgeLevel, isHitBeat = g.isHitBeat } }
-            end
-            g.judgeLevel = state.PERFECT
-            g.isHitBeat = true
-            count = count + 1
-          end
-        end
-      end
-    end
-  end)
-  if not success then safeLog("AuditionMod error: " .. tostring(err)) end
-  return count
-end
+struct SavedState {
+    std::map<std::string, id> originalValues;
+    id object;
+};
 
--- 2. Auto Taiko Hook an toàn
-local function applyTaikoMod()
-  local count = 0
-  local success, err = pcall(function()
-    if not Class or not Class.fromName then return end
-    local cls = Class.fromName("UI_TaikoNoteBase")
-    if cls and cls.findObjects then
-      local notes = cls:findObjects()
-      if notes and notes.count and notes.count > 0 then
-        for i = 1, notes.count do
-          local n = notes[i]
-          if n then
-            local nkey = "taiko:" .. tostring(n)
-            if not originals[nkey] then
-              originals[nkey] = { obj = n, vals = { JudgeLevel = n.JudgeLevel, isJudgeLevel = n.isJudgeLevel, IsHit = n.IsHit } }
-            end
-            n.JudgeLevel = state.PERFECT
-            n.isJudgeLevel = true
-            pcall(function() n.IsHit = true end)
-            count = count + 1
-          end
-        end
-      end
-    end
-  end)
-  if not success then safeLog("TaikoMod error: " .. tostring(err)) end
-  return count
-end
+#pragma mark - === TRẠNG THÁI TOÀN CỤC ===
 
--- 3. Full Mini Game Hook an toàn
-local MINI_CLASSES = {
-  "Modules.UI.UI_DanceBallSingleNote",
-  "Modules.UI.UI_DanceBallLongNote",
-  "Modules.UI.UI_Note_VOS",
-  "DynamicGroup",
-  "DynamicOneBeatKeys"
-}
+static struct GlobalState {
+    bool activeOn;
+    bool taikoOn;
+    bool miniOn;
+    std::string status;
+    const int PERFECT = JUDGE_PERFECT;
+    
+    struct Stats {
+        int modified;
+        int taiko;
+        int mini;
+        long long crazy;
+    } stats;
+    
+    time_t lastCheck;
+    int lastCount;
+    time_t lastTaikoCheck;
+    int lastTaikoCount;
+    time_t lastMiniCheck;
+    int lastMiniCount;
+    time_t lastCrazyCheck;
+    long long crazyScore;
+    std::map<std::string, bool> scoredGroups;
+    
+    GlobalState() : activeOn(false), taikoOn(false), miniOn(false),
+                    status("Sẵn sàng. Bật toggle để chạy tự động qua các trận."),
+                    modified(0), taiko(0), mini(0), crazy(0),
+                    lastCheck(0), lastCount(0), lastTaikoCheck(0), lastTaikoCount(0),
+                    lastMiniCheck(0), lastMiniCount(0), lastCrazyCheck(0), crazyScore(0) {}
+} state;
 
-local function applyMiniMod()
-  local total = 0
-  local success, err = pcall(function()
-    if not Class or not Class.fromName then return end
-    for _, className in ipairs(MINI_CLASSES) do
-      local cls = Class.fromName(className)
-      if cls and cls.findObjects then
-        local objs = cls:findObjects()
-        if objs and objs.count then
-          for i = 1, objs.count do
-            local o = objs[i]
-            if o then
-              local mkey = "mini:" .. tostring(o)
-              if not originals[mkey] then
-                originals[mkey] = { obj = o, vals = { judgeLevel = o.judgeLevel } }
-              end
-              pcall(function() o.judgeLevel = 4 end)
-              pcall(function() o.isJudge = true end)
-              pcall(function() o.JudgeRatio = 100 end)
-              total = total + 1
-            end
-          end
-        end
-      end
-    end
-  end)
-  if not success then safeLog("MiniMod error: " .. tostring(err)) end
-  return total
-end
+static std::map<std::string, SavedState> originals;
+static std::map<std::string, int> miniCounts;
 
--- Hàm vòng lặp gọi từ Objective-C định kỳ
-function OnDraw()
-  local currentTime = os.time()
-  if state.activeOn and (currentTime - state.lastCheck >= 1) then
-    state.lastCheck = currentTime
-    state.stats.modified = applyAuditionMod()
-  end
-  if state.taikoOn and (currentTime - state.lastTaikoCheck >= 1) then
-    state.lastTaikoCheck = currentTime
-    state.stats.taiko = applyTaikoMod()
-  end
-  if state.miniOn and (currentTime - state.lastMiniCheck >= 1) then
-    state.lastMiniCheck = currentTime
-    state.stats.mini = applyMiniMod()
-  end
-end
+#pragma mark - === BẢNG OFFSET & ĐỊA CHỈ ===
 
-function OnStop()
-  state.activeOn = false
-  state.taikoOn = false
-  state.miniOn = false
-  restoreOriginal()
-end
-)lua";
-
-// Khởi tạo Lua State và nạp script
-static void initLuaScriptEmbedded() {
-    if (isLuaLoaded) return;
-
-    L = luaL_newstate();
-    if (!L) return;
-    luaL_openlibs(L);
-
-    if (luaL_loadstring(L, kLuaScriptContent) == LUA_OK) {
-        if (lua_pcall(L, 0, LUA_MULTRET, 0) == LUA_OK) {
-            isLuaLoaded = YES;
-            NSLog(@"[AutoDanceHex v7.2] Khởi tạo Lua Engine thành công!");
-        } else {
-            NSLog(@"[AutoDanceHex v7.2] Lỗi chạy Lua Script: %s", lua_tostring(L, -1));
-            lua_pop(L, 1);
+static const std::vector<ClassInfo> methodInfo = {
+    {
+        "Dance.AuditionGroup", "HotFix.dll",
+        {
+            {"judgeLevel", 64, "eNoteJudgeLevel", "set 4 (PERFECT)"},
+            {"isHitBeat", 50, "Boolean", "set true"}
+        },
+        {
+            {"IsAllHit", "0x16d22b4", "Boolean", "()"},
+            {"ResetArrowsHit", "0x16fe4ac", "Void", "()"},
+            {"CheckNextHit", "0x16e1764", "Boolean", "(AuditionArrowsDirection)"}
         }
-    } else {
-        NSLog(@"[AutoDanceHex v7.2] Lỗi biên dịch chuỗi Lua: %s", lua_tostring(L, -1));
-        lua_pop(L, 1);
+    },
+    {
+        "GuidTrackDanceNoteCtrl", "HotFix.dll",
+        {
+            {"isPlay", 408, "Boolean", "set true (via IsPlaying)"}
+        },
+        {
+            {"get_IsPlaying", "0x16d22b4", "Boolean", "()"},
+            {"set_IsPlaying", "0x170cb8c", "Void", "(Boolean)"},
+            {"JudgeNotePress", "0x1702a5c", "Void", "(eTrackDirection,Boolean,Boolean)"}
+        }
+    },
+    {
+        "UI_TaikoNoteBase", "HotFix.dll",
+        {
+            {"isJudgeLevel", 48, "Boolean", "set true"},
+            {"JudgeLevel", 56, "eNoteJudgeLevel", "set 4 (PERFECT)"},
+            {"IsHit", 64, "Boolean", "set true"}
+        },
+        {
+            {"set_isJudgeLevel", "0x170cb8c", "Void", "(Boolean)"},
+            {"get_IsHit", "0x16d22b4", "Boolean", "()"},
+            {"set_IsHit", "0x170cb8c", "Void", "(Boolean)"},
+            {"InitData", "0x170cb34", "Void", "(TaikoNote)"}
+        }
+    },
+    {
+        "Dance.DynamicArrowsController", "HotFix.dll",
+        {},
+        {
+            {"CalculateScore", "0x16fe4ac", "Void", "()"},
+            {"OnOneGroupFinish", "0x16fe4ac", "Void", "()"},
+            {"GetComboRatio", "0x16e3574", "UInt32", "(UInt32)"},
+            {"SendRoundScoreToServer", "0x170d84c", "Void", "(DynamicGroup, Int32)"}
+        }
+    }
+};
+
+static const std::vector<MiniModeDef> MINI_MODES = {
+    {
+        "Bubble", JUDGE_PERFECT,
+        {
+            {"Modules.UI.UI_DanceBallSingleNote", {"judgeLevel"}},
+            {"Modules.UI.UI_DanceBallLongNote", {"judgeLevel"}},
+            {"BubbleNoteController", {"isAutoPlay"}}
+        },
+        {"Modules.UI.UI_BubbleNoteBase"}
+    },
+    {
+        "VOS", JUDGE_PERFECT,
+        {
+            {"Modules.UI.UI_Note_VOS", {"judgeLevel", "isJudge"}},
+            {"Modules.UI.UI_LongNote_VOS", {"judgeLevel"}}
+        },
+        {}
+    },
+    {
+        "Burst", JUDGE_PERFECT,
+        {
+            {"BurstAuGroup", {"judgeLevel", "isHitBeat"}}
+        },
+        {}
+    },
+    {
+        "Crazy", JUDGE_PERFECT,
+        {
+            {"DynamicGroup", {"judgeLevel"}},
+            {"DynamicOneBeatKeys", {"judgeLevel", "JudgeRatio"}}
+        },
+        {}
+    },
+    {
+        "Quỷ đạo", 0, // Perfect = 0 ở chế độ này
+        {
+            {"GuideNote", {"judgeLevel", "haveDone"}},
+            {"GuideLongNote", {"curLevel"}},
+            {"GuideDoubleNote", {"judgeLevel"}},
+            {"GuideSlideNote", {"judgeLevel"}}
+        },
+        {}
+    },
+    {
+        "4K/Track", JUDGE_PERFECT,
+        {
+            {"Dance.MusicTool.TrackNote", {"judgeLevel"}}
+        },
+        {}
+    }
+};
+
+#pragma mark - === HÀM HỖ TRỢ TRUY CẬP ĐỐI TƯỢNG ===
+
+static id getObjectField(id obj, NSString* fieldName) {
+    if (!obj) return nil;
+    @try { return [obj valueForKey:fieldName]; }
+    @catch (...) { return nil; }
+}
+
+static bool setObjectField(id obj, NSString* fieldName, id value) {
+    if (!obj) return false;
+    @try { [obj setValue:value forKey:fieldName]; return true; }
+    @catch (...) { return false; }
+}
+
+static bool setObjectFieldBool(id obj, NSString* fieldName, bool value) {
+    return setObjectField(obj, fieldName, @(value));
+}
+
+static bool setObjectFieldInt(id obj, NSString* fieldName, int value) {
+    return setObjectField(obj, fieldName, @(value));
+}
+
+static int getObjectFieldInt(id obj, NSString* fieldName, int defaultValue = 0) {
+    id val = getObjectField(obj, fieldName);
+    return val ? [val intValue] : defaultValue;
+}
+
+static long long getObjectFieldLong(id obj, NSString* fieldName, long long defaultValue = 0) {
+    id val = getObjectField(obj, fieldName);
+    return val ? [val longLongValue] : defaultValue;
+}
+
+static bool callObjectMethod(id obj, NSString* selector, id arg1 = nil, id arg2 = nil) {
+    if (!obj || !selector) return false;
+    SEL sel = NSSelectorFromString(selector);
+    if (![obj respondsToSelector:sel]) return false;
+    
+    @try {
+        NSMethodSignature* sig = [obj methodSignatureForSelector:sel];
+        NSInvocation* inv = [NSInvocation invocationWithMethodSignature:sig];
+        inv.target = obj;
+        inv.selector = sel;
+        if (arg1) [inv setArgument:&arg1 atIndex:2];
+        if (arg2) [inv setArgument:&arg2 atIndex:3];
+        [inv invoke];
+        return true;
+    } @catch (...) {
+        return false;
     }
 }
 
-// Gọi hàm OnDraw() từ Lua mỗi chu kỳ
-static void executeLuaModLoop() {
-    if (!isLuaLoaded || !L) return;
-    lua_getglobal(L, "OnDraw");
-    if (lua_isfunction(L, -1)) {
-        if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
-            NSLog(@"[AutoDanceHex v7.2] Lỗi trong OnDraw: %s", lua_tostring(L, -1));
-            lua_pop(L, 1);
-        }
-    } else {
-        lua_pop(L, 1);
+static NSArray* findObjectsOfClass(NSString* className) {
+    Class cls = NSClassFromString(className);
+    if (!cls || ![cls respondsToSelector:@selector(findObjects)]) return nil;
+    id result = [cls performSelector:@selector(findObjects)];
+    if ([result isKindOfClass:[NSArray class]]) return result;
+    return nil;
+}
+
+#pragma mark - === LƯU / KHÔI PHỤC TRẠNG THÁI ===
+
+static void captureOriginalValue(NSString* prefix, id obj, NSArray* fields) {
+    if (!obj || !prefix) return;
+    NSString* key = [NSString stringWithFormat:@"%@%p", prefix, obj];
+    if (originals.count([key UTF8String])) return;
+    
+    SavedState stateEntry;
+    stateEntry.object = obj;
+    for (NSString* field in fields) {
+        id val = getObjectField(obj, field);
+        if (val) stateEntry.originalValues[[field UTF8String]] = val;
     }
+    originals[[key UTF8String]] = stateEntry;
 }
 
-static void startModLoop() {
-    if (modLoopTimer) return;
-    dispatch_queue_t queue = dispatch_get_main_queue();
-    modLoopTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
-    // Chạy tần suất 0.3s để bắt nhịp game cực mượt mà
-    dispatch_source_set_timer(modLoopTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.3 * NSEC_PER_SEC, 0.05 * NSEC_PER_SEC);
-    dispatch_source_set_event_handler(modLoopTimer, ^{
-        executeLuaModLoop();
-    });
-    dispatch_resume(modLoopTimer);
-}
-
-// Lấy UIWindow hiện tại của game
-static UIWindow *getCurrentWindow() {
-    UIWindow *foundWindow = nil;
-    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-        if ([scene isKindOfClass:[UIWindowScene class]]) {
-            UIWindowScene *windowScene = (UIWindowScene *)scene;
-            for (UIWindow *window in windowScene.windows) {
-                if (window.isKeyWindow) { return window; }
-                if (!foundWindow) { foundWindow = window; }
-            }
+static int restoreAllOriginals() {
+    int restored = 0;
+    for (auto& pair : originals) {
+        const SavedState& rec = pair.second;
+        if (!rec.object) continue;
+        for (const auto& fv : rec.originalValues) {
+            setObjectField(rec.object, [NSString stringWithUTF8String:fv.first.c_str()], fv.second);
         }
+        restored++;
     }
-    return foundWindow;
+    originals.clear();
+    state.stats.modified = 0;
+    state.stats.taiko = 0;
+    state.stats.mini = 0;
+    state.stats.crazy = 0;
+    state.scoredGroups.clear();
+    state.crazyScore = 0;
+    return restored;
 }
 
-// Giao diện Menu quản lý qua UIKit Alert (Tương thích 100% với môi trường gọi lệnh)
-@interface AutoDanceMenuController : NSObject
-+ (void)showMenu;
-+ (void)showToast:(NSString *)msg;
-@end
+#pragma mark - === ÁP DỤNG MODULE ===
 
-@implementation AutoDanceMenuController
-
-+ (void)showMenu {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *window = getCurrentWindow();
-        if (!window) return;
+static int applyAuditionMod() {
+    int count = 0;
+    @autoreleasepool {
+        NSArray* groups = findObjectsOfClass(@"Dance.AuditionGroup");
+        for (id g in groups) {
+            captureOriginalValue(@"group:", g, @[@"judgeLevel", @"isHitBeat"]);
+            setObjectFieldInt(g, @"judgeLevel", JUDGE_PERFECT);
+            setObjectFieldBool(g, @"isHitBeat", YES);
+            count++;
+        }
         
-        UIViewController *rootVC = window.rootViewController;
-        while (rootVC.presentedViewController) { rootVC = rootVC.presentedViewController; }
-
-        BOOL activeOn = NO, taikoOn = NO, miniOn = NO;
-        if (L) {
-            lua_getglobal(L, "state");
-            if (lua_istable(L, -1)) {
-                lua_getfield(L, -1, "activeOn"); activeOn = lua_toboolean(L, -1); lua_pop(L, 1);
-                lua_getfield(L, -1, "taikoOn"); taikoOn = lua_toboolean(L, -1); lua_pop(L, 1);
-                lua_getfield(L, -1, "miniOn"); miniOn = lua_toboolean(L, -1); lua_pop(L, 1);
-            }
-            lua_pop(L, 1);
+        NSArray* tracks = findObjectsOfClass(@"GuidTrackDanceNoteCtrl");
+        for (id trk in tracks) {
+            captureOriginalValue(@"track:", trk, @[@"IsPlaying"]);
+            setObjectFieldBool(trk, @"IsPlaying", YES);
+            count++;
         }
-
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"AutoDance Hex v7.2 (Lua Engine)"
-                                                                     message:@"Chọn tính năng mod:"
-                                                              preferredStyle:UIAlertControllerStyleAlert];
-
-        [alert addAction:[UIAlertAction actionWithTitle:activeOn ? @"[ ✅ ] Auto Arrow (Audition): BẬT" : @"[ ❌ ] Auto Arrow (Audition): TẮT" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            BOOL newState = !activeOn;
-            if (L) {
-                lua_getglobal(L, "state");
-                if (lua_istable(L, -1)) { lua_pushboolean(L, newState); lua_setfield(L, -2, "activeOn"); }
-                lua_pop(L, 1);
-            }
-            [self showToast:newState ? @"Đã Bật Auto Arrow" : @"Đã Tắt Auto Arrow"];
-        }]];
-
-        [alert addAction:[UIAlertAction actionWithTitle:taikoOn ? @"[ ✅ ] Auto Taiko Mode: BẬT" : @"[ ❌ ] Auto Taiko Mode: TẮT" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            BOOL newState = !taikoOn;
-            if (L) {
-                lua_getglobal(L, "state");
-                if (lua_istable(L, -1)) { lua_pushboolean(L, newState); lua_setfield(L, -2, "taikoOn"); }
-                lua_pop(L, 1);
-            }
-            [self showToast:newState ? @"Đã Bật Taiko Mode" : @"Đã Tắt Taiko Mode"];
-        }]];
-
-        [alert addAction:[UIAlertAction actionWithTitle:miniOn ? @"[ ✅ ] FULL MINI GAME: BẬT" : @"[ ❌ ] FULL MINI GAME: TẮT" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            BOOL newState = !miniOn;
-            if (L) {
-                lua_getglobal(L, "state");
-                if (lua_istable(L, -1)) { lua_pushboolean(L, newState); lua_setfield(L, -2, "miniOn"); }
-                lua_pop(L, 1);
-            }
-            [self showToast:newState ? @"Đã Bật Full Mini Game" : @"Đã Tắt Full Mini Game"];
-        }]];
-
-        [alert addAction:[UIAlertAction actionWithTitle:@"Đóng Menu" style:UIAlertActionStyleCancel handler:nil]];
-        [rootVC presentViewController:alert animated:YES completion:nil];
-    });
-}
-
-+ (void)showToast:(NSString *)msg {
-    UIWindow *window = getCurrentWindow();
-    if (!window) return;
-    UILabel *toast = [[UILabel alloc] initWithFrame:CGRectMake(40, window.frame.size.height - 150, window.frame.size.width - 80, 42)];
-    toast.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.85];
-    toast.textColor = [UIColor cyanColor];
-    toast.textAlignment = NSTextAlignmentCenter;
-    toast.font = [UIFont boldSystemFontOfSize:14];
-    toast.text = msg;
-    toast.layer.cornerRadius = 10;
-    toast.clipsToBounds = YES;
-    [window addSubview:toast];
-    [UIView animateWithDuration:2.2 animations:^{ toast.alpha = 0.0; } completion:^(BOOL finished) { [toast removeFromSuperview]; }];
-}
-
-@end
-
-// Trình lắng nghe chạm 2 ngón tay mở Menu
-@interface AutoDanceGestureLoader : NSObject
-@end
-
-@implementation AutoDanceGestureLoader
-+ (void)load {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        initLuaScriptEmbedded();
-        startModLoop();
-        UIWindow *window = getCurrentWindow();
-        if (window) {
-            UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap:)];
-            tap.numberOfTouchesRequired = 2;
-            [window addGestureRecognizer:tap];
-            NSLog(@"[AutoDanceHex v7.2] Đã kích hoạt thành công gesture 2 ngón tay!");
-        }
-    });
-}
-
-+ (void)handleTap:(UITapGestureRecognizer *)sender {
-    if (sender.state == UIGestureRecognizerStateEnded) {
-        [AutoDanceMenuController showMenu];
     }
+    return count;
 }
-@end
+
+static int applyTaikoMod() {
+    int count = 0;
+    @autoreleasepool {
+        NSArray* notes = findObjectsOfClass(@"UI_TaikoNoteBase");
+        for (id n in notes) {
+            captureOriginalValue(@"taiko:", n, @[@"JudgeLevel", @"isJudgeLevel", @"IsHit"]);
+            setObjectFieldInt(n, @"JudgeLevel", JUDGE_PERFECT);
+            setObjectFieldBool(n, @"isJudgeLevel", YES);
+            if (!getObjectFieldInt(n, @"IsHit")) {
+                setObjectFieldBool(n, @"IsHit", YES);
+            }
+            count++;
+        }
+    }
+    return count;
+}
+
+#pragma mark - === CRAZY SCORE FIX ===
+
+static int repairCrazyKeys() {
+    int repaired = 0;
+    @autoreleasepool {
+        NSArray* keys = findObjectsOfClass(@"DynamicOneBeatKeys");
+        for (id k in keys) {
+            int idx = getObjectFieldInt(k, @"curArrowsIndex", -1);
+            NSArray* arrows = getObjectField(k, @"arrows");
+            NSUInteger len = arrows ? [arrows count] : 0;
+            
+            if (len > 0 && (idx < 0 || idx >= (int)len)) {
+                setObjectFieldInt(k, @"curArrowsIndex", 0);
+                repaired++;
+            }
+        }
+    }
+    return repaired;
+}
+
+static long long applyCrazyScoreFix() {
+    long long added = 0;
+    @autoreleasepool {
+        NSArray* ctrls = findObjectsOfClass(@"Dance.DynamicArrowsController");
+        id ctrl = ctrls.count > 0 ? ctrls[0] : nil;
+        if (!ctrl) return 0;
+        
+        long long base = getObjectFieldLong(ctrl, @"noteBaseScore", 100);
+        int combo = getObjectFieldInt(ctrl, @"curComboLevel", 1);
+        double comboMul = 1.0 + (combo - 1) * 0.05;
+        long long nowScore = getObjectFieldLong(ctrl, @"nowTotalScore", 0);
+        
+        NSArray* groups = getObjectField(ctrl, @"totalGroup");
+        for (id grp in groups) {
+            NSString* gKey = [NSString stringWithFormat:@"crazyG:%p", grp];
+            if (state.scoredGroups[[gKey UTF8String]]) continue;
+            
+            bool allHit = getObjectFieldInt(grp, @"isJudgeAllKey", 0);
+            int jl = getObjectFieldInt(grp, @"judgeLevel", -1);
+            if (!allHit || jl < 0) continue;
+            
+            int keysCnt = getObjectFieldInt(grp, @"curKeysIndex", 1);
+            long long gain = (long long)floor(base * comboMul * std::max(keysCnt, 1));
+            setObjectFieldInt(ctrl, @"nowTotalScore", (int)(nowScore + gain));
+            
+            state.scoredGroups[[gKey UTF8String]] = true;
+            state.crazyScore = nowScore + gain;
+            added += gain;
+        }
+        
+        // Force perfect trên keys
+        NSArray* keys = findObjectsOfClass(@"DynamicOneBeatKeys");
+        for (id k in keys) {
+            setObjectFieldInt(k, @"judgeLevel", JUDGE_PERFECT);
+            setObjectFieldInt(k, @"JudgeRatio", 100);
+            setObjectFieldBool(k, @"isJudge", YES);
+        }
+    }
+    return added;
+}
+
+static int applyMiniMod() {
+    int total = 0;
+    @autoreleasepool {
+        for (const auto& mode : MINI_MODES) {
+            int modeCnt = 0;
+            for (const auto& entry : mode.classes) {
+                NSString* clsName = [NSString stringWithUTF8String:entry.first];
+                NSArray* objs = findObjectsOfClass(clsName);
+                for (id o in objs) {
+                    captureOriginalValue([NSString stringWithFormat:@"mini:%p", o], o,
+                        [entry.second.utf8String UTF8String]);
+                    
+                    for (const char* field : entry.second) {
+                        std::string f = field;
+                        if (f == "isAutoPlay" || f == "isJudge" || f == "isHitBeat" || f == "haveDone") {
+                            setObjectFieldBool(o, @(f.c_str()), YES);
+                        } else if (f == "JudgeRatio") {
+                            setObjectFieldInt(o, @(f.c_str()), 100);
+                        } else {
+                            setObjectFieldInt(o, @(f.c_str()), mode.judgeValue);
+                        }
+                    }
+                    modeCnt++;
+                }
+            }
+            miniCounts[mode.label] = modeCnt;
+            total += modeCnt;
+        }
+    }
+    return total;
+}
+
+#pragma mark - === GIAO DIỆN IMGUI ===
+
+void OnDraw() {
+    time_t currentTime = time(nullptr);
+    
+    // Auto Arrow — mỗi 2s
+    if (state.activeOn && difftime(currentTime, state.lastCheck) >= 2) {
+        state.lastCheck = currentTime;
+        int cnt = applyAuditionMod();
+        if (cnt > 0 && cnt != state.lastCount) {
+            state.lastCount = cnt;
+            state.status = "Arrow: áp dụng cho trận mới! Objects=" + std::to_string(cnt);
+        }
+    }
+    
+    // Auto Taiko — mỗi 2s
+    if (state.taikoOn && difftime(currentTime, state.lastTaikoCheck) >= 2) {
+        state.lastTaikoCheck = currentTime;
+        int cnt = applyTaikoMod();
+        if (cnt > 0 && cnt != state.lastTaikoCount) {
+            state.lastTaikoCount = cnt;
+            state.status = "Taiko: Perfect áp dụng! Notes=" + std::to_string(cnt);
+        }
+    }
+    
+    // Full Mini — mỗi 2s
+    if (state.miniOn && difftime(currentTime, state.lastMiniCheck) >= 2) {
+        state.lastMiniCheck = currentTime;
+        int cnt = applyMiniMod();
+        if (cnt > 0 && cnt != state.lastMiniCount) {
+            state.lastMiniCount = cnt;
+            state.status = "FULL MINI GAME: Perfect áp dụng! Objects=" + std::to_string(cnt);
+        }
+    }
+    
+    // Crazy Fix — mỗi 0.3s
+    if (state.miniOn && difftime(currentTime, state.lastCrazyCheck) >= 0.3) {
+        int repaired = repairCrazyKeys();
+        long long gain = applyCrazyScoreFix();
+        state.lastCrazyCheck = currentTime;
+        if (gain > 0 || repaired > 0) state.stats.crazy += gain;
+    }
+    
+    // === VẼ GIAO DIỆN ===
+    ImGui::SetNextWindowSize(ImVec2(660, 680));
+    if (ImGui::Begin("AutoDance HexControl v7.2 — FULL MINI (Crazy Score Fix)")) {
+        if (ImGui::BeginTabBar("##mainTabs")) {
+            
+            // === TAB 1: CONTROL ===
+            if (ImGui::BeginTabItem("🎮 Control")) {
+                bool b1 = state.activeOn;
+                if (ImGui::Checkbox("Bật Auto Arrow (Audition)", &b1)) {
+                    state.activeOn = b1;
+                    if (b1) {
+                        state.lastCount = applyAuditionMod();
+                        state.lastCheck = currentTime;
+                        state.status = "Arrow BẬT. Objects=" + std::to_string(state.lastCount);
+                    } else {
+                        restoreAllOriginals();
+                        state.status = "Arrow TẮT. Khôi phục hoàn tất.";
+                    }
+                }
+                
+                bool b2 = state.taikoOn;
+                if (ImGui::Checkbox("Bật Auto Taiko (Perfect All Notes)", &b2)) {
+                    state.taikoOn = b2;
+                    if (b2) {
+                        state.lastTaikoCount = applyTaikoMod();
+                        state.lastTaikoCheck = currentTime;
+                        state.status = "Taiko BẬT. Notes=" + std::to_string(state.lastTaikoCount);
+                    } else {
+                        restoreAllOriginals();
+                        state.status = "Taiko TẮT.";
+                    }
+                }
+                
+                bool b3 = state.miniOn;
+                if (ImGui::Checkbox("🎯 Bật FULL MINI GAME (Bubble/VOS/Burst/Crazy/Quỷ đạo/4K)", &b3)) {
+                    state.miniOn = b3;
+                    if (b3) {
+                        state.lastMiniCount = applyMiniMod();
+                        state.lastMiniCheck = currentTime;
+                        state.status = "FULL MINI BẬT. Objects=" + std::to_string(state.lastMiniCount);
+                    } else {
+                        restoreAllOriginals();
+                        state.status = "FULL MINI TẮT.";
+                    }
+                }
+                
+                ImGui::Separator();
+                ImGui::Text("Arrow: %s | Taiko: %s | Mini: %s",
+                    state.activeOn ? "⚡ ON" : "OFF",
+                    state.taikoOn ? "⚡ ON" : "OFF",
+                    state.miniOn ? "⚡ ON" : "OFF");
+                
+                ImGui::SeparatorText("🎯 Crazy Score Fix");
+                ImGui::Text("  Bonus đã cộng: %lld điểm", state.stats.crazy);
+                ImGui::Text("  nowTotalScore: %lld", state.crazyScore);
+                ImGui::Text("  Công thức: base × combo(1+%.2f×(combo-1)) × keyCount", 0.05f);
+                
+                if (state.miniOn) {
+                    ImGui::SeparatorText("Mini per-mode");
+                    for (const auto& m : MINI_MODES) {
+                        ImGui::Text("  %-10s : %d", m.label, miniCounts[m.label]);
+                    }
+                }
+                
+                ImGui::SeparatorText("Trạng thái");
+                ImGui::TextWrapped("%s", state.status.c_str());
+                
+                if (ImGui::Button("Reset / Khôi phục tất cả")) {
+                    state.activeOn = state.taikoOn = state.miniOn = false;
+                    int r = restoreAllOriginals();
+                    state.status = "Đã reset + khôi phục " + std::to_string(r) + " object.";
+                }
+                
+                ImGui::EndTabItem();
+            }
+            
+            // === TAB 2: FIELD OFFSET ===
+            if (ImGui::BeginTabItem("📐 Field Offset")) {
+                for (const auto& cls : methodInfo) {
+                    if (!cls.fields.empty()) {
+                        ImGui::SeparatorText("%s  [%s]", cls.clsName, cls.image);
+                        for (const auto& f : cls.fields) {
+                            ImGui::Text("  0x%03zx  %-16s  %-20s → %s",
+                                f.offset, f.name, f.type, f.mod);
+                        }
+                    }
+                }
+                ImGui::EndTabItem();
+            }
+            
+            // === TAB 3: METHOD OFFSET ===
+            if (ImGui::BeginTabItem("📍 Method Offset")) {
+                for (const auto& cls : methodInfo) {
+                    ImGui::SeparatorText("%s", cls.clsName);
+                    for (const auto& m : cls.methods) {
+                        ImGui::Text("  %s  %-20s  %s %s", m.addr, m.name, m.ret, m.params);
+                    }
+                }
+                ImGui::EndTabItem();
+            }
+            
+            ImGui::EndTabBar();
+        }
+    }
+    ImGui::End();
+}
+
+void OnStop() {
+    state.activeOn = state.taikoOn = state.miniOn = false;
+    int r = restoreAllOriginals();
+    printf("[AutoDance] Dừng. Đã khôi phục %d đối tượng.\n", r);
+}
+
+int main(int argc, const char* argv[]) {
+    printf("=== AutoDance HexControl v7.2 Đã khởi động ===\n");
+    printf("Nền tảng: Objective-C++ / main.mm\n");
+    printf("Chế độ: Arrow + Taiko + Full Mini + Crazy Score Fix\n");
+    printf("Gọi OnDraw() trong vòng lặp chính của ứng dụng\n");
+    printf("Gọi OnStop() khi kết thúc\n");
+    
+    // Vòng lặp chính tích hợp với ImGui/Game engine
+    // while (appRunning) { OnDraw(); }
+    
+    return 0;
+}
