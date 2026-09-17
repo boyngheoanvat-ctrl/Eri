@@ -23,9 +23,9 @@ static BOOL autoDanceEnabled = NO;
 static BOOL taikoEnabled = NO;
 static BOOL fullMiniGameEnabled = NO;
 
-// Khai báo một Helper class để nhận sự kiện click nút nổi chuẩn xác
+// Đã sửa lỗi đánh máy inst5ancetype -> instancetype chuẩn xác
 @interface FloatButtonHandler : NSObject
-+ (inst5ancetype)sharedInstance;
++ (instancetype)sharedInstance;
 - (void)onFloatingButtonClicked:(UIButton *)sender;
 @end
 
@@ -133,10 +133,18 @@ static BOOL fullMiniGameEnabled = NO;
 __attribute__((constructor)) static void entryPoint() {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         @autoreleasepool {
-            UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
-            if (!keyWindow) return;
+            // Lấy WindowScene hiện tại để tương thích với các phiên bản iOS mới
+            UIWindowScene *windowScene = nil;
+            for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+                if ([scene isKindOfClass:[UIWindowScene class]]) {
+                    windowScene = (UIWindowScene *)scene;
+                    break;
+                }
+            }
+            if (!windowScene) return;
             
-            modWindow = [[PassthroughWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+            modWindow = [[PassthroughWindow alloc] initWithWindowScene:windowScene];
+            modWindow.frame = windowScene.coordinateSpace.bounds;
             modWindow.windowLevel = UIWindowLevelAlert + 1000;
             modWindow.hidden = NO;
             modWindow.backgroundColor = [UIColor clearColor];
@@ -154,12 +162,13 @@ __attribute__((constructor)) static void entryPoint() {
             floatingBtn.layer.borderWidth = 2.0;
             floatingBtn.layer.borderColor = [UIColor cyanColor].CGColor;
             
-            // Trỏ target chính xác vào FloatButtonHandler để nhận sự kiện bấm
             [floatingBtn addTarget:[FloatButtonHandler sharedInstance] action:@selector(onFloatingButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
             [rootVC.view addSubview:floatingBtn];
             
-            CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
-            CGFloat screenHeight = [UIScreen mainScreen].bounds.size.height;
+            CGRect screenBounds = windowScene.coordinateSpace.bounds;
+            CGFloat screenWidth = screenBounds.size.width;
+            CGFloat screenHeight = screenBounds.size.height;
+            
             menuView = [[UIView alloc] initWithFrame:CGRectMake((screenWidth - 300)/2, (screenHeight - 270)/2, 300, 270)];
             menuView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.9];
             menuView.layer.cornerRadius = 14;
@@ -173,7 +182,7 @@ __attribute__((constructor)) static void entryPoint() {
             [menuView addSubview:menuVC.view];
             [rootVC.view addSubview:menuView];
             
-            NSLog(@"[EriOS] Floating button target fixed!");
+            NSLog(@"[EriOS] Clean build compiled successfully!");
         }
     });
 }
