@@ -1,14 +1,12 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-// Custom UIWindow cho phép chạm xuyên qua vùng trống để không làm đơ game
 @interface PassthroughWindow : UIWindow
 @end
 
 @implementation PassthroughWindow
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     UIView *hitView = [super hitTest:point withEvent:event];
-    // Nếu điểm chạm rơi vào chính cửa sổ root trong suốt (vùng trống), cho phép xuyên qua game
     if (hitView == self.rootViewController.view) {
         return nil;
     }
@@ -24,6 +22,40 @@ static BOOL isMenuOpen = NO;
 static BOOL autoDanceEnabled = NO;
 static BOOL taikoEnabled = NO;
 static BOOL fullMiniGameEnabled = NO;
+
+// Khai báo một Helper class để nhận sự kiện click nút nổi chuẩn xác
+@interface FloatButtonHandler : NSObject
++ (inst5ancetype)sharedInstance;
+- (void)onFloatingButtonClicked:(UIButton *)sender;
+@end
+
+@implementation FloatButtonHandler
++ (instancetype)sharedInstance {
+    static FloatButtonHandler *instance = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        instance = [[FloatButtonHandler alloc] init];
+    });
+    return instance;
+}
+
+- (void)onFloatingButtonClicked:(UIButton *)sender {
+    isMenuOpen = !isMenuOpen;
+    if (isMenuOpen) {
+        menuView.hidden = NO;
+        menuView.alpha = 0.0;
+        [UIView animateWithDuration:0.25 animations:^{
+            menuView.alpha = 1.0;
+        }];
+    } else {
+        [UIView animateWithDuration:0.25 animations:^{
+            menuView.alpha = 0.0;
+        } completion:^(BOOL finished) {
+            menuView.hidden = YES;
+        }];
+    }
+}
+@end
 
 @interface ModMenuController : UIViewController
 @end
@@ -98,30 +130,12 @@ static BOOL fullMiniGameEnabled = NO;
 }
 @end
 
-static void onFloatingButtonClicked(UIButton *sender) {
-    isMenuOpen = !isMenuOpen;
-    if (isMenuOpen) {
-        menuView.hidden = NO;
-        menuView.alpha = 0.0;
-        [UIView animateWithDuration:0.25 animations:^{
-            menuView.alpha = 1.0;
-        }];
-    } else {
-        [UIView animateWithDuration:0.25 animations:^{
-            menuView.alpha = 0.0;
-        } completion:^(BOOL finished) {
-            menuView.hidden = YES;
-        }];
-    }
-}
-
 __attribute__((constructor)) static void entryPoint() {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         @autoreleasepool {
             UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
             if (!keyWindow) return;
             
-            // Sử dụng PassthroughWindow thay vì UIWindow thông thường để chống đơ game
             modWindow = [[PassthroughWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
             modWindow.windowLevel = UIWindowLevelAlert + 1000;
             modWindow.hidden = NO;
@@ -139,7 +153,9 @@ __attribute__((constructor)) static void entryPoint() {
             floatingBtn.layer.cornerRadius = 24;
             floatingBtn.layer.borderWidth = 2.0;
             floatingBtn.layer.borderColor = [UIColor cyanColor].CGColor;
-            [floatingBtn addTarget:nil action:@selector(onFloatingButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
+            
+            // Trỏ target chính xác vào FloatButtonHandler để nhận sự kiện bấm
+            [floatingBtn addTarget:[FloatButtonHandler sharedInstance] action:@selector(onFloatingButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
             [rootVC.view addSubview:floatingBtn];
             
             CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
@@ -157,7 +173,7 @@ __attribute__((constructor)) static void entryPoint() {
             [menuView addSubview:menuVC.view];
             [rootVC.view addSubview:menuView];
             
-            NSLog(@"[EriOS] Passthrough window initialized successfully!");
+            NSLog(@"[EriOS] Floating button target fixed!");
         }
     });
 }
