@@ -6,6 +6,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME := AutoDanceHex
 AutoDanceHex_FILES = main.mm
 AutoDanceHex_FRAMEWORKS = UIKit Foundation Security
+AutoDanceHex_LIBRARIES = lua  # Liên kết thư viện Lua
 AutoDanceHex_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -I$(THEOS)/include -I$(THEOS)/vendor/include
 
 include $(THEOS_MAKE_PATH)/tweak.mk
