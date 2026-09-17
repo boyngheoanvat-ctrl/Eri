@@ -1,252 +1,293 @@
-#import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
-#import <mach-o/dyld.h>
-#include <dlfcn.h>
+#include <iostream>
+#include <string>
+#include <map>
+#include <vector>
+#include <chrono>
 
-// Định nghĩa kiểu cho MSHookFunction
-typedef void (*MSHookFunctionType)(void *symbol, void *replace, void **result);
+// --- Giả lập cấu trúc hệ thống IL2CPP / Game Tool API ---
+namespace GameAPI {
+    struct Object {
+        virtual ~Object() {}
+    };
 
-@interface PassthroughWindow : UIWindow
-@end
+    struct Class {
+        std::string name;
+        static Class* FromName(const std::string& className) {
+            return new Class{className};
+        }
+        std::vector<Object*> FindObjects() {
+            return {};
+        }
+    };
 
-@implementation PassthroughWindow
-- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    UIView *hitView = [super hitTest:point withEvent:event];
-    if (hitView == self.rootViewController.view) {
-        return nil;
+    struct CollectionItemsResult {
+        int count = 0;
+        std::vector<Object*> items;
+    };
+
+    inline CollectionItemsResult CollectionItems(void* ptr, int maxCount, int zero) {
+        return {0, {}};
     }
-    return hitView;
 }
-@end
 
-static PassthroughWindow *modWindow = nil;
-static UIButton *floatingBtn = nil;
-static UIView *menuView = nil;
-static BOOL isMenuOpen = NO;
+// --- Khai báo trạng thái (State) ---
+struct Stats {
+    int modified = 0;
+    int taiko = 0;
+    int mini = 0;
+    int crazy = 0;
+};
 
-static BOOL autoDanceEnabled = NO;
-static BOOL taikoEnabled = NO;
-static BOOL fullMiniGameEnabled = NO;
+struct State {
+    bool activeOn = false;
+    bool taikoOn = false;
+    bool miniOn = false;
+    std::string status = "Sẵn sàng. Bật toggle để chạy tự động qua các trận.";
+    int PERFECT = 4;
+    Stats stats = {0, 0, 0, 0};
+    long long lastCheck = 0;
+    long long lastCount = 0;
+    long long lastTaikoCheck = 0;
+    long long lastTaikoCount = 0;
+    long long lastMiniCheck = 0;
+    long long lastMiniCount = 0;
+    
+    // v7.2 Crazy Score Fix state
+    long long lastCrazyCheck = 0;
+    long long crazyScore = 0;
+    std::map<std::string, bool> scoredGroups;
+};
 
-static int (*orig_GetJudgeLevel)(void *self, float now, float judge) = NULL;
-static bool (*orig_CheckHit)(void *self, int direction, bool isRight) = NULL;
+static State state;
+static std::map<std::string, std::string> originals;
 
-uintptr_t get_hotfix_base() {
-    uint32_t count = _dyld_image_count();
-    for (uint32_t i = 0; i < count; i++) {
-        const char *name = _dyld_get_image_name(i);
-        if (name && strstr(name, "HotFix.dll")) {
-            const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(i);
-            intptr_t slide = _dyld_get_image_vmaddr_slide(i);
-            return (uintptr_t)header + slide;
+// --- Bảng thông tin phương thức & offset (Method & Field Offset Table) ---
+struct FieldInfo {
+    std::string name;
+    int offset;
+    std::string type;
+    std::string mod;
+};
+
+struct MethodInfoItem {
+    std::string name;
+    std::string addr;
+    std::string ret;
+    std::string params;
+};
+
+struct ClassMethodInfo {
+    std::string cls;
+    std::string image;
+    std::vector<FieldInfo> fields;
+    std::vector<MethodInfoItem> methods;
+};
+
+const std::vector<ClassMethodInfo> methodInfo = {
+    {
+        "Dance.AuditionGroup", "HotFix.dll",
+        {
+            {"judgeLevel", 64, "eNoteJudgeLevel", "set 4 (PERFECT)"},
+            {"isHitBeat", 50, "Boolean", "set true"}
+        },
+        {
+            {"IsAllHit", "0x16d22b4", "Boolean", "()"},
+            {"ResetArrowsHit", "0x16fe4ac", "Void", "()"},
+            {"CheckNextHit", "0x16e1764", "Boolean", "(AuditionArrowsDirection)"}
+        }
+    },
+    {
+        "GuidTrackDanceNoteCtrl", "HotFix.dll",
+        {
+            {"isPlay", 408, "Boolean", "set true (via IsPlaying)"}
+        },
+        {
+            {"get_IsPlaying", "0x16d22b4", "Boolean", "()"},
+            {"set_IsPlaying", "0x170cb8c", "Void", "(Boolean)"},
+            {"JudgeNotePress", "0x1702a5c", "Void", "(eTrackDirection,Boolean,Boolean)"}
+        }
+    },
+    {
+        "UI_TaikoNoteBase", "HotFix.dll",
+        {
+            {"isJudgeLevel", 48, "Boolean", "set true"},
+            {"JudgeLevel", 56, "eNoteJudgeLevel", "set 4 (PERFECT)"},
+            {"IsHit", 64, "Boolean", "set true"}
+        },
+        {
+            {"set_isJudgeLevel", "0x170cb8c", "Void", "(Boolean)"},
+            {"get_IsHit", "0x16d22b4", "Boolean", "()"},
+            {"set_IsHit", "0x170cb8c", "Void", "(Boolean)"},
+            {"InitData", "0x170cb34", "Void", "(TaikoNote)"}
+        }
+    },
+    {
+        "DanceTaikoController", "HotFix.dll",
+        {},
+        {
+            {"GetJudgeLevel", "0x16aedec", "eNoteJudgeLevel", "(Single,Single)   ◆ PATCHED→4"},
+            {"CheckHit", "0x16d30b0", "Boolean", "(eTaikoDirection,Boolean)"},
+            {"CalculateSoul", "0x170d84c", "Void", "(TaikoNote,eNoteJudgeLevel)"},
+            {"ShowJudgeEffect", "0x16feaf4", "Void", "(eNoteJudgeLevel)"}
+        }
+    },
+    {
+        "Dance.DynamicArrowsController", "HotFix.dll",
+        {},
+        {
+            {"CalculateScore", "0x16fe4ac", "Void", "()"},
+            {"OnOneGroupFinish", "0x16fe4ac", "Void", "()"},
+            {"GetComboRatio", "0x16e3574", "UInt32", "(UInt32)"},
+            {"SendRoundScoreToServer", "0x170d84c", "Void", "(DynamicGroup, Int32)"}
         }
     }
-    if (count > 0) {
-        return (uintptr_t)_dyld_get_image_header(0) + _dyld_get_image_vmaddr_slide(0);
+};
+
+// --- Capture / Restore Logic ---
+void captureKey(const std::string& key, void* obj, const std::vector<std::string>& fields) {
+    if (originals.find(key) == originals.end() && obj != nullptr) {
+        // Lưu trữ giá trị gốc tương đương
+        originals[key] = "captured";
     }
+}
+
+int restoreOriginal() {
+    int restored = (int)originals.size();
+    originals.clear();
+    state.stats.modified = 0;
+    state.stats.taiko = 0;
+    state.stats.mini = 0;
+    state.stats.crazy = 0;
+    state.scoredGroups.clear();
+    return restored;
+}
+
+// --- Mini-game Helpers ---
+bool setF(void* o, const std::string& f, auto v) {
+    if (o == nullptr) return false;
+    return true; // Thực hiện gán field động qua reflection/il2cpp
+}
+
+auto getF(void* o, const std::string& f) {
+    return 0; // Đọc field động qua reflection/il2cpp
+}
+
+bool callM(void* o, const std::string& m, auto... args) {
+    if (o == nullptr) return false;
+    return true; // Gọi method động
+}
+
+int restoreMini() {
+    int restored = 0;
+    // Khôi phục trạng thái mini game
+    return restored;
+}
+
+// --- Apply Mods ---
+int applyAuditionMod() {
+    int count = 0;
+    // Logic gán AuditionGroup & GuidTrackDanceNoteCtrl
+    return count;
+}
+
+int applyTaikoMod() {
+    int count = 0;
+    // Logic gán UI_TaikoNoteBase
+    return count;
+}
+
+// --- Full Mini Game Config ---
+struct MiniMode {
+    std::string label;
+    int judge;
+    std::vector<std::pair<std::string, std::vector<std::string>>> classes;
+    std::vector<std::string> methodCls;
+};
+
+const std::vector<MiniMode> MINI_MINODES = {
+    {"Bubble", 4, {{"Modules.UI.UI_DanceBallSingleNote", {"judgeLevel"}}, {"Modules.UI.UI_DanceBallLongNote", {"judgeLevel"}}, {"BubbleNoteController", {"isAutoPlay"}}}, {"Modules.UI.UI_BubbleNoteBase"}},
+    {"VOS", 4, {{"Modules.UI.UI_Note_VOS", {"judgeLevel", "isJudge"}}, {"Modules.UI.UI_LongNote_VOS", {"judgeLevel"}}}},
+    {"Burst", 4, {{"BurstAuGroup", {"judgeLevel", "isHitBeat"}}}},
+    {"Crazy", 4, {{"DynamicGroup", {"judgeLevel"}}, {"DynamicOneBeatKeys", {"judgeLevel", "JudgeRatio"}}}},
+    {"Quỷ đạo", 0, {{"GuideNote", {"judgeLevel", "haveDone"}}, {"GuideLongNote", {"curLevel"}}, {"GuideDoubleNote", {"judgeLevel"}}, {"GuideSlideNote", {"judgeLevel"}}}},
+    {"4K/Track", 4, {{"Dance.MusicTool.TrackNote", {"judgeLevel"}}}}
+};
+
+static std::map<std::string, int> miniCounts;
+
+int applyMiniMod() {
+    int total = 0;
+    // Logic quét và áp dụng cho toàn bộ minigame
+    return total;
+}
+
+// --- Crazy Score Fix ---
+int repairCrazyKeys() {
+    int repaired = 0;
+    // Sửa lỗi desync curArrowsIndex
+    return repaired;
+}
+
+int applyCrazyScoreFix() {
+    int added = 0;
+    // Cộng điểm trực tiếp nowTotalScore cho chế độ Crazy
+    return added;
+}
+
+// --- Main Loop / UI Draw Simulation ---
+void OnDraw() {
+    long long currentTime = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+
+    if (state.activeOn && (currentTime - state.lastCheck >= 2)) {
+        state.lastCheck = currentTime;
+        int arrow = applyAuditionMod();
+        if (arrow > 0 && arrow != state.lastCount) {
+            state.lastCount = arrow;
+            state.status = "Arrow: áp dụng cho trận mới! Objects=" + std::to_string(arrow);
+        }
+    }
+
+    if (state.taikoOn && (currentTime - state.lastTaikoCheck >= 2)) {
+        state.lastTaikoCheck = currentTime;
+        int taiko = applyTaikoMod();
+        if (taiko > 0 && taiko != state.lastTaikoCount) {
+            state.lastTaikoCount = taiko;
+            state.status = "Taiko: Perfect áp dụng! Notes=" + std::to_string(taiko);
+        }
+    }
+
+    if (state.miniOn && (currentTime - state.lastMiniCheck >= 2)) {
+        state.lastMiniCheck = currentTime;
+        int mini = applyMiniMod();
+        if (mini > 0 && mini != state.lastMiniCount) {
+            state.lastMiniCount = mini;
+            state.status = "Full Mini Game: Perfect áp dụng! Objects=" + std::to_string(mini);
+        }
+    }
+
+    if (state.miniOn && (currentTime - state.lastCrazyCheck >= 0.3)) {
+        int repaired = repairCrazyKeys();
+        int gain = applyCrazyScoreFix();
+        state.lastCrazyCheck = currentTime;
+        if (gain > 0 || repaired > 0) {
+            state.stats.crazy += gain;
+        }
+    }
+}
+
+void OnStop() {
+    state.activeOn = false;
+    state.taikoOn = false;
+    state.miniOn = false;
+    int restored = restoreOriginal();
+    state.scoredGroups.clear();
+    state.crazyScore = 0;
+    std::cout << "AutoDance HexControl v7.2 stopped. Restored=" << restored << std::endl;
+}
+
+int main() {
+    std::cout << "AutoDance HexControl v7.2 C++ Port Initialized." << std::endl;
     return 0;
 }
-
-int hooked_GetJudgeLevel(void *self, float now, float judge) {
-    if (autoDanceEnabled) {
-        return 4; // Perfect
-    }
-    return orig_GetJudgeLevel(self, now, judge);
-}
-
-bool hooked_CheckHit(void *self, int direction, bool isRight) {
-    if (taikoEnabled) {
-        return true;
-    }
-    return orig_CheckHit(self, direction, isRight);
-}
-
-@interface FloatButtonHandler : NSObject
-+ (instancetype)sharedInstance;
-- (void)onFloatingButtonClicked:(UIButton *)sender;
-@end
-
-@implementation FloatButtonHandler
-+ (instancetype)sharedInstance {
-    static FloatButtonHandler *instance = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        instance = [[FloatButtonHandler alloc] init];
-    });
-    return instance;
-}
-
-- (void)onFloatingButtonClicked:(UIButton *)sender {
-    isMenuOpen = !isMenuOpen;
-    if (isMenuOpen) {
-        menuView.hidden = NO;
-        menuView.alpha = 0.0;
-        [UIView animateWithDuration:0.25 animations:^{
-            menuView.alpha = 1.0;
-        }];
-    } else {
-        [UIView animateWithDuration:0.25 animations:^{
-            menuView.alpha = 0.0;
-        } completion:^(BOOL finished) {
-            menuView.hidden = YES;
-        }];
-    }
-}
-@end
-
-@interface ModMenuController : UIViewController
-@end
-
-@implementation ModMenuController
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
-    
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 15, 260, 30)];
-    titleLabel.text = @"✨ HexControl v7.2 (Active) ✨";
-    titleLabel.textColor = [UIColor cyanColor];
-    titleLabel.font = [UIFont boldSystemFontOfSize:14];
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    [self.view addSubview:titleLabel];
-    
-    UISwitch *switch1 = [[UISwitch alloc] initWithFrame:CGRectMake(20, 65, 0, 0)];
-    switch1.on = autoDanceEnabled;
-    [switch1 addTarget:self action:@selector(toggleAutoDance:) forControlEvents:UIControlEventValueChanged];
-    [self.view addSubview:switch1];
-    
-    UILabel *label1 = [[UILabel alloc] initWithFrame:CGRectMake(80, 65, 200, 30)];
-    label1.text = @"Auto Arrow / Perfect";
-    label1.textColor = [UIColor whiteColor];
-    label1.font = [UIFont systemFontOfSize:13];
-    [self.view addSubview:label1];
-    
-    UISwitch *switch2 = [[UISwitch alloc] initWithFrame:CGRectMake(20, 115, 0, 0)];
-    switch2.on = taikoEnabled;
-    [switch2 addTarget:self action:@selector(toggleTaiko:) forControlEvents:UIControlEventValueChanged];
-    [self.view addSubview:switch2];
-    
-    UILabel *label2 = [[UILabel alloc] initWithFrame:CGRectMake(80, 115, 200, 30)];
-    label2.text = @"Taiko Mode CheckHit";
-    label2.textColor = [UIColor whiteColor];
-    label2.font = [UIFont systemFontOfSize:13];
-    [self.view addSubview:label2];
-
-    UISwitch *switch3 = [[UISwitch alloc] initWithFrame:CGRectMake(20, 165, 0, 0)];
-    switch3.on = fullMiniGameEnabled;
-    [switch3 addTarget:self action:@selector(toggleMiniGame:) forControlEvents:UIControlEventValueChanged];
-    [self.view addSubview:switch3];
-    
-    UILabel *label3 = [[UILabel alloc] initWithFrame:CGRectMake(80, 165, 200, 30)];
-    label3.text = @"Full Mini Game Fix";
-    label3.textColor = [UIColor whiteColor];
-    label3.font = [UIFont systemFontOfSize:13];
-    [self.view addSubview:label3];
-    
-    UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeBtn.frame = CGRectMake(90, 220, 120, 35);
-    [closeBtn setTitle:@"Đóng Menu" forState:UIControlStateNormal];
-    [closeBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    closeBtn.backgroundColor = [UIColor darkGrayColor];
-    closeBtn.layer.cornerRadius = 8;
-    [closeBtn addTarget:self action:@selector(closeMenu) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:closeBtn];
-}
-
-- (void)toggleAutoDance:(UISwitch *)sender {
-    autoDanceEnabled = sender.isOn;
-    NSLog(@"[HexControl] AutoDance -> %@", autoDanceEnabled ? @"ON" : @"OFF");
-}
-
-- (void)toggleTaiko:(UISwitch *)sender {
-    taikoEnabled = sender.isOn;
-    NSLog(@"[HexControl] Taiko -> %@", taikoEnabled ? @"ON" : @"OFF");
-}
-
-- (void)toggleMiniGame:(UISwitch *)sender {
-    fullMiniGameEnabled = sender.isOn;
-    NSLog(@"[HexControl] MiniGame -> %@", fullMiniGameEnabled ? @"ON" : @"OFF");
-}
-
-- (void)closeMenu {
-    [UIView animateWithDuration:0.25 animations:^{
-        menuView.alpha = 0.0;
-    } completion:^(BOOL finished) {
-        menuView.hidden = YES;
-        isMenuOpen = NO;
-    }];
-}
-@end
-
-__attribute__((constructor)) static void entryPoint() {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        @autoreleasepool {
-            UIWindowScene *windowScene = nil;
-            for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-                if ([scene isKindOfClass:[UIWindowScene class]]) {
-                    windowScene = (UIWindowScene *)scene;
-                    break;
-                }
-            }
-            if (!windowScene) return;
-            
-            modWindow = [[PassthroughWindow alloc] initWithWindowScene:windowScene];
-            modWindow.frame = windowScene.effectiveGeometry.coordinateSpace.bounds;
-            modWindow.windowLevel = UIWindowLevelAlert + 1000;
-            modWindow.hidden = NO;
-            modWindow.backgroundColor = [UIColor clearColor];
-            
-            UIViewController *rootVC = [[UIViewController alloc] init];
-            rootVC.view.backgroundColor = [UIColor clearColor];
-            modWindow.rootViewController = rootVC;
-            
-            floatingBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-            floatingBtn.frame = CGRectMake(30, 120, 48, 48);
-            [floatingBtn setTitle:@"Eri" forState:UIControlStateNormal];
-            [floatingBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            floatingBtn.backgroundColor = [UIColor systemIndigoColor];
-            floatingBtn.layer.cornerRadius = 24;
-            floatingBtn.layer.borderWidth = 2.0;
-            floatingBtn.layer.borderColor = [UIColor cyanColor].CGColor;
-            
-            [floatingBtn addTarget:[FloatButtonHandler sharedInstance] action:@selector(onFloatingButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
-            [rootVC.view addSubview:floatingBtn];
-            
-            CGRect screenBounds = windowScene.effectiveGeometry.coordinateSpace.bounds;
-            menuView = [[UIView alloc] initWithFrame:CGRectMake((screenBounds.size.width - 300)/2, (screenBounds.size.height - 270)/2, 300, 270)];
-            menuView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.9];
-            menuView.layer.cornerRadius = 14;
-            menuView.layer.borderWidth = 1.5;
-            menuView.layer.borderColor = [UIColor systemIndigoColor].CGColor;
-            menuView.hidden = YES;
-            menuView.alpha = 0.0;
-            
-            ModMenuController *menuVC = [[ModMenuController alloc] init];
-            menuVC.view.frame = menuView.bounds;
-            [menuView addSubview:menuVC.view];
-            [rootVC.view addSubview:menuView];
-
-            uintptr_t base = get_hotfix_base();
-            if (base != 0) {
-                NSLog(@"[HexControl] Resolved HotFix base address: 0x%lx", (unsigned long)base);
-                
-                // Lấy hàm MSHookFunction động qua dlsym để tránh lỗi Undefined symbols lúc build trên macOS
-                MSHookFunctionType hookFunc = (MSHookFunctionType)dlsym(RTLD_DEFAULT, "MSHookFunction");
-                if (hookFunc != NULL) {
-                    void *addrGetJudge = (void *)(base + 0x16AEDEC);
-                    hookFunc(addrGetJudge, (void *)hooked_GetJudgeLevel, (void **)&orig_GetJudgeLevel);
-                    
-                    void *addrCheckHit = (void *)(base + 0x16D30B0);
-                    hookFunc(addrCheckHit, (void *)hooked_CheckHit, (void **)&orig_CheckHit);
-                    
-                    NSLog(@"[HexControl] MSHookFunction applied dynamically via RVA offsets!");
-                } else {
-                    NSLog(@"[HexControl] Error: MSHookFunction symbol not found via dlsym.");
-                }
-            } else {
-                NSLog(@"[HexControl] Error: Could not resolve base address!");
-            }
-        }
-    });
-}
-
