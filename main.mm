@@ -78,7 +78,6 @@ static UIWindow *getCurrentWindow() {
         // Nút bật tính năng Audition Mod
         [alert addAction:[UIAlertAction actionWithTitle:@"🟢 Bật Auto Arrow" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             if (L) {
-                // Gọi hàm hoặc kích hoạt state trong Lua nếu cần
                 lua_getglobal(L, "state");
                 if (lua_istable(L, -1)) {
                     lua_pushboolean(L, 1);
@@ -155,7 +154,7 @@ static UIWindow *getCurrentWindow() {
         UIWindow *window = getCurrentWindow();
         if (window) {
             UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTwoFingerTap:)];
-            tap.numberOfTouchesRequired = 2; // Yêu cầu chạm 2 ngón tay đồng thời
+            tap.numberOfTouchesRequired = 2;
             [window addGestureRecognizer:tap];
             NSLog(@"[AutoDanceHex] Đã thiết lập thành công cử chỉ chạm 2 ngón tay mở menu!");
         }
@@ -171,7 +170,7 @@ static UIWindow *getCurrentWindow() {
 
 // Khởi chạy khi dylib được tiêm vào game
 __attribute__((constructor)) static void entry() {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(),్‌;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         initLuaScriptEmbedded();
         [MenuGestureHandler setupGesture];
         NSLog(@"[AutoDanceHex] Tweak đã khởi chạy thành công!");
