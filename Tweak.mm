@@ -1,10 +1,40 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <dispatch/dispatch.h>
-#import "substrate.h"
 #include <map>
 #include <string>
 #include <ctime>
+#include <mach/mach.h>
+
+#pragma mark - === SUBSTRATE HOOK — Không dùng Theos Preprocessor ===
+typedef struct { void *next; } MSHookIvar;
+
+extern "C" {
+    void MSHookFunction(void* symbol, void* replacement, void** storage);
+    void* MSFindSymbol(const char* image, const char* name);
+}
+
+#define HOOK_RET_TYPE(RET, SEL, ...) \
+typedef RET (*orig_##SEL)(id, SEL, ##__VA_ARGS__); \
+static orig_##SEL orig_##SEL = nullptr; \
+static RET hook_##SEL(id self, SEL _cmd, ##__VA_ARGS__)
+
+#define HOOK_VOID_TYPE(SEL, ...) \
+typedef void (*orig_##SEL)(id, SEL, ##__VA_ARGS__); \
+static orig_##SEL orig_##SEL = nullptr; \
+static void hook_##SEL(id self, SEL _cmd, ##__VA_ARGS__)
+
+#define GET_SEL(sel) @selector(sel)
+#define DO_HOOK(class, selName, hookFn) \
+do { \
+    Class cls = NSClassFromString(@#class); \
+    SEL sel = @selector(selName); \
+    Method m = class_getInstanceMethod(cls, sel); \
+    if(m) { \
+        IMP origImp = method_getImplementation(m); \
+        MSHookFunction((void*)origImp, (void*)hookFn, (void**)&orig_##hookFn); \
+    } \
+} while(0)
 
 #pragma mark - === OFFSET ===
 enum JudgeLv : int32_t { MISS = 0, PERFECT = 4 };
@@ -258,34 +288,25 @@ extern "C" {
     void dance_set_ctrl_D(void* p) { g.pD = p; }
 }
 
-#pragma mark - === HOOK VÀO APP ===
-%hook UIApplication
-- (BOOL)application:(UIApplication*)app didFinishLaunchingWithOptions:(id)opts {
-    BOOL ok = %orig;
+#pragma mark - === HOOK APP WITHOUT THEOS ===
+static void tryBuildUI() {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if(g_iconBtn) return;
         UIWindow* keyWin = [UIApplication sharedApplication].keyWindow;
         if(keyWin && keyWin.rootViewController) {
             buildUI(keyWin.rootViewController.view);
         }
     });
-    return ok;
 }
-%end
 
-%hook UIViewController
-- (void)viewDidAppear:(BOOL)animated {
-    %orig;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if(!g_iconBtn) {
-            UIView* v = self.view;
-            while(v.superview) v = v.superview;
-            if([v isKindOfClass:[UIWindow class]] && ((UIWindow*)v).rootViewController) {
-                buildUI(((UIWindow*)v).rootViewController.view);
-            }
-        }
+HOOK_RET_TYPE(BOOL, application_didFinishLaunching,
+               UIApplication* app, NSDictionary* opts) {
+    BOOL ret = orig_application_didFinishLaunching(self, _cmd, app, opts);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        tryBuildUI();
     });
+    return ret;
 }
-%end
 
 #pragma mark - === VÒNG LẶP ===
 static void runLoop() {
@@ -298,8 +319,20 @@ static void runLoop() {
     if(g.mini  && g.pD && difftime(now,lC)>=0.3) { lC=now; fixIdx(); doScore(); }
 }
 
+#pragma mark - === KHỞI TẠO ===
 __attribute__((constructor))
 static void init() {
+    // Hook UIApplication
+    Class appCls = NSClassFromString(@"UIApplication");
+    SEL sel = @selector(application:didFinishLaunchingWithOptions:);
+    Method m = class_getInstanceMethod(appCls, sel);
+    if(m) {
+        IMP origImp = method_getImplementation(m);
+        MSHookFunction((void*)origImp, (void*)hook_application_didFinishLaunching,
+                      (void**)&orig_application_didFinishLaunching);
+    }
+    
+    // Timer
     dispatch_source_t timer = dispatch_source_create(
         DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     dispatch_source_set_timer(timer, DISPATCH_TIME_NOW,
