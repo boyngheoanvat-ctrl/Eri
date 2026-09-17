@@ -1,9 +1,8 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #include "substrate.h"
-#include "lua_script.h"
+#include "lua_script.h" // Chứa mảng byte của file Lua (Autodancehex_lua)
 
-// Khai báo thư viện Lua
 extern "C" {
 #include <lua.h>
 #include <lualib.h>
@@ -12,20 +11,21 @@ extern "C" {
 
 static lua_State *L = NULL;
 static BOOL isLuaLoaded = NO;
+static dispatch_source_t renderTimer = nil;
 
-// Nạp script Lua từ bộ nhớ nhúng trong dylib
+// 1. Hàm nạp script Lua nhúng từ bộ nhớ
 static void initLuaScriptEmbedded() {
     if (isLuaLoaded) return;
 
     L = luaL_newstate();
     if (!L) return;
-
     luaL_openlibs(L);
 
+    // Nạp dữ liệu từ lua_script.h
     if (luaL_loadbuffer(L, (const char *)Autodancehex_lua, Autodancehex_lua_len, "AutoDanceHex.lua") == LUA_OK) {
         if (lua_pcall(L, 0, LUA_MULTRET, 0) == LUA_OK) {
             isLuaLoaded = YES;
-            NSLog(@"[AutoDanceHex] Đã nạp script Lua nhúng thành công!");
+            NSLog(@"[AutoDanceHex] Đã nạp script Lua thành công vào memory!");
         } else {
             const char *err = lua_tostring(L, -1);
             NSLog(@"[AutoDanceHex] Lỗi chạy script Lua: %s", err);
@@ -38,123 +38,44 @@ static void initLuaScriptEmbedded() {
     }
 }
 
-// Lấy cửa sổ chính an toàn tương thích iOS mới nhất
-static UIWindow *getCurrentWindow() {
-    UIWindow *foundWindow = nil;
-    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-        if ([scene isKindOfClass:[UIWindowScene class]]) {
-            UIWindowScene *windowScene = (UIWindowScene *)scene;
-            for (UIWindow *window in windowScene.windows) {
-                if (window.isKeyWindow) {
-                    return window;
-                }
-                if (!foundWindow) {
-                    foundWindow = window;
-                }
-            }
+// 2. Hàm gọi liên tục hàm OnDraw() trong Lua mỗi frame (khoảng 60 FPS)
+static void executeLuaDraw() {
+    if (!isLuaLoaded || !L) return;
+
+    lua_getglobal(L, "OnDraw");
+    if (lua_isfunction(L, -1)) {
+        if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+            const char *err = lua_tostring(L, -1);
+            // Tránh spam log quá nhiều nếu lỗi nhẹ
+            lua_pop(L, 1);
         }
-    }
-    return foundWindow;
-}
-
-// Hiển thị Menu Native UIKit
-@interface AutoDanceMenuController : NSObject
-@end
-
-@implementation AutoDanceMenuController
-
-+ (void)showMenu {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *window = getCurrentWindow();
-        if (!window) return;
-
-        UIViewController *rootVC = window.rootViewController;
-        while (rootVC.presentedViewController) {
-            rootVC = rootVC.presentedViewController;
-        }
-
-        // Tạo bảng điều khiển menu UIKit
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"AutoDance Hex v7.2"
-                                                                     message:@"Chọn tính năng hack/mod cho Au 2:"
-                                                              preferredStyle:UIAlertControllerStyleAlert];
-
-        // Nút Bật/Tắt Auto Arrow
-        [alert addAction:[UIAlertAction actionWithTitle:@"🟢 Bật/Tắt Auto Arrow" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            if (L) {
-                lua_getglobal(L, "ToggleAutoArrow");
-                if (lua_isfunction(L, -1)) {
-                    lua_pcall(L, 0, 0, 0);
-                } else {
-                    lua_pop(L, 1);
-                }
-            }
-            [self showToast:@"Đã kích hoạt Auto Arrow!"];
-        }]];
-
-        // Nút Bật Taiko Mode
-        [alert addAction:[UIAlertAction actionWithTitle:@"🎯 Bật Taiko Mode" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [self showToast:@"Đã bật chế độ Taiko!"];
-        }]];
-
-        // Nút Đóng Menu
-        [alert addAction:[UIAlertAction actionWithTitle:@"Đóng Menu" style:UIAlertActionStyleCancel handler:nil]];
-
-        [rootVC presentViewController:alert animated:YES completion:nil];
-    });
-}
-
-+ (void)showToast:(NSString *)message {
-    UIWindow *window = getCurrentWindow();
-    if (!window) return;
-    
-    UILabel *toast = [[UILabel alloc] initWithFrame:CGRectMake(50, window.frame.size.height - 150, window.frame.size.width - 100, 40)];
-    toast.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.8];
-    toast.textColor = [UIColor whiteColor]; // Đã sửa lỗi whiteOfColor thành whiteColor chuẩn
-    toast.textAlignment = NSTextAlignmentCenter;
-    toast.font = [UIFont boldSystemFontOfSize:14];
-    toast.text = message;
-    toast.layer.cornerRadius = 10;
-    toast.clipsToBounds = YES;
-    [window addSubview:toast];
-    
-    [UIView animateWithDuration:2.0 animations:^{
-        toast.alpha = 0.0;
-    } completion:^(BOOL finished) {
-        [toast removeFromSuperview];
-    }];
-}
-
-@end
-
-// Lắng nghe cử chỉ chạm 2 ngón tay để hiện menu
-@interface MenuGestureHandler : NSObject
-@end
-
-@implementation MenuGestureHandler
-+ (void)setupGesture {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *window = getCurrentWindow();
-        if (window) {
-            UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTwoFingerTap:)];
-            tap.numberOfTouchesRequired = 2; // Chạm 2 ngón tay đồng thời
-            [window addGestureRecognizer:tap];
-            NSLog(@"[AutoDanceHex] Đã cài đặt thành công cử chỉ chạm 2 ngón tay mở menu!");
-        }
-    });
-}
-
-+ (void)handleTwoFingerTap:(UITapGestureRecognizer *)sender {
-    if (sender.state == UIGestureRecognizerStateEnded) {
-        [AutoDanceMenuController showMenu];
+    } else {
+        lua_pop(L, 1);
     }
 }
-@end
 
-// Khởi chạy khi dylib được tiêm vào game
+// 3. Khởi tạo vòng lặp render ngầm độc lập
+static void startRenderLoop() {
+    if (renderTimer) return;
+    
+    dispatch_queue_t queue = dispatch_get_main_queue();
+    renderTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+    
+    // Đặt tần số quét ~60 FPS (0.0166 giây / lần)
+    dispatch_source_set_timer(renderTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.01666 * NSEC_PER_SEC, 0.001 * NSEC_PER_SEC);
+    
+    dispatch_source_set_event_handler(renderTimer, ^{
+        executeLuaDraw();
+    });
+    
+    dispatch_resume(renderTimer);
+}
+
+// Entry point khi dylib được tiêm vào game Au 2
 __attribute__((constructor)) static void entry() {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         initLuaScriptEmbedded();
-        [MenuGestureHandler setupGesture];
-        NSLog(@"[AutoDanceHex] Tweak đã khởi chạy thành công!");
+        startRenderLoop();
+        NSLog(@"[AutoDanceHex] Tweak đã khởi chạy vòng lặp Lua thành công!");
     });
 }
