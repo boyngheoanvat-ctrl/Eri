@@ -1,16 +1,16 @@
-# Makefile — Eri Mod | FIXED UI + Compatibility
+# Makefile — Eri Mod | FIXED BUILD
 SDK_PATH := $(shell xcrun --sdk iphoneos --show-sdk-path)
 CC := clang++
 
-# === Sửa quan trọng: Thêm UIKit + Kiến trúc + Phiên bản ===
 CFLAGS := -isysroot $(SDK_PATH) \
           -arch arm64 -arch arm64e \
-          -mios-version-min:14.0 \
+          -mios-version-min=14.0 \
           -fobjc-arc -std=c++17 -O2 -Wall
 
-# === Bắt buộc: Thêm -framework UIKit ===
 LDFLAGS := -framework Foundation \
           -framework UIKit \
+          -framework CoreGraphics \
+          -framework Dispatch \
           -lsubstrate
 
 TARGET := EriMod.dylib
