@@ -25,11 +25,11 @@ jobs:
         SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
         echo "Using iOS SDK: $SDK_PATH"
 
-        # 1. Biên dịch từng file C của Lua thành file object (.o) cho kiến trúc arm64 của iOS
+        # 1. Biên dịch từng file C của Lua sang object file (.o) cho iOS arm64
+        # Thêm -Dl_system='(void)(0),-1' để loại bỏ hàm system() bị iOS chặn
         for src in lua-5.4.6/src/*.c; do
-          # Bỏ qua lua.c và luac.c vì đó là file biên dịch chương trình console, ta chỉ cần thư viện core
           if [[ "$src" != *"lua.c"* && "$src" != *"luac.c"* ]]; then
-            xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDK_PATH -c "$src" -O2
+            xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDK_PATH -c "$src" -O2 -Dl_system='(void)(0),-1'
           fi
         done
 
