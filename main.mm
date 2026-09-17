@@ -1,13 +1,26 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-// Khai báo biến giao diện toàn cục an toàn
-static UIWindow *modWindow = nil;
+// Custom UIWindow cho phép chạm xuyên qua vùng trống để không làm đơ game
+@interface PassthroughWindow : UIWindow
+@end
+
+@implementation PassthroughWindow
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hitView = [super hitTest:point withEvent:event];
+    // Nếu điểm chạm rơi vào chính cửa sổ root trong suốt (vùng trống), cho phép xuyên qua game
+    if (hitView == self.rootViewController.view) {
+        return nil;
+    }
+    return hitView;
+}
+@end
+
+static PassthroughWindow *modWindow = nil;
 static UIButton *floatingBtn = nil;
 static UIView *menuView = nil;
 static BOOL isMenuOpen = NO;
 
-// Các trạng thái tính năng mod
 static BOOL autoDanceEnabled = NO;
 static BOOL taikoEnabled = NO;
 static BOOL fullMiniGameEnabled = NO;
@@ -21,15 +34,13 @@ static BOOL fullMiniGameEnabled = NO;
     [super viewDidLoad];
     self.view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
     
-    // Tiêu đề Menu
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 15, 260, 30)];
-    titleLabel.text = @"✨ HexControl v7.2 (Safe) ✨";
+    titleLabel.text = @"✨ HexControl v7.2 (Fixed) ✨";
     titleLabel.textColor = [UIColor cyanColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:14];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.view addSubview:titleLabel];
     
-    // Toggle 1: Auto Dance
     UISwitch *switch1 = [[UISwitch alloc] initWithFrame:CGRectMake(20, 65, 0, 0)];
     switch1.on = autoDanceEnabled;
     [switch1 addTarget:self action:@selector(toggleAutoDance:) forControlEvents:UIControlEventValueChanged];
@@ -41,7 +52,6 @@ static BOOL fullMiniGameEnabled = NO;
     label1.font = [UIFont systemFontOfSize:13];
     [self.view addSubview:label1];
     
-    // Toggle 2: Taiko Mode
     UISwitch *switch2 = [[UISwitch alloc] initWithFrame:CGRectMake(20, 115, 0, 0)];
     switch2.on = taikoEnabled;
     [switch2 addTarget:self action:@selector(toggleTaiko:) forControlEvents:UIControlEventValueChanged];
@@ -53,7 +63,6 @@ static BOOL fullMiniGameEnabled = NO;
     label2.font = [UIFont systemFontOfSize:13];
     [self.view addSubview:label2];
 
-    // Toggle 3: Full Mini Game
     UISwitch *switch3 = [[UISwitch alloc] initWithFrame:CGRectMake(20, 165, 0, 0)];
     switch3.on = fullMiniGameEnabled;
     [switch3 addTarget:self action:@selector(toggleMiniGame:) forControlEvents:UIControlEventValueChanged];
@@ -65,7 +74,6 @@ static BOOL fullMiniGameEnabled = NO;
     label3.font = [UIFont systemFontOfSize:13];
     [self.view addSubview:label3];
     
-    // Nút Đóng Menu
     UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     closeBtn.frame = CGRectMake(90, 220, 120, 35);
     [closeBtn setTitle:@"Đóng Menu" forState:UIControlStateNormal];
@@ -76,20 +84,9 @@ static BOOL fullMiniGameEnabled = NO;
     [self.view addSubview:closeBtn];
 }
 
-- (void)toggleAutoDance:(UISwitch *)sender {
-    autoDanceEnabled = sender.isOn;
-    NSLog(@"[HexControl] AutoDance: %@", autoDanceEnabled ? @"ON" : @"OFF");
-}
-
-- (void)toggleTaiko:(UISwitch *)sender {
-    taikoEnabled = sender.isOn;
-    NSLog(@"[HexControl] Taiko: %@", taikoEnabled ? @"ON" : @"OFF");
-}
-
-- (void)toggleMiniGame:(UISwitch *)sender {
-    fullMiniGameEnabled = sender.isOn;
-    NSLog(@"[HexControl] MiniGame: %@", fullMiniGameEnabled ? @"ON" : @"OFF");
-}
+- (void)toggleAutoDance:(UISwitch *)sender { autoDanceEnabled = sender.isOn; }
+- (void)toggleTaiko:(UISwitch *)sender { taikoEnabled = sender.isOn; }
+- (void)toggleMiniGame:(UISwitch *)sender { fullMiniGameEnabled = sender.isOn; }
 
 - (void)closeMenu {
     [UIView animateWithDuration:0.25 animations:^{
@@ -99,10 +96,8 @@ static BOOL fullMiniGameEnabled = NO;
         isMenuOpen = NO;
     }];
 }
-
 @end
 
-// Hàm xử lý khi bấm vào nút nổi
 static void onFloatingButtonClicked(UIButton *sender) {
     isMenuOpen = !isMenuOpen;
     if (isMenuOpen) {
@@ -120,16 +115,14 @@ static void onFloatingButtonClicked(UIButton *sender) {
     }
 }
 
-// Khởi tạo an toàn không gây đơ game
 __attribute__((constructor)) static void entryPoint() {
-    // Chạy ngầm 4 giây để đảm bảo game đã load hoàn tất UI chính rồi mới dựng Mod Menu
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         @autoreleasepool {
-            // Kiểm tra xem ứng dụng đã sẵn sàng cửa sổ chưa
             UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
             if (!keyWindow) return;
             
-            modWindow = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+            // Sử dụng PassthroughWindow thay vì UIWindow thông thường để chống đơ game
+            modWindow = [[PassthroughWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
             modWindow.windowLevel = UIWindowLevelAlert + 1000;
             modWindow.hidden = NO;
             modWindow.backgroundColor = [UIColor clearColor];
@@ -138,7 +131,6 @@ __attribute__((constructor)) static void entryPoint() {
             rootVC.view.backgroundColor = [UIColor clearColor];
             modWindow.rootViewController = rootVC;
             
-            // 1. Tạo Nút Nổi
             floatingBtn = [UIButton buttonWithType:UIButtonTypeCustom];
             floatingBtn.frame = CGRectMake(30, 120, 48, 48);
             [floatingBtn setTitle:@"Eri" forState:UIControlStateNormal];
@@ -147,12 +139,9 @@ __attribute__((constructor)) static void entryPoint() {
             floatingBtn.layer.cornerRadius = 24;
             floatingBtn.layer.borderWidth = 2.0;
             floatingBtn.layer.borderColor = [UIColor cyanColor].CGColor;
-            
-            // Sử dụng cú pháp addTarget an toàn
             [floatingBtn addTarget:nil action:@selector(onFloatingButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
             [rootVC.view addSubview:floatingBtn];
             
-            // 2. Tạo Khung Menu chính
             CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
             CGFloat screenHeight = [UIScreen mainScreen].bounds.size.height;
             menuView = [[UIView alloc] initWithFrame:CGRectMake((screenWidth - 300)/2, (screenHeight - 270)/2, 300, 270)];
@@ -166,10 +155,9 @@ __attribute__((constructor)) static void entryPoint() {
             ModMenuController *menuVC = [[ModMenuController alloc] init];
             menuVC.view.frame = menuView.bounds;
             [menuView addSubview:menuVC.view];
-            
             [rootVC.view addSubview:menuView];
             
-            NSLog(@"[EriOS] Mod Menu loaded safely without freeze!");
+            NSLog(@"[EriOS] Passthrough window initialized successfully!");
         }
     });
 }
