@@ -1,11 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#import <QuartzCore/QuartzCore.h> // Buộc nhúng framework QuartzCore tại đây
 #include "substrate.h"
 #include "lua_script.h"
-
-// Khai báo liên kết trực tiếp với Clang linker
-#pragma comment(lib, "QuartzCore")
 
 // Khai báo thư viện Lua
 extern "C" {
@@ -16,6 +12,7 @@ extern "C" {
 
 static lua_State *L = NULL;
 static BOOL isLuaLoaded = NO;
+static dispatch_source_t renderTimer = nil;
 
 // Nạp script Lua từ bộ nhớ nhúng trong dylib
 static void initLuaScriptEmbedded() {
@@ -42,35 +39,37 @@ static void initLuaScriptEmbedded() {
     }
 }
 
-// Vòng lặp render tự động hiển thị mỗi khung hình
-@interface LuaRenderLoop : NSObject
-@end
+// Sử dụng Grand Central Dispatch (GCD Timer) thay cho CADisplayLink để gọi OnDraw định kỳ (~60fps)
+static void startRenderLoop() {
+    if (renderTimer) return;
+    
+    dispatch_queue_t queue = dispatch_get_main_queue();
+    renderTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+    
+    // Thực thi mỗi 0.016 giây (~60 khung hình/giây)
+    dispatch_source_set_timer(renderTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.01666 * NSEC_PER_SEC, 0.001 * NSEC_PER_SEC);
+    
+    dispatch_source_set_event_handler(renderTimer, ^{
+        if (!isLuaLoaded || !L) return;
 
-@implementation LuaRenderLoop
-+ (void)setupDisplayLink {
-    CADisplayLink *link = [CADisplayLink displayLinkWithTarget:self selector:@selector(renderFrame:)];
-    [link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-}
-
-+ (void)renderFrame:(CADisplayLink *)sender {
-    if (!isLuaLoaded || !L) return;
-
-    lua_getglobal(L, "OnDraw");
-    if (lua_isfunction(L, -1)) {
-        if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+        lua_getglobal(L, "OnDraw");
+        if (lua_isfunction(L, -1)) {
+            if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+                lua_pop(L, 1);
+            }
+        } else {
             lua_pop(L, 1);
         }
-    } else {
-        lua_pop(L, 1);
-    }
+    });
+    
+    dispatch_resume(renderTimer);
 }
-@end
 
 // Khởi chạy khi dylib được tiêm vào game
 __attribute__((constructor)) static void entry() {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         initLuaScriptEmbedded();
-        [LuaRenderLoop setupDisplayLink];
-        NSLog(@"[AutoDanceHex] Tweak đã khởi chạy thành công hoàn toàn!");
+        startRenderLoop();
+        NSLog(@"[AutoDanceHex] Tweak đã khởi chạy thành công hoàn toàn bằng GCD Timer!");
     });
 }
