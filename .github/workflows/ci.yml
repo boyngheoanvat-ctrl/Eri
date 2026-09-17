@@ -24,10 +24,10 @@ jobs:
         SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
         echo "Using iOS SDK: $SDK_PATH"
 
-        # Định nghĩa l_system trả về kiểu int chuẩn (-1) để tương thích hoàn toàn với loslib.c
+        # Định nghĩa l_system dưới dạng macro nhận tham số x: l_system(x) -> trả về -1 an toàn
         for src in lua-5.4.6/src/*.c; do
           if [[ "$src" != *"lua.c"* && "$src" != *"luac.c"* ]]; then
-            xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDK_PATH -c "$src" -O2 -Dl_system='(int)(__extension__({int __x = -1; __x;}))'
+            xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDK_PATH -c "$src" -O2 '-Dl_system(x)=((void)(x),-1)'
           fi
         done
 
