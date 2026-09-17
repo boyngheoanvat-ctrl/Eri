@@ -31,13 +31,14 @@ jobs:
           fi
         done
 
-        # Biên dịch main.mm kết hợp với các object files của Lua thành dylib cho iOS
+        # Biên dịch main.mm kết hợp với các object files của Lua và liên kết libsubstrate cho iOS
         xcrun --sdk iphoneos clang++ -dynamiclib -arch arm64 -isysroot $SDK_PATH \
           -std=c++17 -fobjc-arc \
           main.mm *.o \
           -I lua-5.4.6/src \
           -framework Foundation \
           -framework UIKit \
+          -lsubstrate \
           -o libautodance.dylib
 
     - name: Upload Artifact
