@@ -1,14 +1,11 @@
-CXX = clang++
-CXXFLAGS = -x objective-c++ -std=c++17 -fobjc-arc
-LDFLAGS = -framework Foundation -framework UIKit
+TARGET := iphone:clang:latest:14.0
+ARCHS := arm64 arm64e
 
-TARGET = libautodance.dylib
-SRC = main.mm
+include $(THEOS)/makefiles/common.mk
 
-all: $(TARGET)
+TWEAK_NAME := AutoDanceHex
+AutoDanceHex_FILES = main.mm
+AutoDanceHex_FRAMEWORKS = UIKit Foundation Security
+AutoDanceHex_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -I$(THEOS)/include
 
-$(TARGET): $(SRC)
-	$(CXX) -dynamiclib $(CXXFLAGS) $(SRC) $(LDFLAGS) -o $(TARGET)
-
-clean:
-	rm -f $(TARGET)
+include $(THEOS_MAKE_PATH)/tweak.mk
