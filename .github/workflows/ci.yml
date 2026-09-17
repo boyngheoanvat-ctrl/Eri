@@ -16,19 +16,30 @@ jobs:
 
     - name: Download Lua source code
       run: |
-        # Tải mã nguồn Lua chính thức để tự động có đủ lua.h, lauxlib.h, lualib.h
         curl -R -O https://www.lua.org/ftp/lua-5.4.6.tar.gz
         tar zxf lua-5.4.6.tar.gz
 
-    - name: Compile dynamic library (.dylib)
+    - name: Compile dynamic library (.dylib for iOS)
       run: |
-        # Biên dịch main.mm cùng với mã nguồn Lua vừa tải về
-        clang++ -shared -undefined dynamic_lookup \
-          -x objective-c++ -std=c++17 -fobjc-arc \
-          main.mm \
-          lua-5.4.6/src/*.c \
+        # Lấy đường dẫn iOS SDK trên máy ảo macOS
+        SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+        echo "Using iOS SDK: $SDK_PATH"
+
+        # 1. Biên dịch từng file C của Lua thành file object (.o) cho kiến trúc arm64 của iOS
+        for src in lua-5.4.6/src/*.c; do
+          # Bỏ qua lua.c và luac.c vì đó là file biên dịch chương trình console, ta chỉ cần thư viện core
+          if [[ "$src" != *"lua.c"* && "$src" != *"luac.c"* ]]; then
+            xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDK_PATH -c "$src" -O2
+          fi
+        done
+
+        # 2. Biên dịch main.mm kết hợp với các object files của Lua thành dylib cho iOS
+        xcrun --sdk iphoneos clang++ -dynamiclib -arch arm64 -isysroot $SDK_PATH \
+          -std=c++17 -fobjc-arc \
+          main.mm *.o \
           -I lua-5.4.6/src \
           -framework Foundation \
+          -framework UIKit \
           -o libautodance.dylib
 
     - name: Upload Artifact
