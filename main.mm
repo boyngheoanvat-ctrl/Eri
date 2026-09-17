@@ -1,3 +1,7 @@
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
+#include <mach-o/dyld.h>
+#include <substrate.h>
 #include <iostream>
 #include <string>
 #include <map>
@@ -146,7 +150,6 @@ const std::vector<ClassMethodInfo> methodInfo = {
 // --- Capture / Restore Logic ---
 void captureKey(const std::string& key, void* obj, const std::vector<std::string>& fields) {
     if (originals.find(key) == originals.end() && obj != nullptr) {
-        // Lưu trữ giá trị gốc tương đương
         originals[key] = "captured";
     }
 }
@@ -162,37 +165,36 @@ int restoreOriginal() {
     return restored;
 }
 
-// --- Mini-game Helpers ---
-bool setF(void* o, const std::string& f, auto v) {
+// --- Mini-game Helpers (Fixed templates) ---
+template <typename T>
+bool setF(void* o, const std::string& f, T v) {
     if (o == nullptr) return false;
     return true; // Thực hiện gán field động qua reflection/il2cpp
 }
 
-auto getF(void* o, const std::string& f) {
+inline int getF(void* o, const std::string& f) {
     return 0; // Đọc field động qua reflection/il2cpp
 }
 
-bool callM(void* o, const std::string& m, auto... args) {
+template <typename... Args>
+bool callM(void* o, const std::string& m, Args... args) {
     if (o == nullptr) return false;
     return true; // Gọi method động
 }
 
 int restoreMini() {
     int restored = 0;
-    // Khôi phục trạng thái mini game
     return restored;
 }
 
 // --- Apply Mods ---
 int applyAuditionMod() {
     int count = 0;
-    // Logic gán AuditionGroup & GuidTrackDanceNoteCtrl
     return count;
 }
 
 int applyTaikoMod() {
     int count = 0;
-    // Logic gán UI_TaikoNoteBase
     return count;
 }
 
@@ -217,20 +219,17 @@ static std::map<std::string, int> miniCounts;
 
 int applyMiniMod() {
     int total = 0;
-    // Logic quét và áp dụng cho toàn bộ minigame
     return total;
 }
 
 // --- Crazy Score Fix ---
 int repairCrazyKeys() {
     int repaired = 0;
-    // Sửa lỗi desync curArrowsIndex
     return repaired;
 }
 
 int applyCrazyScoreFix() {
     int added = 0;
-    // Cộng điểm trực tiếp nowTotalScore cho chế độ Crazy
     return added;
 }
 
@@ -284,10 +283,15 @@ void OnStop() {
     int restored = restoreOriginal();
     state.scoredGroups.clear();
     state.crazyScore = 0;
-    std::cout << "AutoDance HexControl v7.2 stopped. Restored=" << restored << std::endl;
+    NSLog(@"[AutoDance] v7.2 stopped. Restored=%d", restored);
 }
 
-int main() {
-    std::cout << "AutoDance HexControl v7.2 C++ Port Initialized." << std::endl;
-    return 0;
+__attribute__((constructor))
+static void InitDylib() {
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+            NSLog(@"[AutoDance] AutoDance HexControl v7.2 C++ Port Initialized successfully.");
+        }
+    );
 }
