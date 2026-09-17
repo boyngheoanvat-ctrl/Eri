@@ -1,47 +1,22 @@
-name: Build dylib CI
+name: Build EriMod
 
 on:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Download Lua source code
-      run: |
-        curl -R -O https://www.lua.org/ftp/lua-5.4.6.tar.gz
-        tar zxf lua-5.4.6.tar.gz
-
-    - name: Compile dynamic library (.dylib for iOS)
-      run: |
-        SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-        echo "Using iOS SDK: $SDK_PATH"
-
-        # Định nghĩa l_system dưới dạng macro an toàn
-        for src in lua-5.4.6/src/*.c; do
-          if [[ "$src" != *"lua.c"* && "$src" != *"luac.c"* ]]; then
-            xcrun --sdk iphoneos clang -arch arm64 -isysroot $SDK_PATH -c "$src" -O2 '-Dl_system(x)=((void)(x),-1)'
-          fi
-        done
-
-        # Biên dịch dylib thành công không phụ thuộc libsubstrate trên macOS runner
-        xcrun --sdk iphoneos clang++ -dynamiclib -arch arm64 -isysroot $SDK_PATH \
-          -std=c++17 -fobjc-arc \
-          main.mm *.o \
-          -I lua-5.4.6/src \
-          -framework Foundation \
-          -framework UIKit \
-          -o libautodance.dylib
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: autodance-dylib
-        path: libautodance.dylib
+      - uses: actions/checkout@v4
+      
+      - name: Build
+        run: |
+          make clean
+          make
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EriMod
+          path: EriMod.dylib
