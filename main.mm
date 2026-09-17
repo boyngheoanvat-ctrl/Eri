@@ -11,8 +11,9 @@ extern "C" {
 
 static lua_State *L = NULL;
 static BOOL isLuaLoaded = NO;
+static dispatch_source_t modLoopTimer = nil;
 
-// Nạp script Lua từ bộ nhớ nhúng
+// 1. Nạp script Lua từ bộ nhớ nhúng
 static void initLuaScriptEmbedded() {
     if (isLuaLoaded) return;
 
@@ -36,6 +37,62 @@ static void initLuaScriptEmbedded() {
     }
 }
 
+// 2. Vòng lặp gọi hàm Lua liên tục (~20 lần/giây) khi tính năng được bật
+static void executeLuaModLoop() {
+    if (!isLuaLoaded || !L) return;
+
+    lua_getglobal(L, "state");
+    if (lua_istable(L, -1)) {
+        lua_getfield(L, -1, "miniOn");
+        BOOL miniOn = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+
+        lua_getfield(L, -1, "activeOn");
+        BOOL activeOn = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+
+        lua_getfield(L, -1, "taikoOn");
+        BOOL taikoOn = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+        
+        lua_pop(L, 1); // pop state table
+
+        if (miniOn) {
+            lua_getglobal(L, "applyMiniMod");
+            if (lua_isfunction(L, -1)) { lua_pcall(L, 0, 0, 0); } else { lua_pop(L, 1); }
+
+            lua_getglobal(L, "repairCrazyKeys");
+            if (lua_isfunction(L, -1)) { lua_pcall(L, 0, 0, 0); } else { lua_pop(L, 1); }
+
+            lua_getglobal(L, "applyCrazyScoreFix");
+            if (lua_isfunction(L, -1)) { lua_pcall(L, 0, 0, 0); } else { lua_pop(L, 1); }
+        }
+
+        if (activeOn) {
+            lua_getglobal(L, "applyAuditionMod");
+            if (lua_isfunction(L, -1)) { lua_pcall(L, 0, 0, 0); } else { lua_pop(L, 1); }
+        }
+
+        if (taikoOn) {
+            lua_getglobal(L, "applyTaikoMod");
+            if (lua_isfunction(L, -1)) { lua_pcall(L, 0, 0, 0); } else { lua_pop(L, 1); }
+        }
+    } else {
+        lua_pop(L, 1);
+    }
+}
+
+static void startModLoop() {
+    if (modLoopTimer) return;
+    dispatch_queue_t queue = dispatch_get_main_queue();
+    modLoopTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+    dispatch_source_set_timer(modLoopTimer, dispatch_time(DISPATCH_TIME_NOW, 0), 0.05 * NSEC_PER_SEC, 0.01 * NSEC_PER_SEC);
+    dispatch_source_set_event_handler(modLoopTimer, ^{
+        executeLuaModLoop();
+    });
+    dispatch_resume(modLoopTimer);
+}
+
 // Lấy cửa sổ game hiện tại an toàn
 static UIWindow *getCurrentWindow() {
     UIWindow *foundWindow = nil;
@@ -43,20 +100,17 @@ static UIWindow *getCurrentWindow() {
         if ([scene isKindOfClass:[UIWindowScene class]]) {
             UIWindowScene *windowScene = (UIWindowScene *)scene;
             for (UIWindow *window in windowScene.windows) {
-                if (window.isKeyWindow) {
-                    return window;
-                }
-                if (!foundWindow) {
-                    foundWindow = window;
-                }
+                if (window.isKeyWindow) { return window; }
+                if (!foundWindow) { foundWindow = window; }
             }
         }
     }
     return foundWindow;
 }
 
-// Hiển thị Menu UIKit nổi trên màn hình Au 2 khi chạm 2 ngón tay
+// Khai báo trước hàm showMenu để gọi lại dạng Checkbox tương tác
 @interface AutoDanceMenuController : NSObject
++ (void)showMenu;
 @end
 
 @implementation AutoDanceMenuController
@@ -71,50 +125,82 @@ static UIWindow *getCurrentWindow() {
             rootVC = rootVC.presentedViewController;
         }
 
+        // Đọc trạng thái hiện tại từ Lua state
+        BOOL activeOn = NO;
+        BOOL taikoOn = NO;
+        BOOL miniOn = NO;
+
+        if (L) {
+            lua_getglobal(L, "state");
+            if (lua_istable(L, -1)) {
+                lua_getfield(L, -1, "activeOn");
+                activeOn = lua_toboolean(L, -1);
+                lua_pop(L, 1);
+
+                lua_getfield(L, -1, "taikoOn");
+                taikoOn = lua_toboolean(L, -1);
+                lua_pop(L, 1);
+
+                lua_getfield(L, -1, "miniOn");
+                miniOn = lua_toboolean(L, -1);
+                lua_pop(L, 1);
+            }
+            lua_pop(L, 1);
+        }
+
+        // Tạo tiêu đề Checkbox trực quan
+        NSString *titleArrow = activeOn ? @"[ ✅ ] Bật Auto Arrow" : @"[ ❌ ] Bật Auto Arrow";
+        NSString *titleTaiko = taikoOn ? @"[ ✅ ] Bật Taiko Mode" : @"[ ❌ ] Bật Taiko Mode";
+        NSString *titleMini  = miniOn ?  @"[ ✅ ] Bật Full Mini Game" : @"[ ❌ ] Bật Full Mini Game";
+
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"AutoDance Hex v7.2"
-                                                                     message:@"Đã kích hoạt menu điều khiển Au 2:"
+                                                                     message:@"Chọn trạng thái Bật/Tắt tính năng:"
                                                               preferredStyle:UIAlertControllerStyleAlert];
 
-        // Nút bật tính năng Audition Mod
-        [alert addAction:[UIAlertAction actionWithTitle:@"🟢 Bật Auto Arrow" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        // 1. Nút Auto Arrow Checkbox
+        [alert addAction:[UIAlertAction actionWithTitle:titleArrow style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             if (L) {
                 lua_getglobal(L, "state");
                 if (lua_istable(L, -1)) {
-                    lua_pushboolean(L, 1);
+                    lua_pushboolean(L, !activeOn);
                     lua_setfield(L, -2, "activeOn");
                 }
                 lua_pop(L, 1);
             }
-            [self showToast:@"Đã bật Auto Arrow!"];
+            [self showToast:activeOn ? @"Đã Tắt Auto Arrow" : @"Đã Bật Auto Arrow"];
+            // Tự động bật lại menu để cập nhật dấu check mới
+            [self showMenu];
         }]];
 
-        // Nút bật Taiko Mod
-        [alert addAction:[UIAlertAction actionWithTitle:@"🎯 Bật Taiko Mode" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        // 2. Nút Taiko Mode Checkbox
+        [alert addAction:[UIAlertAction actionWithTitle:titleTaiko style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             if (L) {
                 lua_getglobal(L, "state");
                 if (lua_istable(L, -1)) {
-                    lua_pushboolean(L, 1);
+                    lua_pushboolean(L, !taikoOn);
                     lua_setfield(L, -2, "taikoOn");
                 }
                 lua_pop(L, 1);
             }
-            [self showToast:@"Đã bật Taiko Mode!"];
+            [self showToast:taikoOn ? @"Đã Tắt Taiko Mode" : @"Đã Bật Taiko Mode"];
+            [self showMenu];
         }]];
 
-        // Nút bật Full Mini Game & Crazy Score Fix
-        [alert addAction:[UIAlertAction actionWithTitle:@"⚡ Bật Full Mini Game" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        // 3. Nút Full Mini Game Checkbox
+        [alert addAction:[UIAlertAction actionWithTitle:titleMini style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             if (L) {
                 lua_getglobal(L, "state");
                 if (lua_istable(L, -1)) {
-                    lua_pushboolean(L, 1);
+                    lua_pushboolean(L, !miniOn);
                     lua_setfield(L, -2, "miniOn");
                 }
                 lua_pop(L, 1);
             }
-            [self showToast:@"Đã bật Full Mini Game & Crazy Score!"];
+            [self showToast:miniOn ? @"Đã Tắt Full Mini Game" : @"Đã Bật Full Mini Game"];
+            [self showMenu];
         }]];
 
-        // Nút Đóng
+        // Nút Đóng Menu
         [alert addAction:[UIAlertAction actionWithTitle:@"Đóng Menu" style:UIAlertActionStyleCancel handler:nil]];
 
         [rootVC presentViewController:alert animated:YES completion:nil];
@@ -172,6 +258,7 @@ static UIWindow *getCurrentWindow() {
 __attribute__((constructor)) static void entry() {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         initLuaScriptEmbedded();
+        startModLoop();
         [MenuGestureHandler setupGesture];
         NSLog(@"[AutoDanceHex] Tweak đã khởi chạy thành công!");
     });
