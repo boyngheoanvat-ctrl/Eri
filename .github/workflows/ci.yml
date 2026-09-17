@@ -14,21 +14,21 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install dependencies (Lua)
+    - name: Download Lua source code
       run: |
-        brew install lua
+        # Tải mã nguồn Lua chính thức để tự động có đủ lua.h, lauxlib.h, lualib.h
+        curl -R -O https://www.lua.org/ftp/lua-5.4.6.tar.gz
+        tar zxf lua-5.4.6.tar.gz
 
-    - name: Compile dynamic library (.dylib for iOS)
+    - name: Compile dynamic library (.dylib)
       run: |
-        # Sử dụng xcrun --sdk iphoneos để trình biên dịch nhận diện đầy đủ UIKit và Foundation của iOS
-        xcrun --sdk iphoneos clang++ -shared -undefined dynamic_lookup \
+        # Biên dịch main.mm cùng với mã nguồn Lua vừa tải về
+        clang++ -shared -undefined dynamic_lookup \
           -x objective-c++ -std=c++17 -fobjc-arc \
           main.mm \
+          lua-5.4.6/src/*.c \
+          -I lua-5.4.6/src \
           -framework Foundation \
-          -framework UIKit \
-          -I$(brew --prefix lua)/include \
-          -L$(brew --prefix lua)/lib \
-          -llua \
           -o libautodance.dylib
 
     - name: Upload Artifact
