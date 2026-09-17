@@ -18,10 +18,10 @@ jobs:
       run: |
         brew install lua
 
-    - name: Compile dynamic library (.dylib)
+    - name: Compile dynamic library (.dylib for iOS)
       run: |
-        # Biên dịch main.mm thành libautodance.dylib bao gồm cả đường dẫn include/lib của Lua từ Homebrew
-        clang++ -shared -undefined dynamic_lookup \
+        # Sử dụng xcrun --sdk iphoneos để trình biên dịch nhận diện đầy đủ UIKit và Foundation của iOS
+        xcrun --sdk iphoneos clang++ -shared -undefined dynamic_lookup \
           -x objective-c++ -std=c++17 -fobjc-arc \
           main.mm \
           -framework Foundation \
