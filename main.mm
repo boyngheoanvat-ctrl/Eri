@@ -31,28 +31,43 @@ static void startModLoop() {
     dispatch_resume(timer);
 }
 
-// 3. Menu UIKit thay thế ImGui (Chạy trực tiếp 100% ổn định trên mọi phiên bản iOS/Game mà không sợ lỗi Context ImGui)
+// Hàm lấy UIWindow an toàn cho iOS hiện đại
+static UIWindow *getCurrentWindow() {
+    UIWindow *foundWindow = nil;
+    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+        if ([scene isKindOfClass:[UIWindowScene class]]) {
+            UIWindowScene *windowScene = (UIWindowScene *)scene;
+            for (UIWindow *window in windowScene.windows) {
+                if (window.isKeyWindow) {
+                    return window;
+                }
+                if (!foundWindow) {
+                    foundWindow = window;
+                }
+            }
+        }
+    }
+    return foundWindow;
+}
+
+// 3. Menu UIKit điều khiển Checkbox trực quan
 @interface AutoDanceMenuController : NSObject
-+ * (void)showMenu;
++ (void)showMenu;
++ (void)showToast:(NSString *)msg;
 @end
 
 @implementation AutoDanceMenuController
 
 + (void)showMenu {
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *window = nil;
-        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if ([scene isKindOfClass:[UIWindowScene class]]) {
-                for (UIWindow *w in ((UIWindowScene *)scene).windows) {
-                    if (w.isKeyWindow) { window = w; break; }
-                }
-            }
-        }
+        UIWindow *window = getCurrentWindow();
         if (!window) return;
+        
         UIViewController *rootVC = window.rootViewController;
-        while (rootVC.presentedViewController) { rootVC = rootVC.presentedViewController; }
+        while (rootVC.presentedViewController) { 
+            rootVC = rootVC.presentedViewController; 
+        }
 
-        // Tạo giao diện Checkbox Switch mượt mà
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"AutoDance Hex v7.2"
                                                                      message:@"Bật/Tắt tính năng trực tiếp:"
                                                               preferredStyle:UIAlertControllerStyleAlert];
@@ -81,7 +96,7 @@ static void startModLoop() {
 }
 
 + (void)showToast:(NSString *)msg {
-    UIWindow *window = [UIApplication sharedApplication].keyWindow;
+    UIWindow *window = getCurrentWindow();
     if (!window) return;
     UILabel *toast = [[UILabel alloc] initWithFrame:CGRectMake(50, window.frame.size.height - 140, window.frame.size.width - 100, 40)];
     toast.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.85];
@@ -103,7 +118,7 @@ static void startModLoop() {
 @implementation MenuGestureListener
 + (void)load {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *window = [UIApplication sharedApplication].keyWindow;
+        UIWindow *window = getCurrentWindow();
         if (window) {
             UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap:)];
             tap.numberOfTouchesRequired = 2; // Chạm 2 ngón tay
@@ -119,4 +134,3 @@ static void startModLoop() {
     }
 }
 @end
-
