@@ -1,0 +1,33 @@
+name: C++ / Objective-C++ CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-run:
+    # Chọn hệ điều hành macOS để có sẵn Xcode và các thư viện Apple (Foundation)
+    runs-on: macos-latest
+
+    steps:
+    # 1. Checkout mã nguồn từ repository về runner
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # 2. Kiểm tra phiên bản Clang/Xcode (tùy chọn)
+    - name: Check tools
+      run: |
+        clang++ --version
+        xcodebuild -version
+
+    # 3. Biên dịch file main.mm sử dụng lệnh Clang++ tương tự Makefile
+    - name: Compile Objective-C++
+      run: |
+        clang++ -x objective-c++ -std=c++17 -fobjc-arc main.mm -framework Foundation -o main_app
+
+    # 4. Chạy thử chương trình sau khi build thành công
+    - name: Run executable
+      run: |
+        ./main_app
