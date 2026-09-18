@@ -58,7 +58,6 @@ static int xuLyArrow() {
     int n = 0;
     void* list = *(void**)((uint8_t*)g_instArrow + LIST_GROUPS);
     if(!list) return 0;
-    
     for(int i = 0, N = cntList(list); i < N; i++) {
         void* grp = getList(list, i);
         if(!grp) continue;
@@ -67,11 +66,7 @@ static int xuLyArrow() {
         n++;
     }
     void* cur = *(void**)((uint8_t*)g_instArrow + CURRENT_GROUP);
-    if(cur) {
-        WR32(cur, JUDGE_LEVEL, PERFECT);
-        WRB(cur, IS_HIT_BEAT, true);
-        n++;
-    }
+    if(cur) { WR32(cur, JUDGE_LEVEL, PERFECT); WRB(cur, IS_HIT_BEAT, true); n++; }
     return n;
 }
 
@@ -80,7 +75,6 @@ static int xuLyTaiko() {
     int n = 0;
     void* list = *(void**)((uint8_t*)g_instTaiko + TN_LIST_NOTES);
     if(!list) return 0;
-    
     for(int i = 0, N = cntList(list); i < N; i++) {
         void* note = getList(list, i);
         if(!note) continue;
@@ -97,7 +91,6 @@ static int xuLyMini() {
     int n = 0;
     void* list = *(void**)((uint8_t*)g_instMini + DYN_LIST_GROUPS);
     if(!list) return 0;
-    
     for(int i = 0, N = cntList(list); i < N; i++) {
         void* grp = getList(list, i);
         if(!grp) continue;
@@ -113,35 +106,42 @@ static int xuLyMini() {
     return n;
 }
 
-#pragma mark - === HOOK HÀM AWAKE — ĐÃ ĐIỀN SỐ CHÍNH XÁC ===
+#pragma mark - === HOOK CHUNG — 1 LẦN DUY NHẤT, KHÔNG TRÙNG ===
 typedef void (*HamAwake)(void* self);
+static HamAwake g_origAwake = nullptr;
 
-// ✅ Dance.AuditionGroup
-static HamAwake g_origAwakeArrow = nullptr;
-static void HookedAwakeArrow(void* self) {
-    if(g_origAwakeArrow) g_origAwakeArrow(self);
-    g_instArrow = self;
-    NSLog(@"[EriMod] ✅ AuditionGroup kết nối: %p", self);
-}
-#define ADDR_AWAKE_ARROW   0x3e0dc5c
+#define ADDR_AWAKE  0x3e0dc5c  // Cả 3 lớp dùng chung offset này
 
-// ✅ DanceTaikoController
-static HamAwake g_origAwakeTaiko = nullptr;
-static void HookedAwakeTaiko(void* self) {
-    if(g_origAwakeTaiko) g_origAwakeTaiko(self);
-    g_instTaiko = self;
-    NSLog(@"[EriMod] ✅ TaikoController kết nối: %p", self);
+static void PhanLoaiVaLuu(void* self) {
+    void* p1 = *(void**)((uint8_t*)self + LIST_GROUPS);     // 0x48
+    void* p2 = *(void**)((uint8_t*)self + TN_LIST_NOTES);   // 0x80
+    void* p3 = *(void**)((uint8_t*)self + DYN_LIST_GROUPS); // 0x60
+    
+    // Phân biệt theo con trỏ thành viên đặc trưng
+    if(p1 && !p2 && !p3) {
+        if(!g_instArrow) {
+            g_instArrow = self;
+            NSLog(@"[EriMod] ✅ AuditionGroup (Arrow): %p", self);
+        }
+    }
+    else if(!p1 && p2 && !p3) {
+        if(!g_instTaiko) {
+            g_instTaiko = self;
+            NSLog(@"[EriMod] ✅ TaikoController: %p", self);
+        }
+    }
+    else if(!p1 && !p2 && p3) {
+        if(!g_instMini) {
+            g_instMini = self;
+            NSLog(@"[EriMod] ✅ DynamicArrows (Mini): %p", self);
+        }
+    }
 }
-#define ADDR_AWAKE_TAIKO   0x3e0dc5c
 
-// ✅ DynamicArrowsController
-static HamAwake g_origAwakeMini = nullptr;
-static void HookedAwakeMini(void* self) {
-    if(g_origAwakeMini) g_origAwakeMini(self);
-    g_instMini = self;
-    NSLog(@"[EriMod] ✅ DynamicArrows kết nối: %p", self);
+static void HookedAwake(void* self) {
+    if(g_origAwake) g_origAwake(self);
+    PhanLoaiVaLuu(self);
 }
-#define ADDR_AWAKE_MINI    0x3e0dc5c
 
 #pragma mark - === GIAO DIỆN ===
 static UIButton* g_btn = nil;
@@ -156,12 +156,24 @@ static void updateDisplay() {
         UILabel* l3 = [g_panel viewWithTag:103];
         UILabel* addr = [g_panel viewWithTag:999];
         
-        l1.text = [NSString stringWithFormat:@"⚡ Auto Arrow: %@", g_autoArrow ? @"BẬT ✅" : @"TẮT ❌"];
-        l1.textColor = g_autoArrow ? [UIColor systemGreenColor] : [UIColor lightGrayColor];
-        l2.text = [NSString stringWithFormat:@"🥁 Auto Taiko: %@", g_autoTaiko ? @"BẬT ✅" : @"TẮT ❌"];
-        l2.textColor = g_autoTaiko ? [UIColor systemGreenColor] : [UIColor lightGrayColor];
-        l3.text = [NSString stringWithFormat:@"🔥 Mini+Crazy: %@", g_autoMini ? @"BẬT ✅" : @"TẮT ❌"];
-        l3.textColor = g_autoMini ? [UIColor systemGreenColor] : [UIColor lightGrayColor];
+        l1.text = g_instArrow ?
+            [NSString stringWithFormat:@"⚡ Auto Arrow: %@", g_autoArrow ? @"BẬT ✅" : @"SẴN SÀNG"] :
+            @"⚡ Auto Arrow: CHƯA KẾT NỐI";
+        l1.textColor = g_instArrow ?
+            (g_autoArrow ? [UIColor systemGreenColor] : [UIColor whiteColor]) : [UIColor systemRedColor];
+        
+        l2.text = g_instTaiko ?
+            [NSString stringWithFormat:@"🥁 Auto Taiko: %@", g_autoTaiko ? @"BẬT ✅" : @"SẴN SÀNG"] :
+            @"🥁 Auto Taiko: CHƯA KẾT NỐI";
+        l2.textColor = g_instTaiko ?
+            (g_autoTaiko ? [UIColor systemGreenColor] : [UIColor whiteColor]) : [UIColor systemRedColor];
+        
+        l3.text = g_instMini ?
+            [NSString stringWithFormat:@"🔥 Mini+Crazy: %@", g_autoMini ? @"BẬT ✅" : @"SẴN SÀNG"] :
+            @"🔥 Mini+Crazy: CHƯA KẾT NỐI";
+        l3.textColor = g_instMini ?
+            (g_autoMini ? [UIColor systemGreenColor] : [UIColor whiteColor]) : [UIColor systemRedColor];
+        
         addr.text = [NSString stringWithFormat:@"A:%p T:%p M:%p", g_instArrow, g_instTaiko, g_instMini];
     });
 }
@@ -169,16 +181,7 @@ static void updateDisplay() {
 static void buildUI() {
     dispatch_async(dispatch_get_main_queue(), ^{
         if(g_btn) return;
-        
-        UIWindow* win = nil;
-        if (@available(iOS 13.0, *)) {
-            for(UIScene* s in [UIApplication sharedApplication].connectedScenes) {
-                if([s isKindOfClass:[UIWindowScene class]])
-                    for(UIWindow* w in [(UIWindowScene*)s windows])
-                        if(w.isKeyWindow) { win = w; break; }
-            }
-        }
-        if(!win) win = [UIApplication sharedApplication].keyWindow;
+        UIWindow* win = [UIApplication sharedApplication].keyWindow;
         if(!win || !win.rootViewController) return;
         
         // Nút mở menu
@@ -196,7 +199,7 @@ static void buildUI() {
         [win.rootViewController.view addSubview:g_btn];
         
         // Bảng điều khiển
-        g_panel = [[UIView alloc] initWithFrame:CGRectMake(85, 70, 290, 300)];
+        g_panel = [[UIView alloc] initWithFrame:CGRectMake(85, 70, 290, 310)];
         g_panel.backgroundColor = [UIColor colorWithRed:0.07 green:0.05 blue:0.12 alpha:0.96];
         g_panel.layer.cornerRadius = 18;
         g_panel.layer.borderWidth = 2;
@@ -213,11 +216,11 @@ static void buildUI() {
         b1.backgroundColor = [UIColor darkGrayColor];
         b1.layer.cornerRadius = 12;
         [b1 addAction:[UIAction actionWithHandler:^(UIAction*){
-            g_autoArrow = !g_autoArrow; updateDisplay();
+            if(g_instArrow) { g_autoArrow = !g_autoArrow; updateDisplay(); }
         }] forControlEvents:UIControlEventTouchUpInside];
         [g_panel addSubview:b1];
         UILabel* l1 = [[UILabel alloc] initWithFrame:CGRectMake(20, 52, 250, 44)];
-        l1.tag = 101; l1.text = @"⚡ Auto Arrow: TẮT";
+        l1.tag = 101; l1.text = @"⚡ Auto Arrow: CHƯA KẾT NỐI";
         l1.font = [UIFont systemFontOfSize:15];
         [g_panel addSubview:l1];
         
@@ -226,11 +229,11 @@ static void buildUI() {
         b2.backgroundColor = [UIColor darkGrayColor];
         b2.layer.cornerRadius = 12;
         [b2 addAction:[UIAction actionWithHandler:^(UIAction*){
-            g_autoTaiko = !g_autoTaiko; updateDisplay();
+            if(g_instTaiko) { g_autoTaiko = !g_autoTaiko; updateDisplay(); }
         }] forControlEvents:UIControlEventTouchUpInside];
         [g_panel addSubview:b2];
         UILabel* l2 = [[UILabel alloc] initWithFrame:CGRectMake(20, 110, 250, 44)];
-        l2.tag = 102; l2.text = @"🥁 Auto Taiko: TẮT";
+        l2.tag = 102; l2.text = @"🥁 Auto Taiko: CHƯA KẾT NỐI";
         l2.font = [UIFont systemFontOfSize:15];
         [g_panel addSubview:l2];
         
@@ -239,24 +242,23 @@ static void buildUI() {
         b3.backgroundColor = [UIColor darkGrayColor];
         b3.layer.cornerRadius = 12;
         [b3 addAction:[UIAction actionWithHandler:^(UIAction*){
-            g_autoMini = !g_autoMini; updateDisplay();
+            if(g_instMini) { g_autoMini = !g_autoMini; updateDisplay(); }
         }] forControlEvents:UIControlEventTouchUpInside];
         [g_panel addSubview:b3];
         UILabel* l3 = [[UILabel alloc] initWithFrame:CGRectMake(20, 168, 250, 44)];
-        l3.tag = 103; l3.text = @"🔥 Mini+Crazy: TẮT";
+        l3.tag = 103; l3.text = @"🔥 Mini+Crazy: CHƯA KẾT NỐI";
         l3.font = [UIFont systemFontOfSize:15];
         [g_panel addSubview:l3];
         
         // Địa chỉ kết nối
         UILabel* addr = [[UILabel alloc] initWithFrame:CGRectMake(15, 225, 260, 22)];
-        addr.tag = 999;
-        addr.text = @"A:0x0 | T:0x0 | M:0x0";
+        addr.tag = 999; addr.text = @"A:0x0 | T:0x0 | M:0x0";
         addr.textColor = [UIColor lightGrayColor];
         addr.font = [UIFont fontWithName:@"Menlo" size:10];
         [g_panel addSubview:addr];
         
         UILabel* note = [[UILabel alloc] initWithFrame:CGRectMake(15, 250, 260, 20)];
-        note.text = @"💡 Vào màn hình chơi → tự kết nối";
+        note.text = @"💡 Vào từng màn hình chơi → tự kết nối";
         note.textColor = [UIColor grayColor];
         note.font = [UIFont systemFontOfSize:11];
         [g_panel addSubview:note];
@@ -291,29 +293,29 @@ static void mainLoop() {
 #pragma mark - === KHỞI TẠO ===
 __attribute__((constructor))
 static void init() {
-    NSLog(@"[EriMod] === AutoDance AU2 v23.4 ===");
-    NSLog(@"[EriMod] Offset Awake: 0x3e0dc5c ✅");
-    
-    // Hook hàm Awake
-    MSHookFunction((void*)ADDR_AWAKE_ARROW, (void*)HookedAwakeArrow, (void**)&g_origAwakeArrow);
-    NSLog(@"[EriMod] ✅ Hook: AuditionGroup");
-    
-    MSHookFunction((void*)ADDR_AWAKE_TAIKO, (void*)HookedAwakeTaiko, (void**)&g_origAwakeTaiko);
-    NSLog(@"[EriMod] ✅ Hook: TaikoController");
-    
-    MSHookFunction((void*)ADDR_AWAKE_MINI, (void*)HookedAwakeMini, (void**)&g_origAwakeMini);
-    NSLog(@"[EriMod] ✅ Hook: DynamicArrows");
-    
-    // Tạo giao diện
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        buildUI();
-    });
-    
-    // Chạy vòng lặp
-    dispatch_source_t timer = dispatch_source_create(
-        DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(timer, DISPATCH_TIME_NOW,
-                              500000000ULL, 200000000ULL);
-    dispatch_source_set_event_handler(timer, ^{ mainLoop(); });
-    dispatch_resume(timer);
+    @autoreleasepool {
+        NSLog(@"[EriMod] === AutoDance AU2 v23.4 ===");
+        NSLog(@"[EriMod] Hook chung: 0x%llx", (uint64_t)ADDR_AWAKE);
+        
+        // Hook 1 LẦN DUY NHẤT — không trùng, không văng
+        static bool daHook = false;
+        if(!daHook) {
+            MSHookFunction((void*)ADDR_AWAKE, (void*)HookedAwake, (void**)&g_origAwake);
+            daHook = true;
+            NSLog(@"[EriMod] ✅ Hook thành công — chờ kết nối đối tượng");
+        }
+        
+        // Tạo giao diện
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            buildUI();
+        });
+        
+        // Chạy vòng lặp
+        dispatch_source_t timer = dispatch_source_create(
+            DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+        dispatch_source_set_timer(timer, DISPATCH_TIME_NOW,
+                                  500000000ULL, 200000000ULL);
+        dispatch_source_set_event_handler(timer, ^{ mainLoop(); });
+        dispatch_resume(timer);
+    }
 }
