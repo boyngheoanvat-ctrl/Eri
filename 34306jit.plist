@@ -1,13 +1,22 @@
-{
-    Filter = {
-        ExecutableNames = (
-            "Mobile",
-            "ArenaOfValor",
-            "com.nguyenhan.lienquanmobile"
-        );
-        Bundles = (
-            "com.garena.game.kgvn",
-            "com.tencent.nguyenhan"
-        );
-    };
-}
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Filter</key>
+    <dict>
+        <key>Bundles</key>
+        <array>
+            <dict>
+                <key>CFBundleIdentifier</key>
+                <string>com.garena.game.kgvn</string>
+            </dict>
+        </array>
+    </dict>
+    <key>ExecutablePath</key>
+    <string>Liên Quân Mobile</string>
+    <key>LoadPath</key>
+    <string>/Library/MobileSubstrate/DynamicLibraries/34306jit.dylib</string>
+    <key>LoadPriority</key>
+    <integer>100</integer>
+</dict>
+</plist>
