@@ -1,1 +1,13 @@
-
+{
+    Filter = {
+        ExecutableNames = (
+            "Mobile",
+            "ArenaOfValor",
+            "com.nguyenhan.lienquanmobile"
+        );
+        Bundles = (
+            "com.garena.game.kgvn",
+            "com.tencent.nguyenhan"
+        );
+    };
+}
