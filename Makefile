@@ -1,6 +1,5 @@
 ARCHS = arm64
 TARGET = iphone:clang:15.6:14.0
-
 FINALPACKAGE = 1
 FOR_RELEASE = 1
 WARNINGS = 1
@@ -10,10 +9,17 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = 34306jit
 
-$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation QuartzCore CoreGraphics CoreText AVFoundation Accelerate GLKit SystemConfiguration GameController
-$(TWEAK_NAME)_CCFLAGS = -fno-rtti -fvisibility=hidden -DNDEBUG -std=c++11 -I. -I5Toubun
-$(TWEAK_NAME)_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-value -I. -I5Toubun -DHAVE_INTTYPES_H -DHAVE_PKCRYPT -DHAVE_STDINT_H -DHAVE_WZAES -DHAVE_ZLIB
-$(TWEAK_NAME)_LDFLAGS = 5Toubun/libdobby.a lib/libdaubuoi.a lib/libmonostring.a linh_tinh/spam.a -lresolv -lz -liconv
-$(TWEAK_NAME)_FILES = ImGuiDrawView.mm $(wildcard Esp/*.mm) $(wildcard Esp/*.m) $(wildcard IMGUI/*.cpp) $(wildcard IMGUI/*.mm)
+# === Framework & thư viện ===
+$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation Metal MetalKit
+$(TWEAK_NAME)_CCFLAGS = -fno-rtti -fvisibility=hidden
+$(TWEAK_NAME)_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
+$(TWEAK_NAME)_LDFLAGS = -L5Toubun -ldobby
+$(TWEAK_NAME)_FILES = ImGuiDrawView.mm Esp/JHPP.m Esp/JHUIViewControllerDecoupler.m Esp/ImGuiLoad.m \
+                       IMGUI/Il2cpp.cpp IMGUI/imgui_demo.cpp IMGUI/imgui_tables.cpp \
+                       IMGUI/imgui_impl_metal.mm IMGUI/imgui.cpp IMGUI/imgui_draw.cpp \
+                       IMGUI/imgui_widgets.cpp Esp/PubgLoad.mm
+
+# === QUAN TRỌNG: Copy file plist vào gói ===
+$(TWEAK_NAME)_EXTRA_FILES = 34306jit.plist
 
 include $(THEOS_MAKE_PATH)/tweak.mk
