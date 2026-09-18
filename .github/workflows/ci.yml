@@ -1,22 +1,52 @@
-name: Build EriMod
+name: Build Tweak
 
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Build
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install dependencies
         run: |
-          make clean
-          make
-          
-      - name: Upload Artifact
+          sudo apt-get update && sudo apt-get install -y \
+            build-essential git perl libssl-dev curl wget zip unzip xz-utils libtinfo6
+
+      - name: Setup Theos
+        run: |
+          git clone --depth=1 --recursive https://github.com/theos/theos.git "$GITHUB_WORKSPACE/theos"
+          echo "THEOS=$GITHUB_WORKSPACE/theos" >> $GITHUB_ENV
+
+      - name: Install Linux Toolchain
+        run: |
+          cd "$GITHUB_WORKSPACE/theos"
+          curl -sL https://github.com/L1ghtmann/llvm-project/releases/latest/download/iOSToolchain-x86_64.tar.xz | tar -xJvf - -C toolchain/
+
+      - name: Download SDK
+        run: |
+          mkdir -p "$THEOS/sdks"
+          cd "$THEOS/sdks"
+          curl -LO https://github.com/theos/sdks/archive/refs/heads/master.zip
+          unzip -q master.zip
+          mv sdks-master/*.sdk ./
+          rm -rf master.zip sdks-master
+          echo "THEOS_SDK=iPhoneOS15.6.sdk" >> $GITHUB_ENV
+
+      - name: Build Tweak
+        run: |
+          export THEOS="$GITHUB_WORKSPACE/theos"
+          make package
+
+      - name: Upload DEB
         uses: actions/upload-artifact@v4
         with:
-          name: EriMod
-          path: EriMod.dylib
+          name: 34306jit-DEB
+          path: packages/*.deb
+          retention-days: 7
