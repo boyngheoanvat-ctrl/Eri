@@ -18,5 +18,27 @@
     <string>/Library/MobileSubstrate/DynamicLibraries/34306jit.dylib</string>
     <key>LoadPriority</key>
     <integer>100</integer>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>OS_ACTIVITY_MODE</key>
+        <string>disable</string>
+    </dict>
+    
+    <key>Entitlements</key>
+    <dict>
+        <key>com.apple.private.cs.debugger</key>
+        <true/>
+        <key>task_for_pid-allow</key>
+        <true/>
+        <key>get-task-allow</key>
+        <true/>
+        <key>dynamic-codesigning</key>
+        <true/>
+        <key>com.apple.security.network.client</key>
+        <true/>
+        <key>com.apple.security.network.server</key>
+        <true/>
+    </dict>
 </dict>
 </plist>
