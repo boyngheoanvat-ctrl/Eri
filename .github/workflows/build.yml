@@ -49,8 +49,10 @@ jobs:
             -framework Foundation \
             -framework UIKit \
             -framework CoreGraphics \
+            -framework QuartzCore \
             -install_name @rpath/libtool.dylib \
-            -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai -Isrc/memory -Isrc/method -Isrc/dump \
+            -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
+            -Isrc/memory -Isrc/dump -Isrc/lua -Isrc/esp \
             -o libtool.dylib \
             $SRC
 
