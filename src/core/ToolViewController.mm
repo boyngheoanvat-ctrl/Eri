@@ -50,7 +50,7 @@
     NSLog(@"[ToolVC] viewDidLoad START");
 
     self.view.frame = [UIScreen mainScreen].bounds;
-    self.view.backgroundColor = [UIColor redColor];
+    self.view.backgroundColor = [UIColor clearColor];
 
     [self buildUI];
     NSLog(@"[ToolVC] after buildUI");
@@ -220,14 +220,8 @@
 
     if (index == 0) {
         if (!self.aiVC) {
-            NSLog(@"[ToolVC] creating AIChatVC...");
-            @try {
-                self.aiVC = [[AIChatVC alloc] init];
-            } @catch (NSException *e) {
-                NSLog(@"[ToolVC] AIChatVC init crash: %@", e);
-                return;
-            }
-            NSLog(@"[ToolVC] AIChatVC created");
+            @try { self.aiVC = [[AIChatVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] AIChatVC crash: %@", e); return; }
         }
         newVC = self.aiVC;
         self.subtitleLabel.text = @"AI Agent";
@@ -275,7 +269,6 @@
 
     if (!newVC) return;
 
-    NSLog(@"[ToolVC] addChild...");
     @try {
         [self addChildViewController:newVC];
         newVC.view.frame = self.contentView.bounds;
@@ -286,7 +279,6 @@
         NSLog(@"[ToolVC] addChild crash: %@", e);
         return;
     }
-    NSLog(@"[ToolVC] addChild DONE");
 
     self.currentVC = newVC;
     self.currentTab = index;
@@ -297,8 +289,6 @@
     self.methodButton.active = (index == 3);
     self.luaButton.active = (index == 4);
     self.espButton.active = (index == 5);
-
-    NSLog(@"[ToolVC] selectTab %ld DONE", (long)index);
 }
 
 - (void)closeTapped { [[ToolWindow shared] hide]; }
