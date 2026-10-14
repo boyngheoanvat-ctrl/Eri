@@ -22,51 +22,59 @@
 - (void)setupUI {
     self.backgroundColor = [UIColor clearColor];
 
-    self.activeBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 3, 0)];
+    // Active bar (bên trái)
+    self.activeBar = [[UIView alloc] initWithFrame:CGRectZero];
     self.activeBar.backgroundColor = [ToolTheme shared].accent;
     self.activeBar.hidden = YES;
     [self addSubview:self.activeBar];
 
+    // Icon label (không dùng UIImageView vì không có SF Symbols)
     self.iconLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     self.iconLabel.textAlignment = NSTextAlignmentCenter;
     self.iconLabel.textColor = [ToolTheme shared].textSecondary;
-    self.iconLabel.font = [UIFont systemFontOfSize:22];
+    self.iconLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
+    self.iconLabel.text = self.symbol;
     [self addSubview:self.iconLabel];
 
+    // Title label
     self.titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     self.titleLabel.text = self.title;
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     self.titleLabel.textColor = [ToolTheme shared].textSecondary;
-    self.titleLabel.font = [UIFont systemFontOfSize:9 weight:UIFontWeightMedium];
+    self.titleLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightSemibold];
     [self addSubview:self.titleLabel];
-
-    [self applyIcon];
-}
-
-- (void)applyIcon {
-    if ([self.symbol isEqualToString:@"ai"]) self.iconLabel.text = @"AI";
-    else if ([self.symbol isEqualToString:@"dump"]) self.iconLabel.text = @"⬇";
-    else if ([self.symbol isEqualToString:@"mem"]) self.iconLabel.text = @"⚡";
-    else if ([self.symbol isEqualToString:@"call"]) self.iconLabel.text = @"▶";
-    else self.iconLabel.text = @"●";
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
+
     CGFloat w = CGRectGetWidth(self.bounds);
     CGFloat h = CGRectGetHeight(self.bounds);
 
+    // Active bar (3px, cao 60% giữa)
     self.activeBar.frame = CGRectMake(0, h * 0.2, 3, h * 0.6);
-    self.iconLabel.frame = CGRectMake(0, h * 0.15, w, 28);
-    self.titleLabel.frame = CGRectMake(0, h * 0.65, w, 12);
+
+    // Icon (cao 30px, ở trên)
+    self.iconLabel.frame = CGRectMake(0, h * 0.18, w, 30);
+
+    // Title (cao 16px, ở dưới icon)
+    self.titleLabel.frame = CGRectMake(0, h * 0.62, w, 16);
 }
 
 - (void)setActive:(BOOL)active {
     _active = active;
+
     self.activeBar.hidden = !active;
-    self.iconLabel.textColor = active ? [ToolTheme shared].accent : [ToolTheme shared].textSecondary;
-    self.titleLabel.textColor = active ? [ToolTheme shared].accent : [ToolTheme shared].textSecondary;
-    self.backgroundColor = active ? [ToolTheme shared].selectedFill : [UIColor clearColor];
+
+    if (active) {
+        self.iconLabel.textColor = [ToolTheme shared].accent;
+        self.titleLabel.textColor = [ToolTheme shared].accent;
+        self.backgroundColor = [ToolTheme shared].selectedFill;
+    } else {
+        self.iconLabel.textColor = [ToolTheme shared].textSecondary;
+        self.titleLabel.textColor = [ToolTheme shared].textSecondary;
+        self.backgroundColor = [UIColor clearColor];
+    }
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
@@ -82,4 +90,4 @@
     self.alpha = 1.0;
 }
 
-@end 
+@end
