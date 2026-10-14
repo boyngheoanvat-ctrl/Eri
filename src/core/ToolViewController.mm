@@ -31,13 +31,14 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor clearColor];
+    self.view.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.3];
 
     [self buildUI];
     [self buildVCs];
     [self selectTab:0];
-}
 
+    NSLog(@"[ToolViewController] Loaded, view=%@", NSStringFromCGRect(self.view.bounds));
+}
 - (void)buildUI {
     CGRect screen = self.view.bounds;
     CGFloat panelW = MIN(720, screen.size.width - 40);
