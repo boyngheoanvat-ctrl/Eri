@@ -29,7 +29,7 @@
 
     [self.items addObject:@{
         @"type": @"ai",
-        @"text": @"AI Agent ready.\nHoi: tim gia tri 100, hack map, tim ham speed"
+        @"text": @"AI Agent ready.\nHoi: class ShowEntity co gi, tim Hp trong ShowEntity, hack map, tim gia tri 100"
     }];
     [self.tableView reloadData];
 }
@@ -121,17 +121,24 @@
     NSString *sysPrompt =
         @"AI agent hack game IL2CPP. Tra loi tieng Viet ngan gon.\n"
         @"Tool:\n"
-        @"- search_memory(value, type): tim gia tri memory\n"
-        @"- edit_memory(address, value, type): sua gia tri\n"
-        @"- read_memory(address, type): doc gia tri\n"
+        @"- dump_class_runtime(class_name): DUMP TOAN BO class (fields + methods + properties + RVA + offset + type)\n"
+        @"- find_in_class(class_name, keyword): tim field/method/property trong class\n"
+        @"- get_class_detail(class_name): chi tiet class (parent, size)\n"
         @"- search_classes(keyword): tim class\n"
         @"- search_methods(class_name, method_keyword): tim method\n"
         @"- get_method_rva(class_name, method_name): lay RVA\n"
-        @"- find_hack_methods(hack_type): tim ham hack\n"
+        @"- find_hack_methods(hack_type): tim ham hack (map/speed/damage/health/money)\n"
+        @"- search_memory(value, type): tim gia tri memory\n"
+        @"- edit_memory(address, value, type): sua gia tri memory\n"
+        @"- read_memory(address, type): doc gia tri memory\n"
         @"- read_file(filename, keyword): grep file\n"
         @"- list_files(): liet ke file\n"
-        @"Quy tac: hoi 'tim gia tri X' → search_memory; hoi 'hack map' → find_hack_methods('map').\n"
-        @"Neu tool loi, KHONG goi lai. Tra loi user.";
+        @"QUY TAC:\n"
+        @"- Hoi 'class X co gi' → dump_class_runtime\n"
+        @"- Hoi 'tim field Hp trong X' → find_in_class\n"
+        @"- Hoi 'hack map' → find_hack_methods('map')\n"
+        @"- Hoi 'tim gia tri X' → search_memory\n"
+        @"- Neu tool loi, KHONG goi lai. Tra loi user.";
 
     NSMutableArray *messages = [NSMutableArray array];
     [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
@@ -168,62 +175,72 @@
 #pragma mark - AIStreamDelegate
 
 - (void)aiStreamDidReceiveText:(NSString *)text {
-    [self.currentAIResponse appendString:text];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.currentAIResponse appendString:text];
 
-    NSInteger lastIdx = (NSInteger)self.items.count - 1;
-    if (lastIdx >= 0 && [self.items[lastIdx][@"type"] isEqualToString:@"ai"]) {
-        self.items[lastIdx] = @{@"type": @"ai", @"text": [self.currentAIResponse copy]};
-    } else {
-        [self.items addObject:@{@"type": @"ai", @"text": [self.currentAIResponse copy]}];
-    }
+        NSInteger lastIdx = (NSInteger)self.items.count - 1;
+        if (lastIdx >= 0 && [self.items[lastIdx][@"type"] isEqualToString:@"ai"]) {
+            self.items[lastIdx] = @{@"type": @"ai", @"text": [self.currentAIResponse copy]};
+        } else {
+            [self.items addObject:@{@"type": @"ai", @"text": [self.currentAIResponse copy]}];
+        }
 
-    [self.tableView reloadData];
-    [self scrollToBottom];
+        [self.tableView reloadData];
+        [self scrollToBottom];
+    });
 }
 
 - (void)aiStreamDidFailWithError:(NSError *)error {
-    [self.spinner stopAnimating];
-    self.isWaiting = NO;
-    self.sendButton.enabled = YES;
-    self.sendButton.alpha = 1.0;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.spinner stopAnimating];
+        self.isWaiting = NO;
+        self.sendButton.enabled = YES;
+        self.sendButton.alpha = 1.0;
 
-    [self.items addObject:@{
-        @"type": @"error",
-        @"text": error.localizedDescription ?: @"Loi khong xac dinh"
-    }];
-    [self.tableView reloadData];
-    [self scrollToBottom];
+        [self.items addObject:@{
+            @"type": @"error",
+            @"text": error.localizedDescription ?: @"Loi khong xac dinh"
+        }];
+        [self.tableView reloadData];
+        [self scrollToBottom];
+    });
 }
 
 - (void)aiStreamDidComplete {
-    [self.spinner stopAnimating];
-    self.isWaiting = NO;
-    self.sendButton.enabled = YES;
-    self.sendButton.alpha = 1.0;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.spinner stopAnimating];
+        self.isWaiting = NO;
+        self.sendButton.enabled = YES;
+        self.sendButton.alpha = 1.0;
+    });
 }
 
 - (void)aiDidCallTool:(NSString *)toolName args:(NSDictionary *)args result:(id)result {
-    NSString *argsStr = @"";
-    if (args.count > 0) {
-        NSData *data = [NSJSONSerialization dataWithJSONObject:args options:0 error:nil];
-        argsStr = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSString *argsStr = @"";
+        if (args.count > 0) {
+            NSData *data = [NSJSONSerialization dataWithJSONObject:args options:0 error:nil];
+            argsStr = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        }
 
-    NSString *summary = @"OK";
-    if ([result isKindOfClass:[NSDictionary class]]) {
-        NSDictionary *d = (NSDictionary *)result;
-        if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
-        else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ ket qua", d[@"count"]];
-        else if (d[@"success"]) summary = [d[@"success"] boolValue] ? @"OK" : @"Fail";
-        else if (d[@"edited"]) summary = [NSString stringWithFormat:@"sua %@ dia chi", d[@"edited"]];
-    }
+        NSString *summary = @"OK";
+        if ([result isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *d = (NSDictionary *)result;
+            if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
+            else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ ket qua", d[@"count"]];
+            else if (d[@"success"]) summary = [d[@"success"] boolValue] ? @"OK" : @"Fail";
+            else if (d[@"edited"]) summary = [NSString stringWithFormat:@"sua %@ dia chi", d[@"edited"]];
+            else if (d[@"field_count"]) summary = [NSString stringWithFormat:@"%@ fields, %@ methods",
+                                                    d[@"field_count"], d[@"method_count"]];
+        }
 
-    [self.items addObject:@{
-        @"type": @"tool",
-        @"text": [NSString stringWithFormat:@"%@(%@) → %@", toolName, argsStr, summary]
-    }];
-    [self.tableView reloadData];
-    [self scrollToBottom];
+        [self.items addObject:@{
+            @"type": @"tool",
+            @"text": [NSString stringWithFormat:@"%@(%@) → %@", toolName, argsStr, summary]
+        }];
+        [self.tableView reloadData];
+        [self scrollToBottom];
+    });
 }
 
 #pragma mark - Table
