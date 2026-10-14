@@ -21,40 +21,48 @@ static const CGFloat kInputBarHeight = 50;
 
 @implementation AIChatVC
 
-#pragma mark - TEST D: chỉ bật AIESPTool registerAll
+#pragma mark - TEST E: bật cả 3 registerAll, KHÔNG gọi GameFingerprint
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    NSLog(@"[TEST-D] viewDidLoad START");
+    NSLog(@"[TEST-E] viewDidLoad START");
 
     self.view.backgroundColor = [ToolTheme shared].background;
     self.items = [NSMutableArray array];
-    NSLog(@"[TEST-D] after init vars");
+    NSLog(@"[TEST-E] after init vars");
 
-    // CHỈ BẬT AIESPTool
-    NSLog(@"[TEST-D] AIESPTool registerAll START");
+    NSLog(@"[TEST-E] AITool registerAll START");
+    [AITool registerAll];
+    NSLog(@"[TEST-E] AITool registerAll DONE");
+
+    NSLog(@"[TEST-E] AIMemoryTool registerAll START");
+    [AIMemoryTool registerAll];
+    NSLog(@"[TEST-E] AIMemoryTool registerAll DONE");
+
+    NSLog(@"[TEST-E] AIESPTool registerAll START");
     [AIESPTool registerAll];
-    NSLog(@"[TEST-D] AIESPTool registerAll DONE");
+    NSLog(@"[TEST-E] AIESPTool registerAll DONE");
 
-    // [AITool registerAll];
-    // [AIMemoryTool registerAll];
+    NSLog(@"[TEST-E] all registerAll DONE");
 
-    NSLog(@"[TEST-D] before buildUI");
+    NSLog(@"[TEST-E] before buildUI");
     [self buildUI];
-    NSLog(@"[TEST-D] after buildUI");
+    NSLog(@"[TEST-E] after buildUI");
 
-    NSLog(@"[TEST-D] before setupKeyboardObservers");
+    NSLog(@"[TEST-E] before setupKeyboardObservers");
     [self setupKeyboardObservers];
-    NSLog(@"[TEST-D] after setupKeyboardObservers");
+    NSLog(@"[TEST-E] after setupKeyboardObservers");
 
+    // KHÔNG gọi GameFingerprint
     NSString *game = @"Unknown";
+
     NSString *welcome = [NSString stringWithFormat:
         @"AI Agent ready.\nGame: %@\nHoi: hack map, hack speed, tim class...", game];
     [self.items addObject:@{@"type": @"ai", @"text": welcome}];
     [self.tableView reloadData];
     [self scrollToBottomAnimated:NO];
 
-    NSLog(@"[TEST-D] viewDidLoad DONE");
+    NSLog(@"[TEST-E] viewDidLoad DONE");
 }
 
 - (void)dealloc {
@@ -193,7 +201,7 @@ static const CGFloat kInputBarHeight = 50;
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        [self.items addObject:@{@"type": @"ai", @"text": @"[TEST-D] Da nhan tin nhan (khong goi AI)"}];
+        [self.items addObject:@{@"type": @"ai", @"text": @"[TEST-E] Da nhan tin nhan (khong goi AI)"}];
         [self.tableView reloadData];
         [self scrollToBottomAnimated:YES];
 
