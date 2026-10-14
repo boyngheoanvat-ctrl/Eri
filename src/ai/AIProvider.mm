@@ -9,7 +9,7 @@ static const NSTimeInterval kRequestTimeout = 180;
 @property (nonatomic, strong) NSURLSession *session;
 @property (nonatomic, strong) NSURLSessionDataTask *currentTask;
 @property (nonatomic, assign) NSInteger toolLoopCount;
-@property (nonatomic, assign) BOOL;
+@property (nonatomic, assign) BOOL cancelled;
 @end
 
 @implementation AIProvider
@@ -24,9 +24,6 @@ static const NSTimeInterval kRequestTimeout = 180;
         cfg.timeoutIntervalForResource = kRequestTimeout + 30;
         instance.session = [NSURLSession sessionWithConfiguration:cfg];
 
-        // ===== GROQ API =====
-        // LƯU Ý: KHÔNG nên hard-code API key trong source.
-        // Nên đọc từ Info.plist hoặc Settings.
         instance.baseURL = @"https://api.groq.com/openai/v1/chat/completions";
         instance.apiKey  = @"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";
         instance.model   = @"openai/gpt-oss-120b";
@@ -41,10 +38,9 @@ static const NSTimeInterval kRequestTimeout = 180;
     self.currentTask = nil;
 }
 
-- (void)sendMessages:(NSArray<NSDictionary *> *) =messages
-                tools:(NSArray<NS ((NSDictionaryHTTP *> *)tools
-             delegate:(URLid<AIStreamDelegate>)delegateResponse {
-    // Reset state cho request mới
+- (void)sendMessages:(NSArray<NSDictionary *> *)messages
+                tools:(NSArray<NSDictionary *> *)tools
+             delegate:(id<AIStreamDelegate>)delegate {
     self.cancelled = NO;
     self.toolLoopCount = 0;
     [self sendMessagesInternal:messages tools:tools delegate:delegate];
@@ -86,14 +82,9 @@ static const NSTimeInterval kRequestTimeout = 180;
         return;
     }
 
-    // Debug log request
     NSLog(@"[AIProvider] → POST %@ (loop=%ld, tools=%lu, msgs=%lu)",
           self.model, (long)self.toolLoopCount,
           (unsigned long)tools.count, (unsigned long)messages.count);
-    if ([self shouldLogVerbose]) {
-        NSString *bodyStr = [[NSString alloc] initWithData:bodyData encoding:NSUTF8StringEncoding];
-        NSLog(@"[AIProvider] Body: %@", bodyStr);
-    }
 
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:
         [NSURL URLWithString:self.baseURL]];
@@ -120,7 +111,7 @@ static const NSTimeInterval kRequestTimeout = 180;
 
         NSInteger status = 0;
         if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
-            status *)response).statusCode;
+            status = ((NSHTTPURLResponse *)response).statusCode;
         }
 
         if (!data || data.length == 0) {
@@ -161,7 +152,6 @@ static const NSTimeInterval kRequestTimeout = 180;
             return;
         }
 
-        // Kiểm tra choices
         NSArray *choices = json[@"choices"];
         if (![choices isKindOfClass:[NSArray class]] || choices.count == 0) {
             NSLog(@"[AIProvider] Response khong co choices");
@@ -184,7 +174,6 @@ static const NSTimeInterval kRequestTimeout = 180;
         NSArray *toolCalls = message[@"tool_calls"];
         BOOL hasToolCalls = [toolCalls isKindOfClass:[NSArray class]] && toolCalls.count > 0;
 
-        // ============ TRƯỜNG HỢP CÓ TOOL CALL ============
         if (hasToolCalls) {
             NSLog(@"[AIProvider] ← %lu tool calls", (unsigned long)toolCalls.count);
 
@@ -242,7 +231,6 @@ static const NSTimeInterval kRequestTimeout = 180;
             return;
         }
 
-        // ============ TRƯỜNG HỢP TRẢ LỜI CUỐI ============
         NSString *content = message[@"content"];
         if (![content isKindOfClass:[NSString class]] || content.length == 0) {
             content = @"[AI khong tra loi]";
@@ -277,22 +265,12 @@ static const NSTimeInterval kRequestTimeout = 180;
 - (NSString *)jsonString:(id)obj {
     if (!obj) return @"{}";
     if (![NSJSONSerialization isValidJSONObject:obj]) {
-        // Không phải JSON hợp lệ → wrap thành string
         NSDictionary *wrap = @{@"result": [NSString stringWithFormat:@"%@", obj]};
         NSData *d = [NSJSONSerialization dataWithJSONObject:wrap options:0 error:nil];
         return [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding] ?: @"{}";
     }
     NSData *data = [NSJSONSerialization dataWithJSONObject:obj options:0 error:nil];
     return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"{}";
-}
-
-- (BOOL)shouldLogVerbose {
-    // Chỉ log khi debug build
-#ifdef DEBUG
-    return YES;
-#else
-    return NO;
-#endif
 }
 
 @end
