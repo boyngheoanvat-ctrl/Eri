@@ -108,7 +108,7 @@
     IL2CPPResolver *r = [IL2CPPResolver shared];
 
     uint16_t mCount = 0;
-    NSArray<NSValue *> *mList = [r class_get_methods:&mCount];
+    NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
 
     for (uint16_t i = 0; i < mCount; i++) {
         MethodInfo *m = (MethodInfo *)mList[i].pointerValue;
