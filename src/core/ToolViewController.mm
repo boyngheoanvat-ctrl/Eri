@@ -10,7 +10,7 @@
 #import "ESPVC.h"
 #import "ESPOverlay.h"
 
-@interface ToolViewController ()
+@interface ToolViewController () <UIGestureRecognizerDelegate>
 @property (nonatomic, strong) UIView *backdrop;
 @property (nonatomic, strong) UIView *panel;
 @property (nonatomic, strong) UIView *titleBar;
@@ -81,6 +81,8 @@
     [self.view addSubview:self.panel];
 
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
+    pan.delegate = self;                    // ← FIX
+    pan.cancelsTouchesInView = NO;          // ← FIX
     [self.panel addGestureRecognizer:pan];
 
     self.titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, panelW, 36)];
@@ -299,6 +301,27 @@
     [self.methodVC reload];
     [self.luaVC reload];
     [self.espVC reload];
+}
+
+#pragma mark - UIGestureRecognizerDelegate
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)g
+       shouldReceiveTouch:(UITouch *)touch {
+    // Không cho window pan khi user chạm vào các control cần scroll / nhập liệu
+    UIView *v = touch.view;
+    while (v && v != self.panel) {
+        if ([v isKindOfClass:[UITableView class]])  return NO;
+        if ([v isKindOfClass:[UITextView class]])   return NO;
+        if ([v isKindOfClass:[UITextField class]])  return NO;
+        if ([v isKindOfClass:[UIScrollView class]]) return NO;
+        v = v.superview;
+    }
+    return YES;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)g
+shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
+    return YES;
 }
 
 @end
