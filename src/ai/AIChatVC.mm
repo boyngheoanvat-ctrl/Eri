@@ -29,7 +29,7 @@
 
     [self.items addObject:@{
         @"type": @"ai",
-        @"text": @"AI Agent ready.\nHoi: tim gia tri 100, hack mau, tim ham map"
+        @"text": @"AI Agent ready.\nHoi: tim gia tri 100, hack map, tim ham speed"
     }];
     [self.tableView reloadData];
 }
@@ -39,6 +39,7 @@
     CGFloat h = CGRectGetHeight(self.view.bounds);
     CGFloat inputH = 50;
 
+    // Table
     self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, w, h - inputH)
                                                      style:UITableViewStylePlain];
     self.tableView.dataSource = self;
@@ -51,6 +52,7 @@
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.tableView];
 
+    // Input area
     UIView *inputArea = [[UIView alloc] initWithFrame:CGRectMake(0, h - inputH, w, inputH)];
     inputArea.backgroundColor = [ToolTheme shared].surface;
     inputArea.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
@@ -98,6 +100,8 @@
     [self.view addSubview:self.spinner];
 }
 
+#pragma mark - Send
+
 - (void)sendTapped {
     NSString *text = self.inputField.text;
     if (text.length == 0 || self.isWaiting) return;
@@ -117,7 +121,7 @@
     NSString *sysPrompt =
         @"AI agent hack game IL2CPP. Tra loi tieng Viet ngan gon.\n"
         @"Tool:\n"
-        @"- search_memory(value, type): tim gia tri trong memory\n"
+        @"- search_memory(value, type): tim gia tri memory\n"
         @"- edit_memory(address, value, type): sua gia tri\n"
         @"- read_memory(address, type): doc gia tri\n"
         @"- search_classes(keyword): tim class\n"
@@ -126,7 +130,7 @@
         @"- find_hack_methods(hack_type): tim ham hack\n"
         @"- read_file(filename, keyword): grep file\n"
         @"- list_files(): liet ke file\n"
-        @"Quy tac: hoi 'tim gia tri X' → search_memory; hoi 'sua X thanh Y' → edit_memory.\n"
+        @"Quy tac: hoi 'tim gia tri X' → search_memory; hoi 'hack map' → find_hack_methods('map').\n"
         @"Neu tool loi, KHONG goi lai. Tra loi user.";
 
     NSMutableArray *messages = [NSMutableArray array];
@@ -146,26 +150,33 @@
         [tools addObject:[t openAISchema]];
     }
 
-    [[AIProvider shared] sendMessages:messages tools:tools delegate:self];
+    // QUAN TRỌNG: Chạy background để không crash main thread
+    __weak typeof(self) ws = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
+    });
 }
 
 - (void)scrollToBottom {
     if (self.items.count == 0) return;
     NSIndexPath *last = [NSIndexPath indexPathForRow:self.items.count - 1 inSection:0];
     [self.tableView scrollToRowAtIndexPath:last
-                          atScrollPosition:UITableViewScrollPositionBottom animated:YES];
+                          atScrollPosition:UITableViewScrollPositionBottom
+                                  animated:YES];
 }
 
 #pragma mark - AIStreamDelegate
 
 - (void)aiStreamDidReceiveText:(NSString *)text {
     [self.currentAIResponse appendString:text];
+
     NSInteger lastIdx = (NSInteger)self.items.count - 1;
     if (lastIdx >= 0 && [self.items[lastIdx][@"type"] isEqualToString:@"ai"]) {
         self.items[lastIdx] = @{@"type": @"ai", @"text": [self.currentAIResponse copy]};
     } else {
         [self.items addObject:@{@"type": @"ai", @"text": [self.currentAIResponse copy]}];
     }
+
     [self.tableView reloadData];
     [self scrollToBottom];
 }
@@ -175,7 +186,11 @@
     self.isWaiting = NO;
     self.sendButton.enabled = YES;
     self.sendButton.alpha = 1.0;
-    [self.items addObject:@{@"type": @"error", @"text": error.localizedDescription}];
+
+    [self.items addObject:@{
+        @"type": @"error",
+        @"text": error.localizedDescription ?: @"Loi khong xac dinh"
+    }];
     [self.tableView reloadData];
     [self scrollToBottom];
 }
@@ -200,6 +215,7 @@
         if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
         else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ ket qua", d[@"count"]];
         else if (d[@"success"]) summary = [d[@"success"] boolValue] ? @"OK" : @"Fail";
+        else if (d[@"edited"]) summary = [NSString stringWithFormat:@"sua %@ dia chi", d[@"edited"]];
     }
 
     [self.items addObject:@{
