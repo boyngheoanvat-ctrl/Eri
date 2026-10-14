@@ -11,6 +11,7 @@
 @property (nonatomic, strong) UILabel *statusLabel;
 @property (nonatomic, strong) UILabel *resultLabel;
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
+@property (atomic, assign) BOOL isDumping;
 @end
 
 @implementation DumperVC
@@ -113,9 +114,13 @@
     return sw;
 }
 
-#pragma mark - Dump (SIÊU NHẸ)
+#pragma mark - Dump
 
 - (void)startDump {
+    // Chống bấm 2 lần
+    if (self.isDumping) return;
+    self.isDumping = YES;
+
     self.progressView.hidden = NO;
     self.progressView.progress = 0;
     self.statusLabel.text = @"Dang dump...";
@@ -126,185 +131,205 @@
 
     BOOL doScript = self.genScriptSwitch.isOn;
     BOOL doHeader = self.genHeaderSwitch.isOn;
-    BOOL doCs = self.genCsSwitch.isOn;
+    BOOL doCs     = self.genCsSwitch.isOn;
 
     __weak typeof(self) ws = self;
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        @try {
-            IL2CPPResolver *r = [IL2CPPResolver shared];
-            if (![r resolve]) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    ws.statusLabel.text = @"Loi: IL2CPP not resolved";
-                    ws.statusLabel.textColor = [ToolTheme shared].danger;
-                    ws.dumpButton.enabled = YES;
-                    [ws.spinner stopAnimating];
-                });
-                return;
-            }
 
-            Il2CppDomain *domain = [r domain_get];
-            if (!domain) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    ws.statusLabel.text = @"Loi: No domain";
-                    ws.statusLabel.textColor = [ToolTheme shared].danger;
-                    ws.dumpButton.enabled = YES;
-                    [ws.spinner stopAnimating];
-                });
-                return;
-            }
-
-            NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
-            NSString *outDir = [docs stringByAppendingPathComponent:@"IL2CPP_Dump"];
-            [[NSFileManager defaultManager] createDirectoryAtPath:outDir
-                                      withIntermediateDirectories:YES attributes:nil error:nil];
-
-            // GIỚI HẠN CỰC MẠNH
-            int maxAssemblies = MIN(domain->assembly_count, 2);
-            int maxClasses = 1000;
-
-            NSString *scriptPath = [outDir stringByAppendingPathComponent:@"script.json"];
-            NSString *headerPath = [outDir stringByAppendingPathComponent:@"il2cpp.h"];
-            NSString *csPath = [outDir stringByAppendingPathComponent:@"dump.cs"];
-
-            if (doScript) [[NSFileManager defaultManager] createFileAtPath:scriptPath contents:[NSData data] attributes:nil];
-            if (doHeader) [[NSFileManager defaultManager] createFileAtPath:headerPath contents:[NSData data] attributes:nil];
-            if (doCs) [[NSFileManager defaultManager] createFileAtPath:csPath contents:[NSData data] attributes:nil];
-
-            NSFileHandle *scriptFH = doScript ? [NSFileHandle fileHandleForWritingAtPath:scriptPath] : nil;
-            NSFileHandle *headerFH = doHeader ? [NSFileHandle fileHandleForWritingAtPath:headerPath] : nil;
-            NSFileHandle *csFH = doCs ? [NSFileHandle fileHandleForWritingAtPath:csPath] : nil;
-
-            if (scriptFH) [scriptFH writeData:[@"[\n" dataUsingEncoding:NSUTF8StringEncoding]];
-            if (headerFH) [headerFH writeData:[@"// Auto-generated il2cpp.h\n#pragma once\n#include <stdint.h>\n\n" dataUsingEncoding:NSUTF8StringEncoding]];
-            if (csFH) [csFH writeData:[@"// Auto-generated dump.cs\n\n" dataUsingEncoding:NSUTF8StringEncoding]];
-
-            __block int totalClasses = 0;
-            __block BOOL firstJson = YES;
-
-            for (int a = 0; a < maxAssemblies; a++) {
-                @autoreleasepool {
-                    Il2CppAssembly *asm_ = domain->assemblies[a];
-                    if (!asm_) continue;
-                    void *imgPtr = *(void **)asm_;
-                    if (!imgPtr) continue;
-                    Il2CppImage *image = (Il2CppImage *)imgPtr;
-                    if (!image || !image->name) continue;
-
-                    NSString *imgName = [NSString stringWithUTF8String:image->name];
-                    size_t classCount = [r image_get_class_count:image];
-                    size_t maxThisAssembly = MIN(classCount, (size_t)maxClasses);
-
-                    for (size_t i = 0; i < maxThisAssembly && totalClasses < maxClasses; i++) {
-                        @autoreleasepool {
-                            Il2CppClass *klass = [r image_get_class:image index:i];
-                            if (!klass) continue;
-                            const char *cname = [r class_get_name:klass];
-                            const char *cns = [r class_get_namespace:klass];
-                            if (!cname) continue;
-
-                            NSString *clsName = [NSString stringWithUTF8String:cname];
-                            NSString *nsName = cns ? [NSString stringWithUTF8String:cns] : @"";
-
-                            // script.json
-                            if (scriptFH) {
-                                NSMutableString *jsonEntry = [NSMutableString string];
-                                if (!firstJson) [jsonEntry appendString:@",\n"];
-                                firstJson = NO;
-                                [jsonEntry appendFormat:@"  {\"Name\":\"%@\",\"Namespace\":\"%@\",\"Image\":\"%@\"}",
-                                 clsName, nsName, imgName];
-                                [scriptFH writeData:[jsonEntry dataUsingEncoding:NSUTF8StringEncoding]];
-                            }
-
-                            // il2cpp.h
-                            if (headerFH) {
-                                NSString *full = nsName.length > 0
-                                    ? [NSString stringWithFormat:@"%@_%@", nsName, clsName] : clsName;
-                                full = [full stringByReplacingOccurrencesOfString:@"." withString:@"_"];
-                                full = [full stringByReplacingOccurrencesOfString:@"`" withString:@"_"];
-                                full = [full stringByReplacingOccurrencesOfString:@"<" withString:@"_"];
-                                full = [full stringByReplacingOccurrencesOfString:@">" withString:@"_"];
-                                NSString *line = [NSString stringWithFormat:
-                                    @"typedef struct %@ { void *vtable; void *monitor; } %@;\n", full, full];
-                                [headerFH writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
-                            }
-
-                            // dump.cs (chỉ 10 method + 10 field)
-                            if (csFH) {
-                                NSMutableString *cs = [NSMutableString string];
-                                if (nsName.length > 0) [cs appendFormat:@"namespace %@ {\n", nsName];
-                                [cs appendFormat:@"class %@ {\n", clsName];
-
-                                uint16_t mCount = 0;
-                                const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
-                                uint16_t maxM = MIN(mCount, 10);
-                                for (uint16_t j = 0; j < maxM; j++) {
-                                    const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
-                                    uint32_t token = [r method_get_token:(MethodInfo *)mList[j]];
-                                    void *ptr = [r method_get_pointer:(MethodInfo *)mList[j]];
-                                    uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
-                                    if (mn) [cs appendFormat:@"  void %s(); // RVA: 0x%llX Token: 0x%X\n", mn, rva, token];
-                                }
-                                if (mList) free(mList);
-
-                                uint16_t fCount = 0;
-                                const FieldInfo **fList = [r class_get_fields:klass count:&fCount];
-                                uint16_t maxF = MIN(fCount, 10);
-                                for (uint16_t j = 0; j < maxF; j++) {
-                                    const char *fn = [r field_get_name:(FieldInfo *)fList[j]];
-                                    int32_t off = [r field_get_offset:(FieldInfo *)fList[j]];
-                                    if (fn) [cs appendFormat:@"  void *%s; // Offset: 0x%X\n", fn, off];
-                                }
-                                if (fList) free(fList);
-
-                                [cs appendString:@"}\n"];
-                                if (nsName.length > 0) [cs appendString:@"}\n"];
-                                [cs appendString:@"\n"];
-                                [csFH writeData:[cs dataUsingEncoding:NSUTF8StringEncoding]];
-                            }
-
-                            totalClasses++;
-                        }
-                    }
-                }
-
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    ws.progressView.progress = (CGFloat)(a + 1) / maxAssemblies;
-                    ws.statusLabel.text = [NSString stringWithFormat:@"Quet %d/%d", a + 1, maxAssemblies];
-                });
-            }
-
-            if (scriptFH) {
-                [scriptFH writeData:[@"\n]\n" dataUsingEncoding:NSUTF8StringEncoding]];
-                [scriptFH closeFile];
-            }
-            if (headerFH) [headerFH closeFile];
-            if (csFH) [csFH closeFile];
-
+        void (^fail)(NSString *) = ^(NSString *msg) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                ws.progressView.progress = 1.0;
-                ws.statusLabel.text = @"Dump hoan thanh!";
-                ws.statusLabel.textColor = [ToolTheme shared].success;
-                ws.dumpButton.enabled = YES;
-                [ws.spinner stopAnimating];
-                ws.resultLabel.text = [NSString stringWithFormat:@"Da luu vao:\n%@\n\nTong: %d class",
-                                        outDir, totalClasses];
-            });
-
-        } @catch (NSException *e) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                ws.statusLabel.text = [NSString stringWithFormat:@"Loi: %@", e.reason];
+                ws.statusLabel.text = msg;
                 ws.statusLabel.textColor = [ToolTheme shared].danger;
                 ws.dumpButton.enabled = YES;
                 [ws.spinner stopAnimating];
+                ws.isDumping = NO;
+            });
+        };
+
+        IL2CPPResolver *r = [IL2CPPResolver shared];
+
+        if (!r || ![r resolve]) { fail(@"Loi: IL2CPP not resolved"); return; }
+
+        Il2CppDomain *domain = [r domain_get];
+        if (!domain) { fail(@"Loi: No domain (symbol dlsym fail?)"); return; }
+
+        if (domain->assembly_count <= 0 || domain->assemblies == NULL) {
+            fail(@"Loi: assembly_count = 0");
+            return;
+        }
+
+        NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+        NSString *outDir = [docs stringByAppendingPathComponent:@"IL2CPP_Dump"];
+        [[NSFileManager defaultManager] createDirectoryAtPath:outDir
+                                  withIntermediateDirectories:YES attributes:nil error:nil];
+
+        int maxAssemblies = MIN((int)domain->assembly_count, 2);
+        int maxClasses    = 1000;
+
+        NSString *scriptPath = [outDir stringByAppendingPathComponent:@"script.json"];
+        NSString *headerPath = [outDir stringByAppendingPathComponent:@"il2cpp.h"];
+        NSString *csPath     = [outDir stringByAppendingPathComponent:@"dump.cs"];
+
+        if (doScript) [[NSFileManager defaultManager] createFileAtPath:scriptPath contents:[NSData data] attributes:nil];
+        if (doHeader) [[NSFileManager defaultManager] createFileAtPath:headerPath contents:[NSData data] attributes:nil];
+        if (doCs)     [[NSFileManager defaultManager] createFileAtPath:csPath     contents:[NSData data] attributes:nil];
+
+        NSFileHandle *scriptFH = doScript ? [NSFileHandle fileHandleForWritingAtPath:scriptPath] : nil;
+        NSFileHandle *headerFH = doHeader ? [NSFileHandle fileHandleForWritingAtPath:headerPath] : nil;
+        NSFileHandle *csFH     = doCs     ? [NSFileHandle fileHandleForWritingAtPath:csPath]     : nil;
+
+        if (scriptFH) [scriptFH writeData:[@"[\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        if (headerFH) [headerFH writeData:[@"// Auto-generated il2cpp.h\n#pragma once\n#include <stdint.h>\n\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        if (csFH)     [csFH writeData:[@"// Auto-generated dump.cs\n\n" dataUsingEncoding:NSUTF8StringEncoding]];
+
+        __block int totalClasses = 0;
+        __block BOOL firstJson = YES;
+        __block int skippedAssemblies = 0;
+
+        for (int a = 0; a < maxAssemblies; a++) {
+            @autoreleasepool {
+                Il2CppAssembly *asm_ = domain->assemblies[a];
+                if (!asm_) { skippedAssemblies++; continue; }
+
+                Il2CppImage *image = [r assembly_get_image:asm_];
+                if (!image) {
+                    // Không lấy được image (symbol fail) -> skip, KHÔNG deref mù
+                    skippedAssemblies++;
+                    continue;
+                }
+
+                const char *imgNameC = [r image_get_name:image];
+                if (!imgNameC) { skippedAssemblies++; continue; }
+
+                NSString *imgName = [NSString stringWithUTF8String:imgNameC];
+                if (!imgName) { skippedAssemblies++; continue; }
+
+                size_t classCount = [r image_get_class_count:image];
+                if (classCount == 0) continue;
+
+                size_t maxThisAssembly = MIN(classCount, (size_t)maxClasses);
+
+                for (size_t i = 0; i < maxThisAssembly && totalClasses < maxClasses; i++) {
+                    @autoreleasepool {
+                        Il2CppClass *klass = [r image_get_class:image index:i];
+                        if (!klass) continue;
+
+                        const char *cname = [r class_get_name:klass];
+                        if (!cname) continue;
+
+                        NSString *clsName = [NSString stringWithUTF8String:cname];
+                        if (!clsName) continue;
+
+                        const char *cns = [r class_get_namespace:klass];
+                        NSString *nsName = (cns && [NSString stringWithUTF8String:cns])
+                                          ? [NSString stringWithUTF8String:cns] : @"";
+
+                        // script.json
+                        if (scriptFH) {
+                            NSMutableString *jsonEntry = [NSMutableString string];
+                            if (!firstJson) [jsonEntry appendString:@",\n"];
+                            firstJson = NO;
+                            NSString *safeCls = [clsName stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+                            NSString *safeNs  = [nsName  stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+                            NSString *safeImg = [imgName stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+                            [jsonEntry appendFormat:@"  {\"Name\":\"%@\",\"Namespace\":\"%@\",\"Image\":\"%@\"}",
+                             safeCls, safeNs, safeImg];
+                            [scriptFH writeData:[jsonEntry dataUsingEncoding:NSUTF8StringEncoding]];
+                        }
+
+                        // il2cpp.h
+                        if (headerFH) {
+                            NSString *full = nsName.length > 0
+                                ? [NSString stringWithFormat:@"%@_%@", nsName, clsName] : clsName;
+                            full = [full stringByReplacingOccurrencesOfString:@"." withString:@"_"];
+                            full = [full stringByReplacingOccurrencesOfString:@"`" withString:@"_"];
+                            full = [full stringByReplacingOccurrencesOfString:@"<" withString:@"_"];
+                            full = [full stringByReplacingOccurrencesOfString:@">" withString:@"_"];
+                            NSString *line = [NSString stringWithFormat:
+                                @"typedef struct %@ { void *vtable; void *monitor; } %@;\n", full, full];
+                            [headerFH writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+                        }
+
+                        // dump.cs
+                        if (csFH) {
+                            NSMutableString *cs = [NSMutableString string];
+                            if (nsName.length > 0) [cs appendFormat:@"namespace %@ {\n", nsName];
+                            [cs appendFormat:@"class %@ {\n", clsName];
+
+                            // Methods
+                            uint16_t mCount = 0;
+                            NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
+                            uint16_t maxM = (uint16_t)MIN((NSUInteger)mCount, (NSUInteger)10);
+                            for (uint16_t j = 0; j < maxM; j++) {
+                                MethodInfo *mi = (MethodInfo *)mList[j].pointerValue;
+                                if (!mi) continue;
+                                const char *mn = [r method_get_name:mi];
+                                if (!mn) continue;
+                                uint32_t token = [r method_get_token:mi];
+                                void *ptr = [r method_get_pointer:mi];
+                                uint64_t rva = (uint64_t)((uintptr_t)ptr);
+                                [cs appendFormat:@"  void %s(); // RVA: 0x%llX Token: 0x%X\n", mn, rva, token];
+                            }
+
+                            // Fields
+                            uint16_t fCount = 0;
+                            NSArray<NSValue *> *fList = [r class_get_fields:klass count:&fCount];
+                            uint16_t maxF = (uint16_t)MIN((NSUInteger)fCount, (NSUInteger)10);
+                            for (uint16_t j = 0; j < maxF; j++) {
+                                FieldInfo *fi = (FieldInfo *)fList[j].pointerValue;
+                                if (!fi) continue;
+                                const char *fn = [r field_get_name:fi];
+                                if (!fn) continue;
+                                int32_t off = [r field_get_offset:fi];
+                                [cs appendFormat:@"  void *%s; // Offset: 0x%X\n", fn, off];
+                            }
+
+                            [cs appendString:@"}\n"];
+                            if (nsName.length > 0) [cs appendString:@"}\n"];
+                            [cs appendString:@"\n"];
+                            [csFH writeData:[cs dataUsingEncoding:NSUTF8StringEncoding]];
+                        }
+
+                        totalClasses++;
+                    }
+                }
+            }
+
+            int aCopy = a;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                ws.progressView.progress = (CGFloat)(aCopy + 1) / maxAssemblies;
+                ws.statusLabel.text = [NSString stringWithFormat:@"Quet %d/%d", aCopy + 1, maxAssemblies];
             });
         }
+
+        if (scriptFH) {
+            [scriptFH writeData:[@"\n]\n" dataUsingEncoding:NSUTF8StringEncoding]];
+            [scriptFH closeFile];
+        }
+        if (headerFH) [headerFH closeFile];
+        if (csFH)     [csFH closeFile];
+
+        int total = totalClasses;
+        int skipped = skippedAssemblies;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            ws.progressView.progress = 1.0;
+            ws.statusLabel.text = (total > 0) ? @"Dump hoan thanh!" : @"Dump xong nhung 0 class";
+            ws.statusLabel.textColor = (total > 0) ? [ToolTheme shared].success : [ToolTheme shared].warning;
+            ws.dumpButton.enabled = YES;
+            [ws.spinner stopAnimating];
+            ws.isDumping = NO;
+            ws.resultLabel.text = [NSString stringWithFormat:
+                @"Da luu vao:\n%@\n\nTong: %d class\nBo qua: %d assembly\n\nNeu 0 class: kiem tra dlsym il2cpp_*",
+                outDir, total, skipped];
+        });
     });
 }
 
 - (void)reload {
     self.statusLabel.text = @"San sang";
     self.statusLabel.textColor = [ToolTheme shared].success;
+    self.isDumping = NO;
 }
 
 @end
