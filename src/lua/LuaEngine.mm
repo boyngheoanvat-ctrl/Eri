@@ -1,10 +1,12 @@
 #import "LuaEngine.h"
 #import <dlfcn.h>
 
-typedef struct lua_State lua_State;
+// Include Lua headers (đã có sẵn trong dylib)
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
 
 @interface LuaEngine ()
-@property (nonatomic, assign) void *luaHandle;
 @property (nonatomic, assign) lua_State *L;
 @end
 
@@ -18,51 +20,44 @@ typedef struct lua_State lua_State;
 }
 
 - (BOOL)isAvailable {
-    void *h = dlopen("liblua.dylib", RTLD_NOW);
-    if (!h) h = dlopen("liblua.5.3.dylib", RTLD_NOW);
-    if (!h) h = dlopen("liblua.5.4.dylib", RTLD_NOW);
-    if (!h) h = dlopen("liblua.5.1.dylib", RTLD_NOW);
-    if (!h) return NO;
-    self.luaHandle = h;
-    return dlsym(h, "luaL_newstate") != NULL;
+    return YES;  // Lua đã được nhúng sẵn
 }
 
 - (NSString *)runScript:(NSString *)script {
-    if (!self.luaHandle) {
-        if (![self isAvailable]) {
-            return @"[Lua] Khong tim thay liblua trong runtime.";
-        }
-    }
+    if (!script) return @"[Lua] Script rỗng";
 
-    typedef lua_State *(*newstate_t)(void);
-    typedef int (*dostring_t)(lua_State *, const char *);
-    typedef const char *(*tolstring_t)(lua_State *, int);
-
-    newstate_t luaL_newstate = (newstate_t)dlsym(self.luaHandle, "luaL_newstate");
-    dostring_t luaL_dostring = (dostring_t)dlsym(self.luaHandle, "luaL_dostring");
-    tolstring_t lua_tolstring = (tolstring_t)dlsym(self.luaHandle, "lua_tolstring");
-
-    if (!luaL_newstate || !luaL_dostring) {
-        return @"[Lua] Khong tim thay luaL_newstate/luaL_dostring";
-    }
-
+    // Tạo state mới cho mỗi lần chạy
     lua_State *L = luaL_newstate();
     if (!L) return @"[Lua] Khong tao duoc lua_State";
 
+    // Load thư viện chuẩn
+    luaL_openlibs(L);
+
     self.L = L;
 
+    // Chạy script
     int status = luaL_dostring(L, script.UTF8String);
+
+    NSString *result;
     if (status != 0) {
-        // SỬA: bỏ , NULL
-        const char *err = lua_tolstring ? lua_tolstring(L, -1) : "unknown error";
-        return [NSString stringWithFormat:@"[Lua] Loi: %s", err ?: "unknown"];
+        const char *err = lua_tostring(L, -1);
+        result = [NSString stringWithFormat:@"[Lua] Loi: %s", err ? err : "unknown"];
+        lua_pop(L, 1);
+    } else {
+        result = @"[Lua] Script chay thanh cong";
     }
 
-    return @"[Lua] Script chay thanh cong";
+    lua_close(L);
+    self.L = NULL;
+
+    return result;
 }
 
 - (void)stop {
-    self.L = NULL;
+    if (self.L) {
+        lua_close(self.L);
+        self.L = NULL;
+    }
 }
 
 @end
