@@ -30,7 +30,7 @@
 
     [self.items addObject:@{
         @"type": @"ai",
-        @"text": @"AI Agent ready.\nHoi: tim class quan ly entity, hack map, tim gia tri 100"
+        @"text": @"AI Agent ready.\nHoi: hack map, tim class quan ly entity"
     }];
     [self.tableView reloadData];
 }
@@ -119,33 +119,19 @@
     NSString *sysPrompt =
         @"AI agent hack game IL2CPP. Tra loi tieng Viet ngan gon.\n"
         @"Tool:\n"
-        @"=== ESP / CLASS FINDER ===\n"
+        @"- find_hack_methods(hack_type): tim ham hack NHANH (map/speed/damage/health/money)\n"
+        @"- search_classes(keyword): tim class\n"
+        @"- dump_class_runtime(class_name): dump class\n"
         @"- find_entity_manager(): tim class quan ly entity\n"
         @"- find_camera_class(): tim class Camera\n"
-        @"- find_static_entity_lists(): tim static list entity\n"
-        @"- find_entity_list_methods(): tim method tra list\n"
-        @"- full_esp_scan(): quet toan bo\n"
-        @"=== CLASS ===\n"
-        @"- dump_class_runtime(class_name): dump class\n"
-        @"- find_in_class(class_name, keyword): tim field/method\n"
-        @"- search_classes(keyword): tim class\n"
-        @"- search_methods(class_name, method_keyword): tim method\n"
-        @"- get_method_rva(class_name, method_name): lay RVA\n"
-        @"- find_hack_methods(hack_type): tim ham hack\n"
-        @"=== MEMORY ===\n"
         @"- search_memory(value, type): tim gia tri\n"
         @"- edit_memory(address, value, type): sua gia tri\n"
-        @"- read_memory(address, type): doc gia tri\n"
-        @"=== FILE ===\n"
         @"- read_file(filename, keyword): grep file\n"
-        @"- list_files(): liet ke file\n"
-        @"QUY TAC:\n"
-        @"- Hoi 'tim class quan ly entity' → find_entity_manager\n"
-        @"- Hoi 'tim camera' → find_camera_class\n"
-        @"- Hoi 'class X co gi' → dump_class_runtime\n"
-        @"- Hoi 'hack map' → find_hack_methods('map')\n"
-        @"- Hoi 'tim gia tri X' → search_memory\n"
-        @"- Neu tool loi, KHONG goi lai. Tra loi user.";
+        @"QUY TAC QUAN TRONG:\n"
+        @"1. Hoi 'hack map' → goi find_hack_methods('map') 1 LAN DUY NHAT\n"
+        @"2. Neu tool tra ve error hoac 0 ket qua → DUNG LAI, tra loi user\n"
+        @"3. KHONG GOI TOOL LAP LAI qua 3 lan\n"
+        @"4. Tra loi user ngay sau khi co ket qua";
 
     NSMutableArray *messages = [NSMutableArray array];
     [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
@@ -171,14 +157,26 @@
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
     });
+
+    // Timeout 20s
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (ws.isWaiting) {
+            ws.isWaiting = NO;
+            ws.sendButton.enabled = YES;
+            ws.sendButton.alpha = 1.0;
+            [ws.spinner stopAnimating];
+            [ws.items addObject:@{@"type": @"error", @"text": @"Timeout 20s"}];
+            [ws.tableView reloadData];
+        }
+    });
 }
 
 - (void)scrollToBottom {
     if (self.items.count == 0) return;
     NSIndexPath *last = [NSIndexPath indexPathForRow:self.items.count - 1 inSection:0];
     [self.tableView scrollToRowAtIndexPath:last
-                          atScrollPosition:UITableViewScrollPositionBottom
-                                  animated:YES];
+                          atScrollPosition:UITableViewScrollPositionBottom animated:YES];
 }
 
 #pragma mark - AIStreamDelegate
@@ -186,14 +184,12 @@
 - (void)aiStreamDidReceiveText:(NSString *)text {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.currentAIResponse appendString:text];
-
         NSInteger lastIdx = (NSInteger)self.items.count - 1;
         if (lastIdx >= 0 && [self.items[lastIdx][@"type"] isEqualToString:@"ai"]) {
             self.items[lastIdx] = @{@"type": @"ai", @"text": [self.currentAIResponse copy]};
         } else {
             [self.items addObject:@{@"type": @"ai", @"text": [self.currentAIResponse copy]}];
         }
-
         [self.tableView reloadData];
         [self scrollToBottom];
     });
@@ -205,13 +201,9 @@
         self.isWaiting = NO;
         self.sendButton.enabled = YES;
         self.sendButton.alpha = 1.0;
-
-        [self.items addObject:@{
-            @"type": @"error",
-            @"text": error.localizedDescription ?: @"Loi khong xac dinh"
-        }];
+        [self.items addObject:@{@"type": @"error",
+            @"text": error.localizedDescription ?: @"Loi"}];
         [self.tableView reloadData];
-        [self scrollToBottom];
     });
 }
 
@@ -226,30 +218,15 @@
 
 - (void)aiDidCallTool:(NSString *)toolName args:(NSDictionary *)args result:(id)result {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *argsStr = @"";
-        if (args.count > 0) {
-            NSData *data = [NSJSONSerialization dataWithJSONObject:args options:0 error:nil];
-            argsStr = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-        }
-
         NSString *summary = @"OK";
         if ([result isKindOfClass:[NSDictionary class]]) {
             NSDictionary *d = (NSDictionary *)result;
             if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
             else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ ket qua", d[@"count"]];
-            else if (d[@"success"]) summary = [d[@"success"] boolValue] ? @"OK" : @"Fail";
-            else if (d[@"edited"]) summary = [NSString stringWithFormat:@"sua %@", d[@"edited"]];
-            else if (d[@"field_count"]) summary = [NSString stringWithFormat:@"%@ fields, %@ methods",
-                                                    d[@"field_count"], d[@"method_count"]];
-            else if (d[@"entity_managers"]) summary = @"scan hoan tat";
         }
-
-        [self.items addObject:@{
-            @"type": @"tool",
-            @"text": [NSString stringWithFormat:@"%@(%@) → %@", toolName, argsStr, summary]
-        }];
+        [self.items addObject:@{@"type": @"tool",
+            @"text": [NSString stringWithFormat:@"%@ → %@", toolName, summary]}];
         [self.tableView reloadData];
-        [self scrollToBottom];
     });
 }
 
@@ -305,8 +282,6 @@
     return cell;
 }
 
-- (void)reload {
-    [self.tableView reloadData];
-}
+- (void)reload { [self.tableView reloadData]; }
 
 @end
