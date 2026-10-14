@@ -13,7 +13,6 @@
     dispatch_once(&onceToken, ^{
         CGRect screen = [UIScreen mainScreen].bounds;
 
-        // iOS 13+: dùng windowScene
         if (@available(iOS 13.0, *)) {
             UIWindowScene *scene = nil;
             for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
@@ -35,19 +34,34 @@
         instance.windowLevel = UIWindowLevelAlert + 100;
         instance.backgroundColor = [UIColor clearColor];
         instance.hidden = YES;
-
-        instance.toolVC = [[ToolViewController alloc] init];
-        instance.rootViewController = instance.toolVC;
-
-        NSLog(@"[ToolWindow] Created");
+        // KHÔNG tạo ToolViewController ở đây — lazy create trong show
+        NSLog(@"[ToolWindow] Created (no VC)");
     });
     return instance;
 }
 
 - (void)show {
+    // Lazy create VC lần đầu show — lúc này game đã init xong
+    if (!self.toolVC) {
+        @try {
+            self.toolVC = [[ToolViewController alloc] init];
+            self.rootViewController = self.toolVC;
+            NSLog(@"[ToolWindow] VC created lazily");
+        } @catch (NSException *e) {
+            NSLog(@"[ToolWindow] VC create crash: %@", e);
+            return;
+        }
+    }
+
     self.hidden = NO;
     [self makeKeyAndVisible];
-    [self.toolVC reload];
+
+    @try {
+        [self.toolVC reload];
+    } @catch (NSException *e) {
+        NSLog(@"[ToolWindow] reload crash: %@", e);
+    }
+
     NSLog(@"[ToolWindow] SHOWN");
 }
 
