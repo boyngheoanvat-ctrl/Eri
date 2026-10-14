@@ -47,14 +47,23 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor clearColor];
-    [self buildUI];
-    [self buildVCs];
-    [self selectTab:0];
+
+    @try {
+        self.view.frame = [UIScreen mainScreen].bounds;
+        self.view.backgroundColor = [UIColor clearColor];
+        [self buildUI];
+        [self buildVCs];
+        [self selectTab:0];
+    } @catch (NSException *e) {
+        NSLog(@"[ToolViewController] viewDidLoad crash: %@", e);
+    }
 }
 
 - (void)buildUI {
     CGRect screen = self.view.bounds;
+    if (CGRectIsEmpty(screen)) {
+        screen = [UIScreen mainScreen].bounds;
+    }
 
     self.backdrop = [[UIView alloc] initWithFrame:screen];
     self.backdrop.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.5];
@@ -81,8 +90,8 @@
     [self.view addSubview:self.panel];
 
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
-    pan.delegate = self;                    // ← FIX
-    pan.cancelsTouchesInView = NO;          // ← FIX
+    pan.delegate = self;
+    pan.cancelsTouchesInView = NO;
     [self.panel addGestureRecognizer:pan];
 
     self.titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, panelW, 36)];
@@ -193,38 +202,76 @@
 }
 
 - (void)buildVCs {
-    self.aiVC = [[AIChatVC alloc] init];
-    self.dumpVC = [[DumperVC alloc] init];
-    self.memoryVC = [[MemoryVC alloc] init];
-    self.methodVC = [[MethodCallerVC alloc] init];
-    self.luaVC = [[LuaVC alloc] init];
-    self.espVC = [[ESPVC alloc] init];
+    // KHÔNG tạo gì cả — lazy create trong selectTab
 }
 
 - (void)selectTab:(NSInteger)index {
     if (self.currentVC) {
         [self.currentVC.view removeFromSuperview];
         [self.currentVC removeFromParentViewController];
+        self.currentVC = nil;
     }
 
     UIViewController *newVC = nil;
-    if (index == 0) { newVC = self.aiVC; self.subtitleLabel.text = @"AI Agent"; }
-    else if (index == 1) { newVC = self.dumpVC; self.subtitleLabel.text = @"IL2CPP Dumper"; }
-    else if (index == 2) { newVC = self.memoryVC; self.subtitleLabel.text = @"Memory Editor"; }
-    else if (index == 3) { newVC = self.methodVC; self.subtitleLabel.text = @"Method Caller"; }
-    else if (index == 4) { newVC = self.luaVC; self.subtitleLabel.text = @"Lua Console"; }
-    else if (index == 5) { newVC = self.espVC; self.subtitleLabel.text = @"ESP Overlay"; }
+    if (index == 0) {
+        if (!self.aiVC) {
+            @try { self.aiVC = [[AIChatVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] AIChatVC init crash: %@", e); return; }
+        }
+        newVC = self.aiVC;
+        self.subtitleLabel.text = @"AI Agent";
+    } else if (index == 1) {
+        if (!self.dumpVC) {
+            @try { self.dumpVC = [[DumperVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] DumperVC init crash: %@", e); return; }
+        }
+        newVC = self.dumpVC;
+        self.subtitleLabel.text = @"IL2CPP Dumper";
+    } else if (index == 2) {
+        if (!self.memoryVC) {
+            @try { self.memoryVC = [[MemoryVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] MemoryVC init crash: %@", e); return; }
+        }
+        newVC = self.memoryVC;
+        self.subtitleLabel.text = @"Memory Editor";
+    } else if (index == 3) bi {
+        if (!self.methodVC) {
+            @try { self.methodVC = [[MethodCallerVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] MethodCallerVC init crash: %@", e); return; }
+        }
+        newVC = self.methodVC;
+        self.subtitleLabel.text = @"Method Caller";
+    } else if (index == 4) {
+        if (!self.luaVC) {
+            @try { self.luaVC = [[LuaVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] LuaVC init crash: %@", e); return; }
+        }
+        newVC = self.luaVC;
+        self.subtitleLabel.text = @"Lua Console";
+    } else ifệt (index == 5) {
+        if (!self so.espVC) {
+            @try { self.espVC = [[ESPVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] ESPVC init crash: %@", e); return; }
+        }
+        newVC = self.espVC;
+        self.subtitleLabel.text = @"ESP Overlay";
+    }
 
     if (!newVC) return;
 
-    [self addChildViewController:newVC];
-    newVC.view.frame = self.contentView.bounds;
-    newVC.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.contentView addSubview:newVC.view];
-    [newVC didMoveToParentViewController:self];
+    @try {
+        [self addChildViewController:newVC];
+        newVC.view.frame = self.contentView.bounds;
+        newVC.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [self.contentView addSubview:newVC.view];
+        [newVC didMoveToParentViewController:self];
 
-    self.currentVC = newVC;
-    self.currentTab = index;
+        self.currentVC = newVC;
+        self.currentTab = index;
+    } @catch (NSException *e) {
+        NSLog(@"[ToolVC] selectTab %ld crash: %@", (long)index, e);
+        return;
+    }
 
     self.aiButton.active = (index == 0);
     self.dumpButton.active = (index == 1);
@@ -256,8 +303,8 @@
     }
 
     if (g.state == UIGestureRecognizerStateChanged) {
-        CGFloat newW = self.dragStartSize.width + p.x;
-        CGFloat newH = self.dragStartSize.height + p.y;
+        CGFloat newW = MAX(200, self.dragStartSize.width + p.x);
+        CGFloat newH = MAX(150, self.dragStartSize.height + p.y);
         self.panel.frame = CGRectMake(self.dragStartPoint.x, self.dragStartPoint.y, newW, newH);
         [self updateLayoutForPanelSize:CGSizeMake(newW, newH)];
     }
@@ -275,7 +322,7 @@
 
     self.titleBar.frame = CGRectMake(0, 0, panelW, 36);
     self.closeButton.frame = CGRectMake(panelW - 36, 4, 28, 28);
-    self.subtitleLabel.frame = CGRectMake(100, 0, panelW - 160, 36);
+    self.subtitleLabel.frame = CGRectMake(100, 0, MAX(0, panelW - 160), 36);
     self.railView.frame = CGRectMake(0, 36, railW, panelH - 36);
 
     for (UIView *v in self.railView.subviews) {
@@ -295,19 +342,18 @@
 }
 
 - (void)reload {
-    [self.aiVC reload];
-    [self.dumpVC reload];
-    [self.memoryVC reload];
-    [self.methodVC reload];
-    [self.luaVC reload];
-    [self.espVC reload];
+    @try { if (self.aiVC) [self.aiVC reload]; } @catch (NSException *e) {}
+    @try { if (self.dumpVC) [self.dumpVC reload]; } @catch (NSException *e) {}
+    @try { if (self.memoryVC) [self.memoryVC reload]; } @catch (NSException *e) {}
+    @try { if (self.methodVC) [self.methodVC reload]; } @catch (NSException *e) {}
+    @try { if (self.luaVC) [self.luaVC reload]; } @catch (NSException *e) {}
+    @try { if (self.espVC) [self.espVC reload]; } @catch (NSException *e) {}
 }
 
 #pragma mark - UIGestureRecognizerDelegate
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)g
        shouldReceiveTouch:(UITouch *)touch {
-    // Không cho window pan khi user chạm vào các control cần scroll / nhập liệu
     UIView *v = touch.view;
     while (v && v != self.panel) {
         if ([v isKindOfClass:[UITableView class]])  return NO;
