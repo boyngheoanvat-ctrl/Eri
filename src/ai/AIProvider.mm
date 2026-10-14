@@ -1,4 +1,6 @@
 #import "AIProvider.h"
+#import "AITool.h"
+#import "AIChatVC.h"
 
 @interface AIProvider ()
 @property (nonatomic, strong) NSURLSession *session;
@@ -15,9 +17,9 @@
         instance.session = [NSURLSession sessionWithConfiguration:
             [NSURLSessionConfiguration defaultSessionConfiguration]];
 
-        // ===== GROQ =====
+        // ===== GROQ API =====
         instance.baseURL = @"https://api.groq.com/openai/v1/chat/completions";
-        instance.apiKey = @"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";
+        instance.apiKey = @"gsk_DAN_KEY_GROQ_VAO_DAY";
         instance.model = @"openai/gpt-oss-120b";
     });
     return instance;
