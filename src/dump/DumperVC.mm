@@ -117,7 +117,6 @@
 #pragma mark - Dump
 
 - (void)startDump {
-    // Chống bấm 2 lần
     if (self.isDumping) return;
     self.isDumping = YES;
 
@@ -148,7 +147,6 @@
         };
 
         IL2CPPResolver *r = [IL2CPPResolver shared];
-
         if (!r || ![r resolve]) { fail(@"Loi: IL2CPP not resolved"); return; }
 
         Il2CppDomain *domain = [r domain_get];
@@ -193,11 +191,7 @@
                 if (!asm_) { skippedAssemblies++; continue; }
 
                 Il2CppImage *image = [r assembly_get_image:asm_];
-                if (!image) {
-                    // Không lấy được image (symbol fail) -> skip, KHÔNG deref mù
-                    skippedAssemblies++;
-                    continue;
-                }
+                if (!image) { skippedAssemblies++; continue; }
 
                 const char *imgNameC = [r image_get_name:image];
                 if (!imgNameC) { skippedAssemblies++; continue; }
@@ -225,7 +219,6 @@
                         NSString *nsName = (cns && [NSString stringWithUTF8String:cns])
                                           ? [NSString stringWithUTF8String:cns] : @"";
 
-                        // script.json
                         if (scriptFH) {
                             NSMutableString *jsonEntry = [NSMutableString string];
                             if (!firstJson) [jsonEntry appendString:@",\n"];
@@ -238,7 +231,6 @@
                             [scriptFH writeData:[jsonEntry dataUsingEncoding:NSUTF8StringEncoding]];
                         }
 
-                        // il2cpp.h
                         if (headerFH) {
                             NSString *full = nsName.length > 0
                                 ? [NSString stringWithFormat:@"%@_%@", nsName, clsName] : clsName;
@@ -251,13 +243,11 @@
                             [headerFH writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
                         }
 
-                        // dump.cs
                         if (csFH) {
                             NSMutableString *cs = [NSMutableString string];
                             if (nsName.length > 0) [cs appendFormat:@"namespace %@ {\n", nsName];
                             [cs appendFormat:@"class %@ {\n", clsName];
 
-                            // Methods
                             uint16_t mCount = 0;
                             NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
                             uint16_t maxM = (uint16_t)MIN((NSUInteger)mCount, (NSUInteger)10);
@@ -272,7 +262,6 @@
                                 [cs appendFormat:@"  void %s(); // RVA: 0x%llX Token: 0x%X\n", mn, rva, token];
                             }
 
-                            // Fields
                             uint16_t fCount = 0;
                             NSArray<NSValue *> *fList = [r class_get_fields:klass count:&fCount];
                             uint16_t maxF = (uint16_t)MIN((NSUInteger)fCount, (NSUInteger)10);
