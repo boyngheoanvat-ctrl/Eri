@@ -1,8 +1,13 @@
-#import <Foundation/Foundation.h>
+#ifndef ESPStructs_h
+#define ESPStructs_h
 
-#ifndef ESP_STRUCTS_H
-#define ESP_STRUCTS_H
+#include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Unity Vector3 (float, float, float) - 12 bytes
 typedef struct Vector3 {
     float x;
     float y;
@@ -14,11 +19,8 @@ typedef struct Vector2 {
     float y;
 } Vector2;
 
-typedef struct Quaternion {
-    float x;
-    float y;
-    float z;
-    float w;
-} Quaternion;
+#ifdef __cplusplus
+}
+#endif
 
 #endif
