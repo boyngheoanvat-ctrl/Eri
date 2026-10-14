@@ -22,6 +22,11 @@
 // Write
 - (BOOL)writeValue:(NSString *)value at:(vm_address_t)addr type:(MemValueType)type;
 
+// Edit all — sửa nhiều địa chỉ
+- (NSInteger)editAll:(NSArray<MemoryResult *> *)results
+               value:(NSString *)value
+                type:(MemValueType)type;
+
 // Region info
 - (NSString *)regionInfoAt:(vm_address_t)addr;
 
