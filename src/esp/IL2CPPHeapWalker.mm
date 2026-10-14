@@ -22,7 +22,6 @@
     Il2CppClass *targetClass = [self findClass:className resolver:r];
     if (!targetClass) return;
 
-    // Cách 1: Duyệt qua static fields của các manager class
     [self enumerateViaStaticFields:targetClass resolver:r block:block limit:limit];
 }
 
@@ -33,7 +32,6 @@
                            block:(HeapObjectBlock)block
                            limit:(NSInteger)limit {
 
-    // Danh sách class có thể chứa list entity
     NSArray *candidateClasses = @[
         @"ShowPlayerManager", @"EntityManager", @"GameManager",
         @"ShowEntityManager", @"BattleManager", @"PlayerManager",
@@ -45,7 +43,6 @@
         Il2CppClass *managerClass = [self findClass:candidate resolver:r];
         if (!managerClass) continue;
 
-        // Duyệt fields
         uint16_t fCount = 0;
         const FieldInfo **fList = [r class_get_fields:managerClass count:&fCount];
         for (uint16_t i = 0; i < fCount; i++) {
@@ -54,19 +51,16 @@
             NSString *fieldName = [NSString stringWithUTF8String:fn];
             NSString *lower = fieldName.lowercaseString;
 
-            // Field chứa entity
             if ([lower containsString:@"entit"] ||
                 [lower containsString:@"player"] ||
                 [lower containsString:@"list"] ||
                 [lower containsString:@"all"]) {
 
-                // Lấy giá trị static field
                 void *fieldValue = [self getStaticFieldValue:managerClass
                                                        field:(FieldInfo *)fList[i]
                                                     resolver:r];
                 if (!fieldValue) continue;
 
-                // Enumerate list
                 [self enumerateList:fieldValue
                         targetClass:targetClass
                               block:block
@@ -93,7 +87,6 @@
                 limit:(NSInteger)limit {
     if (!listPtr) return;
 
-    // Il2Cpp List<T>: +0x10 = T* items, +0x18 = int size
     void *items = *(void **)((char *)listPtr + 0x10);
     uint32_t size = *(uint32_t *)((char *)listPtr + 0x18);
 
@@ -104,11 +97,9 @@
         void *item = *(void **)((char *)items + i * 8);
         if (!item) continue;
 
-        // Kiểm tra class của item
         Il2CppClass *itemClass = [self classOfObject:item];
         if (!itemClass) continue;
 
-        // So sánh tên class
         const char *cname = itemClass->name;
         if (cname && strcmp(cname, targetClass->name) == 0) {
             block(item, itemClass);
@@ -132,9 +123,9 @@
     for (int a = 0; a < domain->assembly_count; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
         if (!asm_) continue;
-        void *imgPtr = *(voidWalker **)asm_;
-        if (!imgPtr).m continue;
-        Il2CppImage *image =m (Il2C    ppImage *)imgPtr;
+        void *imgPtr = *(void **)asm_;
+        if (!imgPtr) continue;
+        Il2CppImage *image = (Il2CppImage *)imgPtr;
         if (!image || !image->name) continue;
 
         size_t count = [r image_get_class_count:image];
