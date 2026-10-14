@@ -13,7 +13,7 @@ static BOOL gScanned = NO;
     dispatch_once(&onceToken, ^{
         instance = [[GameFingerprint alloc] init];
         [instance setupSynonyms];
-        [instance scan];
+        // KHÔNG scan ở đây — lazy scan trong detectedGame
     });
     return instance;
 }
@@ -21,20 +21,10 @@ static BOOL gScanned = NO;
 - (void)setupSynonyms {
     gSynonyms = @{
         @"map": @[
-            @"CanSight",
-            @"CalcVisible",
-            @"RefreshVisible",
-            @"SetVisible",
-            @"CanSee",
-            @"IsVisible",
-            @"HasVision",
-            @"IsInSight",
-            @"OnSeeEntity",
-            @"SetVision",
-            @"CanView",
-            @"IsShow",
-            @"CheckVisible",
-            @"UpdateVisible",
+            @"CanSight", @"CalcVisible", @"RefreshVisible", @"SetVisible",
+            @"CanSee", @"IsVisible", @"HasVision", @"IsInSight",
+            @"OnSeeEntity", @"SetVision", @"CanView", @"IsShow",
+            @"CheckVisible", @"UpdateVisible",
         ],
         @"speed": @[
             @"SetMoveSpeed", @"get_MoveSpeed",
@@ -99,6 +89,15 @@ static BOOL gScanned = NO;
     IL2CPPResolver *r = [IL2CPPResolver shared];
     if (![r resolve]) {
         gDetectedGame = @"Unknown";
+        gScanned = NO;
+        return;
+    }
+
+    Il2CppDomain *domain = [r domain_get];
+    if (!domain || !domain->assemblies || domain->assembly_count == 0) {
+        NSLog(@"[GameFingerprint] IL2CPP not ready yet");
+        gDetectedGame = @"Unknown";
+        gScanned = NO;
         return;
     }
 
@@ -125,7 +124,12 @@ static BOOL gScanned = NO;
     NSLog(@"[GameFingerprint] detected = %@", gDetectedGame);
 }
 
-- (NSString *)detectedGame { return gDetectedGame ?: @"Unknown"; }
+- (NSString *)detectedGame {
+    if (!gScanned) {
+        [self scan];
+    }
+    return gDetectedGame ?: @"Unknown";
+}
 
 - (NSDictionary *)fingerprintInfo {
     return @{
@@ -142,9 +146,10 @@ static BOOL gScanned = NO;
 - (BOOL)hasAnyMethodNamed:(NSArray<NSString *> *)names {
     IL2CPPResolver *r = [IL2CPPResolver shared];
     Il2CppDomain *domain = [r domain_get];
-    if (!domain) return NO;
+    if (!domain || !domain->assemblies) return NO;
 
-    for (int a = 0; a < MIN((int)domain->assembly_count, 5); a++) {
+    int maxAsm = MIN((int)domain->assembly_count, 5);
+    for (int a = 0; a < maxAsm; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
         if (!asm_) continue;
         Il2CppImage *image = [r assembly_get_image:asm_];
@@ -174,9 +179,10 @@ static BOOL gScanned = NO;
 - (BOOL)hasAnyClassNamed:(NSArray<NSString *> *)names {
     IL2CPPResolver *r = [IL2CPPResolver shared];
     Il2CppDomain *domain = [r domain_get];
-    if (!domain) return NO;
+    if (!domain || !domain->assemblies) return NO;
 
-    for (int a = 0; a < MIN((int)domain->assembly_count, 5); a++) {
+    int maxAsm = MIN((int)domain->assembly_count, 5);
+    for (int a = 0; a < maxAsm; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
         if (!asm_) continue;
         Il2CppImage *image = [r assembly_get_image:asm_];
@@ -210,12 +216,13 @@ static BOOL gScanned = NO;
     IL2CPPResolver *r = [IL2CPPResolver shared];
     if (![r resolve]) return @[];
     Il2CppDomain *domain = [r domain_get];
-    if (!domain) return @[];
+    if (!domain || !domain->assemblies) return @[];
 
     NSMutableArray *found = [NSMutableArray array];
 
     @try {
-        for (int a = 0; a < MIN((int)domain->assembly_count, 5); a++) {
+        int maxAsm = MIN((int)domain->assembly_count, 5);
+        for (int a = 0; a < maxAsm; a++) {
             Il2CppAssembly *asm_ = domain->assemblies[a];
             if (!asm_) continue;
             Il2CppImage *image = [r assembly_get_image:asm_];
