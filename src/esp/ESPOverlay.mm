@@ -6,7 +6,6 @@
 @interface ESPOverlay ()
 @property (nonatomic, strong) CADisplayLink *displayLink;
 @property (nonatomic, strong) NSMutableArray *entities;
-@property (nonatomic, assign) BOOL hidden;
 @end
 
 @implementation ESPOverlay
@@ -63,9 +62,17 @@
 
 - (void)startDrawing {
     if (self.displayLink) return;
+
     self.displayLink = [CADisplayLink displayLinkWithTarget:self
                                                     selector:@selector(tick:)];
-    self.displayLink.preferredFrameRateRange = CAFrameRateRangeMake(15, 30, 30);
+
+    // Fix warning iOS 15
+    if (@available(iOS 15.0, *)) {
+        self.displayLink.preferredFrameRateRange = CAFrameRateRangeMake(15, 30, 30);
+    } else {
+        self.displayLink.preferredFramesPerSecond = 30;
+    }
+
     [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
 
@@ -104,18 +111,24 @@
 
     if (!getPosition) return;
 
-    // Lấy danh sách entity objects
-    // Cần dùng il2cpp để enumerate objects — phức tạp
-    // Đơn giản: scan static field của class chứa list entity
+    // TODO: Enumerate all ShowEntity objects
+    // Cần il2cpp_gc_heap_foreach hoặc tìm list entity trong game
+    //
+    // Ví dụ logic:
+    // 1. Tìm class quản lý entity (VD: EntityManager)
+    // 2. Lấy list ShowEntity
+    // 3. Với mỗi entity:
+    //    - gọi getPosition → Vector3
+    //    - gọi getHp, getHpMax → HP bar
+    //    - gọi getName → tên
+    //    - WorldToScreen → convert tọa độ
+    //    - Thêm vào self.entities
 
-    // TODO: Tích hợp với logic game
-    // Hiện tại để trống — chỉ khung
-
-    // Note: Để ESP hoạt động thật cần:
-    // 1. Enumerate tất cả object của ShowEntity (il2cpp_gc_heap_foreach)
-    // 2. Với mỗi object: get_Position, get_m_Hp, get_m_HpMax
-    // 3. WorldToScreen để convert 3D → 2D
-    // 4. Draw box + HP bar + name
+    // Test: thêm 1 entity giả để test ESP
+    // (xoá khi tích hợp thật)
+    if (self.entities.count == 0) {
+        // Không thêm gì — để trống
+    }
 }
 
 - (Il2CppClass *)findClass:(NSString *)name resolver:(IL2CPPResolver *)r domain:(Il2CppDomain *)domain {
