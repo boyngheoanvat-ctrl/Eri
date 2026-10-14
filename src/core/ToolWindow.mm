@@ -13,28 +13,51 @@
     dispatch_once(&onceToken, ^{
         CGRect screen = [UIScreen mainScreen].bounds;
 
-        if (@available(iOS 13.0, *)) {
-            UIWindowScene *scene = nil;
-            for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
-                if ([s isKindOfClass:[UIWindowScene class]]) {
-                    scene = (UIWindowScene *)s;
-                    break;
+        @try {
+            if (@available(iOS 13.0, *)) {
+                UIWindowScene *scene = nil;
+                for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
+                    if ([s isKindOfClass:[UIWindowScene class]] &&
+                        s.activationState == UISceneActivationStateForegroundActive) {
+                        scene = (UIWindowScene *)s;
+                        break;
+                    }
                 }
-            }
-            if (scene) {
-                instance = [[ToolWindow alloc] initWithWindowScene:scene];
-                instance.frame = screen;
+
+                // Fallback: lấy bất kỳ UIWindowScene nào
+                if (!scene) {
+                    for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
+                        if ([s isKindOfClass:[UIWindowScene class]]) {
+                            scene = (UIWindowScene *)s;
+                            break;
+                        }
+                    }
+                }
+
+                if (scene) {
+                    instance = [[ToolWindow alloc] initWithWindowScene:scene];
+                } else {
+                    instance = [[ToolWindow alloc] initWithFrame:screen];
+                }
             } else {
                 instance = [[ToolWindow alloc] initWithFrame:screen];
             }
-        } else {
+        } @catch (NSException *e) {
+            NSLog(@"[ToolWindow] init scene crash: %@", e);
+            instance = nil;
+        }
+
+        // Fallback tuyệt đối
+        if (!instance) {
             instance = [[ToolWindow alloc] initWithFrame:screen];
         }
 
+        instance.frame = screen;
         instance.windowLevel = UIWindowLevelAlert + 100;
         instance.backgroundColor = [UIColor clearColor];
         instance.hidden = YES;
         // KHÔNG tạo ToolViewController ở đây — lazy create trong show
+
         NSLog(@"[ToolWindow] Created (no VC)");
     });
     return instance;
