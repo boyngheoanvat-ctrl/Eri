@@ -46,13 +46,11 @@
                     NSString *clsName = [NSString stringWithUTF8String:cname];
                     if (!clsName) continue;
 
-                    // Lọc theo keyword nếu có
                     if (keyword.length > 0 &&
                         [clsName rangeOfString:keyword options:NSCaseInsensitiveSearch].location == NSNotFound) {
                         continue;
                     }
 
-                    // Kiểm tra có static_fields không
                     void *staticData = [r class_get_static_field_data:klass];
                     if (!staticData) continue;
 
@@ -69,8 +67,6 @@
 
                         int32_t off = [r field_get_offset:f];
 
-                        // Chỉ lấy field có offset >= 0 (field instance)
-                        // Static field có offset âm hoặc offset đặc biệt
                         if (off < 0) {
                             NSString *fname = [NSString stringWithUTF8String:fn];
                             [staticFields addObject:@{
@@ -81,9 +77,12 @@
                     }
 
                     if (staticFields.count > 0) {
+                        const char *cns = [r class_get_namespace:klass];
+                        NSString *nsName = (cns && [NSString stringWithUTF8String:cns])
+                                          ? [NSString stringWithUTF8String:cns] : @"";
                         [result addObject:@{
                             @"class": clsName,
-                            @"namespace": [NSString stringWithUTF8String:([r class_get_namespace:klass] ?: "")] ?: @"",
+                            @"namespace": nsName ?: @"",
                             @"image": imgName ?: @"",
                             @"staticFields": staticFields,
                             @"staticData": [NSValue valueWithPointer:staticData],
@@ -105,13 +104,6 @@
     if (!staticData) return NULL;
 
     int32_t off = [r field_get_offset:field];
-
-    // Field static thường có offset âm hoặc là offset trong vùng static data
-    // Đối chiếu il2cpp.h để chắc chắn
-    if (off < 0) {
-        // Offset âm: tính từ staticData - offset (thường vậy, tuỳ version)
-        return (char *)staticData + off;
-    }
     return (char *)staticData + off;
 }
 
