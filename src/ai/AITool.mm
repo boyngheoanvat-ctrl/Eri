@@ -23,7 +23,6 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
 }
 
 + (void)registerAll {
-    // Tool: find_hack_methods (SIÊU NHẸ)
     [self registerTool:[AITool toolWithName:@"find_hack_methods"
         description:@"Tim ham hack — CHI 1 LAN"
         parameters:@{@"type": @"object", @"properties": @{
@@ -32,7 +31,6 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
             return [AITool findHack:args[@"hack_type"] ?: @""];
         }]];
 
-    // Tool: search_classes
     [self registerTool:[AITool toolWithName:@"search_classes"
         description:@"Tim class runtime"
         parameters:@{@"type": @"object", @"properties": @{
@@ -41,7 +39,6 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
             return [AITool searchClasses:args[@"keyword"] ?: @""];
         }]];
 
-    // Tool: dump_class_runtime
     [self registerTool:[AITool toolWithName:@"dump_class_runtime"
         description:@"Dump class runtime"
         parameters:@{@"type": @"object", @"properties": @{
@@ -50,7 +47,6 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
             return [AITool dumpClassRuntime:args[@"class_name"] ?: @""];
         }]];
 
-    // Tool: read_file
     [self registerTool:[AITool toolWithName:@"read_file"
         description:@"Grep file"
         parameters:@{@"type": @"object", @"properties": @{
@@ -67,17 +63,17 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
         @"parameters": self.parameters ?: @{@"type": @"object", @"properties": @{}}}};
 }
 
-#pragma mark - findHack (SIÊU NHẸ)
+#pragma mark - findHack
 
 + (id)findHack:(NSString *)hackType {
     if (hackType.length == 0) return @{@"error": @"required"};
 
     NSDictionary *patterns = @{
-        @"map": @[@"map", @"teleport", @"warp", @"moveto", @"setpos"],
-        @"speed": @[@"speed", @"velocity", @"move"],
-        @"damage": @[@"damage", @"attack", @"hit"],
-        @"health": @[@"health", @"hp", @"life", @"god"],
-        @"money": @[@"money", @"gold", @"coin"],
+        @"map":     @[@"map", @"teleport", @"warp", @"moveto", @"setpos"],
+        @"speed":   @[@"speed", @"velocity", @"move"],
+        @"damage":  @[@"damage", @"attack", @"hit"],
+        @"health":  @[@"health", @"hp", @"life", @"god"],
+        @"money":   @[@"money", @"gold", @"coin"],
     };
     NSArray *keywords = patterns[hackType.lowercaseString] ?: @[hackType];
 
@@ -89,14 +85,13 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
     NSMutableArray *found = [NSMutableArray array];
 
     @try {
-        // CHỈ scan 1 assembly, 300 class, 3 kết quả
         if (domain->assembly_count > 0) {
             Il2CppAssembly *asm_ = domain->assemblies[0];
             if (asm_) {
-                void *imgPtr = *(void **)asm_;
-                if (imgPtr) {
-                    Il2CppImage *image = (Il2CppImage *)imgPtr;
-                    if (image && image->name) {
+                Il2CppImage *image = [r assembly_get_image:asm_];
+                if (image) {
+                    const char *imgNameC = [r image_get_name:image];
+                    if (imgNameC) {
                         size_t count = [r image_get_class_count:image];
                         size_t maxClasses = MIN(count, (size_t)300);
 
@@ -106,20 +101,23 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
                             const char *cname = [r class_get_name:klass];
                             if (!cname) continue;
                             NSString *className = [NSString stringWithUTF8String:cname];
+                            if (!className) continue;
 
                             uint16_t mCount = 0;
-                            const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
-                            if (!mList) continue;
+                            NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
 
                             for (uint16_t j = 0; j < mCount && found.count < 3; j++) {
-                                const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
+                                MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
+                                if (!m) continue;
+                                const char *mn = [r method_get_name:m];
                                 if (!mn) continue;
                                 NSString *mName = [NSString stringWithUTF8String:mn];
+                                if (!mName) continue;
                                 NSString *mLower = mName.lowercaseString;
 
                                 for (NSString *kw in keywords) {
                                     if ([mLower containsString:kw.lowercaseString]) {
-                                        void *ptr = [r method_get_pointer:(MethodInfo *)mList[j]];
+                                        void *ptr = [r method_get_pointer:m];
                                         uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
                                         [found addObject:@{
                                             @"class": className,
@@ -130,7 +128,6 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
                                     }
                                 }
                             }
-                            if (mList) free(mList);
                         }
                     }
                 }
@@ -158,10 +155,12 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
             if (a > 3) break;
             Il2CppAssembly *asm_ = domain->assemblies[a];
             if (!asm_) continue;
-            void *imgPtr = *(void **)asm_;
-            if (!imgPtr) continue;
-            Il2CppImage *image = (Il2CppImage *)imgPtr;
-            if (!image || !image->name) continue;
+
+            Il2CppImage *image = [r assembly_get_image:asm_];
+            if (!image) continue;
+
+            const char *imgNameC = [r image_get_name:image];
+            if (!imgNameC) continue;
 
             size_t count = [r image_get_class_count:image];
             for (size_t i = 0; i < count && results.count < 10; i++) {
@@ -171,14 +170,16 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
                 const char *cns = [r class_get_namespace:klass];
                 if (!cname) continue;
                 NSString *name = [NSString stringWithUTF8String:cname];
-                NSString *ns = cns ? [NSString stringWithUTF8String:cns] : @"";
+                if (!name) continue;
+                NSString *ns = (cns && [NSString stringWithUTF8String:cns])
+                              ? [NSString stringWithUTF8String:cns] : @"";
                 if ([name.lowercaseString containsString:lower] ||
                     [ns.lowercaseString containsString:lower]) {
-                    [results addObject:@{@"name": name, @"namespace": ns}];
+                    [results addObject:@{@"name": name, @"namespace": ns ?: @""}];
                 }
             }
         }
-    } @catch (NSException *e) { return @{@"error": e.reason}; }
+    } @catch (NSException *e) { return @{@"error": e.reason ?: @"Exception"}; }
     return @{@"count": @(results.count), @"classes": results};
 }
 
@@ -195,10 +196,12 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
     for (int a = 0; a < domain->assembly_count && !klass; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
         if (!asm_) continue;
-        void *imgPtr = *(void **)asm_;
-        if (!imgPtr) continue;
-        Il2CppImage *image = (Il2CppImage *)imgPtr;
-        if (!image || !image->name) continue;
+
+        Il2CppImage *image = [r assembly_get_image:asm_];
+        if (!image) continue;
+
+        const char *imgNameC = [r image_get_name:image];
+        if (!imgNameC) continue;
 
         size_t count = [r image_get_class_count:image];
         for (size_t i = 0; i < count; i++) {
@@ -207,6 +210,7 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
             const char *cname = [r class_get_name:k];
             if (!cname) continue;
             NSString *n = [NSString stringWithUTF8String:cname];
+            if (!n) continue;
             if ([n.lowercaseString isEqualToString:lower]) { klass = k; break; }
         }
     }
@@ -214,26 +218,36 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
 
     NSMutableArray *fields = [NSMutableArray array];
     uint16_t fCount = 0;
-    const FieldInfo **fList = [r class_get_fields:klass count:&fCount];
+    NSArray<NSValue *> *fList = [r class_get_fields:klass count:&fCount];
     for (uint16_t j = 0; j < fCount && fields.count < 50; j++) {
-        const char *fn = [r field_get_name:(FieldInfo *)fList[j]];
-        int32_t off = [r field_get_offset:(FieldInfo *)fList[j]];
-        if (fn) [fields addObject:@{@"name": [NSString stringWithUTF8String:fn],
-                                     @"offset": [NSString stringWithFormat:@"0x%X", off]}];
+        FieldInfo *f = (FieldInfo *)fList[j].pointerValue;
+        if (!f) continue;
+        const char *fn = [r field_get_name:f];
+        int32_t off = [r field_get_offset:f];
+        if (fn) {
+            [fields addObject:@{
+                @"name": [NSString stringWithUTF8String:fn],
+                @"offset": [NSString stringWithFormat:@"0x%X", off]
+            }];
+        }
     }
-    if (fList) free(fList);
 
     NSMutableArray *methods = [NSMutableArray array];
     uint16_t mCount = 0;
-    const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
+    NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
     for (uint16_t j = 0; j < mCount && methods.count < 50; j++) {
-        const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
-        void *ptr = [r method_get_pointer:(MethodInfo *)mList[j]];
+        MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
+        if (!m) continue;
+        const char *mn = [r method_get_name:m];
+        void *ptr = [r method_get_pointer:m];
         uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
-        if (mn) [methods addObject:@{@"name": [NSString stringWithUTF8String:mn],
-                                      @"rva": [NSString stringWithFormat:@"0x%llX", rva]}];
+        if (mn) {
+            [methods addObject:@{
+                @"name": [NSString stringWithUTF8String:mn],
+                @"rva": [NSString stringWithFormat:@"0x%llX", rva]
+            }];
+        }
     }
-    if (mList) free(mList);
 
     return @{@"class": className,
              @"field_count": @(fields.count),
@@ -266,8 +280,10 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
     for (NSInteger i = 0; i < (NSInteger)lines.count && matches.count < 20; i++) {
         NSString *line = (NSString *)lines[i];
         if ([line.lowercaseString containsString:kwLower]) {
-            [matches addObject:@{@"line": @(i + 1),
-                                 @"text": [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]}];
+            [matches addObject:@{
+                @"line": @(i + 1),
+                @"text": [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]
+            }];
         }
     }
     return @{@"count": @(matches.count), @"matches": matches};
