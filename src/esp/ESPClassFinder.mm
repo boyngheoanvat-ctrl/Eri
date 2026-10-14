@@ -10,7 +10,7 @@
     return instance;
 }
 
-#pragma mark - Public API (from .h)
+#pragma mark - Public API
 
 - (NSArray<NSDictionary *> *)findClassesByName:(NSString *)name {
     NSMutableArray<NSDictionary *> *result = [NSMutableArray array];
@@ -84,13 +84,14 @@
     if (!domain || !domain->assemblies) return result;
 
     NSArray<NSString *> *managerKeywords = @[
-        @"manager", @"controller", @"battle",", @"world", @"game",
+        @"manager", @"controller", @"battle", @"world", @"game",
     ];
 
     NSArray<NSString *> *entityKeywords = @[
-        @"entity", @"fighter", @"player", @"unit @"actor",
+        @"entity", @"fighter", @"player", @"unit", @"actor",
         @"hero", @"monster", @"character",
     ];
+    (void)entityKeywords;
 
     int maxAssemblies = MIN((int)domain->assembly_count, 8);
 
@@ -121,7 +122,6 @@
                     }
                     if (!hasMgrKeyword) continue;
 
-                    // Phải có field List<Entity> hoặc method trả list
                     uint16_t fCount = 0;
                     NSArray<NSValue *> *fList = [r class_get_fields:klass count:&fCount];
 
@@ -137,7 +137,6 @@
                         if (!fname) continue;
                         NSString *fl = fname.lowercaseString;
 
-                        // Field tên chứa "list"/"all"/"entit"
                         BOOL nameMatch = [fl containsString:@"list"] ||
                                          [fl containsString:@"all"] ||
                                          [fl containsString:@"entit"] ||
@@ -151,7 +150,6 @@
 
                     if (!hasEntityList) continue;
 
-                    // Điểm ưu tiên
                     NSUInteger score = 0;
                     if ([cl containsString:@"battle"]) score += 30;
                     if ([cl containsString:@"game"])   score += 20;
@@ -212,7 +210,6 @@
 
                     if (![clsName.lowercaseString containsString:@"camera"]) continue;
 
-                    // Phải có method WorldToScreenPoint
                     uint16_t mCount = 0;
                     NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
                     BOOL hasW2S = NO;
@@ -273,7 +270,6 @@
                     Il2CppClass *klass = [r image_get_class:image index:i];
                     if (!klass) continue;
 
-                    // Chỉ class có static field data
                     void *staticData = [r class_get_static_field_data:klass];
                     if (!staticData) continue;
 
@@ -297,7 +293,7 @@
                         if (!isList) continue;
 
                         int32_t off = [r field_get_offset:f];
-                        if (off >= 0) continue;  // chỉ static
+                        if (off >= 0) continue;
 
                         [staticLists addObject:@{
                             @"name": fname,
@@ -422,7 +418,7 @@
     return report;
 }
 
-#pragma mark - Existing API
+#pragma mark - List fields/methods
 
 - (NSArray<NSDictionary *> *)listFieldsOfClass:(Il2CppClass *)klass {
     NSMutableArray<NSDictionary *> *result = [NSMutableArray array];
