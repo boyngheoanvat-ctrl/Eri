@@ -33,16 +33,12 @@ libtool_FILES = \
     src/esp/ESPClassFinder.mm
 
 libtool_CFLAGS = -fobjc-arc \
-    -I. \
-    -Isrc \
-    -Isrc/core \
-    -Isrc/ui \
-    -Isrc/ai \
-    -Isrc/memory \
-    -Isrc/dump \
-    -Isrc/lua \
-    -Isrc/esp \
+    -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
+    -Isrc/memory -Isrc/dump -Isrc/lua -Isrc/esp \
+    -Ilibs \
     -Wno-everything
+
+libtool_LDFLAGS = -Llibs -llua
 
 libtool_FRAMEWORKS = Foundation UIKit CoreGraphics QuartzCore
 libtool_LIBRARIES = objc
