@@ -21,36 +21,32 @@ static const CGFloat kInputBarHeight = 50;
 
 @implementation AIChatVC
 
+#pragma mark - TEST A: tắt hết registerAll
+
 - (void)viewDidLoad {
     [super viewDidLoad];
-    NSLog(@"[AI] viewDidLoad START");
+    NSLog(@"[TEST-A] viewDidLoad START");
 
     self.view.backgroundColor = [ToolTheme shared].background;
     self.items = [NSMutableArray array];
-    NSLog(@"[AI] after init vars");
+    NSLog(@"[TEST-A] after init vars");
 
-    NSLog(@"[AI] registerAll tools...");
-    [AITool registerAll];
-    [AIMemoryTool registerAll];
-    [AIESPTool registerAll];
-    NSLog(@"[AI] all registerAll DONE");
+    // ===== TẮT HẾT registerAll =====
+    // [AITool registerAll];
+    // [AIMemoryTool registerAll];
+    // [AIESPTool registerAll];
 
-    NSLog(@"[AI] buildUI...");
+    NSLog(@"[TEST-A] before buildUI");
     [self buildUI];
-    NSLog(@"[AI] after buildUI");
+    NSLog(@"[TEST-A] after buildUI");
 
-    NSLog(@"[AI] setupKeyboardObservers...");
+    NSLog(@"[TEST-A] before setupKeyboardObservers");
     [self setupKeyboardObservers];
-    NSLog(@"[AI] after setupKeyboardObservers");
+    NSLog(@"[TEST-A] after setupKeyboardObservers");
 
-    // GameFingerprint có scan an toàn (guard)
+    // ===== TẮT LUÔN GameFingerprint =====
+    // NSString *game = [[GameFingerprint shared] detectedGame];
     NSString *game = @"Unknown";
-    @try {
-        game = [[GameFingerprint shared] detectedGame];
-    } @catch (NSException *e) {
-        NSLog(@"[AI] GameFingerprint crash: %@", e);
-        game = @"Unknown";
-    }
 
     NSString *welcome = [NSString stringWithFormat:
         @"AI Agent ready.\nGame: %@\nHoi: hack map, hack speed, tim class...", game];
@@ -58,7 +54,7 @@ static const CGFloat kInputBarHeight = 50;
     [self.tableView reloadData];
     [self scrollToBottomAnimated:NO];
 
-    NSLog(@"[AI] viewDidLoad DONE");
+    NSLog(@"[TEST-A] viewDidLoad DONE");
 }
 
 - (void)dealloc {
@@ -178,7 +174,7 @@ static const CGFloat kInputBarHeight = 50;
     }];
 }
 
-#pragma mark - Send
+#pragma mark - Send (TEST: không gọi tool)
 
 - (void)sendTapped {
     NSString *text = self.inputField.text;
@@ -195,71 +191,17 @@ static const CGFloat kInputBarHeight = 50;
     self.sendButton.alpha = 0.5;
     [self.spinner startAnimating];
 
-    NSString *game = @"Unknown";
-    @try {
-        game = [[GameFingerprint shared] detectedGame];
-    } @catch (NSException *e) {
-        NSLog(@"[AI] GameFingerprint crash: %@", e);
-    }
-
-    NSString *sysPrompt = [NSString stringWithFormat:
-        @"Ban la AI agent hack game IL2CPP iOS. Tra loi tieng Viet ngan gon, chinh xac.\n"
-        @"Game hien tai: %@\n"
-        @"\n"
-        @"=== TOOL ===\n"
-,        @"1. find_concept(concept) — DUNG DAU TIEN\n"
-        @"   concept: map, speed, damage, health, mana, money cooldown, ammo, level\n"
-        @"2. find_method_global(keyword) — tim method toan bo\n"
-        @"3. dump_class_runtime(class_name) — xem chi tiet class\n"
-        @"4. search_classes(keyword) — tim class\n"
-        @"5. find_classes_by_method(method_name)\n"
-        @"6. find_method_in_class(class_name, keyword)\n"
-        @"7. find_field_in_class(class_name, keyword)\n"
-        @"8. read_file(filename, keyword)\n"
-        @"\n"
-        @"=== QUY TAC ===\n"
-        @"1. Cau hoi 'hack X' → find_concept('X')\n"
-        @"2. Neu 0 ket qua → find_method_global voi tu khoa tuong tu\n"
-        @"3. Cau hoi ve class cu the → dump_class_runtime\n"
-        @"4. Tra loi RO: game + class + method + RVA\n"
-        @"5. Khong bia RVA. Khong lap tool qua 3 lan.", game];
-
-    NSMutableArray *messages = [NSMutableArray array];
-    [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
-
-    NSInteger maxHistory = 6;
-    NSInteger start = MAX(0, (NSInteger)self.items.count - maxHistory);
-    for (NSInteger i = start; i < (NSInteger)self.items.count; i++) {
-        NSDictionary *item = self.items[i];
-        NSString *type = item[@"type"];
-        if ([type isEqualToString:@"user"]) {
-            [messages addObject:@{@"role": @"user", @"content": item[@"text"]}];
-        } else if ([type isEqualToString:@"ai"]) {
-            [messages addObject:@{@"role": @"assistant", @"content": item[@"text"]}];
-        }
-    }
-
-    NSMutableArray *tools = [NSMutableArray array];
-    for (AITool *t in [AITool allTools]) {
-        [tools addObject:[t openAISchema]];
-    }
-
-    __weak typeof(self) ws = self;
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
-    });
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60 * NSEC_PER_SEC)),
+    // TEST: không gọi AI, chỉ trả lời local
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        if (ws.isWaiting) {
-            ws.isWaiting = NO;
-            ws.sendButton.enabled = YES;
-            ws.sendButton.alpha = 1.0;
-            [ws.spinner stopAnimating];
-            [ws.items addObject:@{@"type": @"error", @"text": @"Timeout 60s"}];
-            [ws.tableView reloadData];
-            [ws scrollToBottomAnimated:YES];
-        }
+        [self.items addObject:@{@"type": @"ai", @"text": @"[TEST-A] Da nhan tin nhan (khong goi AI)"}];
+        [self.tableView reloadData];
+        [self scrollToBottomAnimated:YES];
+
+        self.isWaiting = NO;
+        self.sendButton.enabled = YES;
+        self.sendButton.alpha = 1.0;
+        [self.spinner stopAnimating];
     });
 }
 
@@ -318,14 +260,8 @@ static const CGFloat kInputBarHeight = 50;
 
 - (void)aiDidCallTool:(NSString *)toolName args:(NSDictionary *)args result:(id)result {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *summary = @"OK";
-        if ([result isKindOfClass:[NSDictionary class]]) {
-            NSDictionary *d = (NSDictionary *)result;
-            if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
-            else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ ket qua", d[@"count"]];
-        }
         [self.items addObject:@{@"type": @"tool",
-            @"text": [NSString stringWithFormat:@"%@ → %@", toolName, summary]}];
+            @"text": [NSString stringWithFormat:@"%@ → OK", toolName]}];
         [self.tableView reloadData];
         [self scrollToBottomAnimated:YES];
     });
