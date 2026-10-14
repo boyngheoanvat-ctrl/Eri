@@ -182,4 +182,126 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
 
                 uint16_t mCount = 0;
                 const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
-                for (uint16_t
+                for (uint16_t j = 0; j < mCount; j++) {
+                    const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
+                    if (!mn) continue;
+                    NSString *mName = [NSString stringWithUTF8String:mn];
+                    if (![mName isEqualToString:methodName]) continue;
+                    void *ptr = [r method_get_pointer:(MethodInfo *)mList[j]];
+                    uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
+                    if (mList) free(mList);
+                    return @{@"class": name, @"method": mName, @"rva": [NSString stringWithFormat:@"0x%llX", rva]};
+                }
+                if (mList) free(mList);
+            }
+        }
+    } @catch (NSException *e) { return @{@"error": e.reason}; }
+    return @{@"error": @"Not found"};
+}
+
++ (id)findHack:(NSString *)hackType {
+    if (hackType.length == 0) return @{@"error": @"required"};
+
+    NSDictionary *patterns = @{
+        @"map": @[@"map", @"teleport", @"warp", @"position"],
+        @"speed": @[@"speed", @"velocity", @"move"],
+        @"damage": @[@"damage", @"attack", @"hit"],
+        @"health": @[@"health", @"hp", @"life", @"god"],
+        @"money": @[@"money", @"gold", @"coin"],
+    };
+    NSArray *keywords = patterns[hackType.lowercaseString] ?: @[hackType];
+
+    IL2CPPResolver *r = [IL2CPPResolver shared];
+    if (![r resolve]) return @{@"error": @"IL2CPP not resolved"};
+    Il2CppDomain *domain = [r domain_get];
+    if (!domain) return @{@"error": @"No domain"};
+
+    NSMutableArray *found = [NSMutableArray array];
+
+    @try {
+        for (int a = 0; a < domain->assembly_count && found.count < 15; a++) {
+            Il2CppAssembly *asm_ = domain->assemblies[a];
+            if (!asm_) continue;
+            void *imgPtr = *(void **)asm_;
+            if (!imgPtr) continue;
+            Il2CppImage *image = (Il2CppImage *)imgPtr;
+            if (!image || !image->name) continue;
+
+            size_t count = [r image_get_class_count:image];
+            for (size_t i = 0; i < count && found.count < 15; i++) {
+                Il2CppClass *klass = [r image_get_class:image index:i];
+                if (!klass) continue;
+                const char *cname = [r class_get_name:klass];
+                if (!cname) continue;
+                NSString *className = [NSString stringWithUTF8String:cname];
+
+                uint16_t mCount = 0;
+                const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
+                if (!mList) continue;
+                for (uint16_t j = 0; j < mCount && found.count < 15; j++) {
+                    const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
+                    if (!mn) continue;
+                    NSString *mName = [NSString stringWithUTF8String:mn];
+                    NSString *mLower = mName.lowercaseString;
+                    for (NSString *kw in keywords) {
+                        if ([mLower containsString:kw.lowercaseString]) {
+                            void *ptr = [r method_get_pointer:(MethodInfo *)mList[j]];
+                            uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
+                            [found addObject:@{@"class": className, @"method": mName,
+                                               @"rva": [NSString stringWithFormat:@"0x%llX", rva]}];
+                            break;
+                        }
+                    }
+                }
+                if (mList) free(mList);
+            }
+        }
+    } @catch (NSException *e) { return @{@"error": e.reason}; }
+    return @{@"count": @(found.count), @"methods": found};
+}
+
++ (id)readFile:(NSString *)filename keyword:(NSString *)keyword {
+    if (filename.length == 0) return @{@"error": @"required"};
+
+    NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    NSArray *paths = @[
+        [docs stringByAppendingPathComponent:filename],
+        [@"/var/mobile/Documents" stringByAppendingPathComponent:filename],
+        filename,
+    ];
+    NSString *content = nil;
+    for (NSString *p in paths) {
+        if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
+            content = [NSString stringWithContentsOfFile:p encoding:NSUTF8StringEncoding error:nil];
+            break;
+        }
+    }
+    if (!content) return @{@"error": @"File not found"};
+
+    NSArray *lines = [content componentsSeparatedByString:@"\n"];
+    if (keyword.length == 0) return @{@"total_lines": @(lines.count)};
+
+    NSString *kwLower = keyword.lowercaseString;
+    NSMutableArray *matches = [NSMutableArray array];
+    for (NSInteger i = 0; i < (NSInteger)lines.count && matches.count < 20; i++) {
+        NSString *line = (NSString *)lines[i];
+        if ([line.lowercaseString containsString:kwLower]) {
+            [matches addObject:@{@"line": @(i + 1),
+                                 @"text": [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]}];
+        }
+    }
+    return @{@"count": @(matches.count), @"matches": matches};
+}
+
++ (id)listFiles {
+    NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    NSArray *paths = @[docs, @"/var/mobile/Documents"];
+    NSMutableArray *files = [NSMutableArray array];
+    for (NSString *dir in paths) {
+        NSArray *contents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:dir error:nil];
+        for (NSString *f in contents) [files addObject:f];
+    }
+    return @{@"count": @(files.count), @"files": files};
+}
+
+@end
