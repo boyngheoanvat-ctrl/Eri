@@ -30,7 +30,7 @@ typedef struct lua_State lua_State;
 - (NSString *)runScript:(NSString *)script {
     if (!self.luaHandle) {
         if (![self isAvailable]) {
-            return @"[Lua] Khong tim thay liblua trong runtime.\nCan them liblua.a vao project.";
+            return @"[Lua] Khong tim thay liblua trong runtime.";
         }
     }
 
@@ -53,7 +53,8 @@ typedef struct lua_State lua_State;
 
     int status = luaL_dostring(L, script.UTF8String);
     if (status != 0) {
-        const char *err = lua_tolstring ? lua_tolstring(L, -1, NULL) : "unknown error";
+        // SỬA: bỏ , NULL
+        const char *err = lua_tolstring ? lua_tolstring(L, -1) : "unknown error";
         return [NSString stringWithFormat:@"[Lua] Loi: %s", err ?: "unknown"];
     }
 
