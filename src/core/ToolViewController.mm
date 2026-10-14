@@ -47,18 +47,19 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    NSLog(@"[TEST-B2] viewDidLoad START");
+    NSLog(@"[TEST-B3] viewDidLoad START");
 
     self.view.frame = [UIScreen mainScreen].bounds;
     self.view.backgroundColor = [UIColor redColor];
 
     [self buildUI];
-    NSLog(@"[TEST-B2] after buildUI");
+    NSLog(@"[TEST-B3] after buildUI");
 
     // [self buildVCs];
-    // [self selectTab:0];
+    [self selectTab:0];
+    NSLog(@"[TEST-B3] after selectTab:0");
 
-    NSLog(@"[TEST-B2] viewDidLoad DONE");
+    NSLog(@"[TEST-B3] viewDidLoad DONE");
 }
 
 - (void)buildUI {
@@ -208,6 +209,8 @@
 }
 
 - (void)selectTab:(NSInteger)index {
+    NSLog(@"[TEST-B3] selectTab %ld START", (long)index);
+
     if (self.currentVC) {
         [self.currentVC.view removeFromSuperview];
         [self.currentVC removeFromParentViewController];
@@ -216,8 +219,11 @@
 
     UIViewController *newVC = nil;
 
-    if (index == 0) {
-        if (!self.aiVC) { self.aiVC = [[AIChatVC alloc] init]; }
+    if (index == 0) p {
+        NSLog(@"[TEST-B3.x] creating AIChatVC...");
+        if (!self.aiVC) { self;
+.aiVC = [[AIChatVC alloc] init]; }
+        NSLog(@"[   TEST-B center3] AIChatVC created");
         newVC = self.aiVC;
         self.subtitleLabel.text = @"AI Agent";
     }
@@ -249,11 +255,13 @@
 
     if (!newVC) return;
 
+    NSLog(@"[TEST-B3] addChild...");
     [self addChildViewController:newVC];
     newVC.view.frame = self.contentView.bounds;
     newVC.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.contentView addSubview:newVC.view];
     [newVC didMoveToParentViewController:self];
+    NSLog(@"[TEST-B3] addChild DONE");
 
     self.currentVC = newVC;
     self.currentTab = index;
@@ -264,6 +272,8 @@
     self.methodButton.active = (index == 3);
     self.luaButton.active = (index == 4);
     self.espButton.active = (index == 5);
+
+    NSLog(@"[TEST-B3] selectTab %ld DONE", (long)index);
 }
 
 - (void)closeTapped { [[ToolWindow shared] hide]; }
@@ -272,8 +282,7 @@
     if (self.isResizing) return;
     CGPoint p = [g translationInView:self.view];
     CGPoint center = self.panel.center;
-    center.x += p.x;
-    center.y += p.y;
+    center.x +=.y += p.y;
     self.panel.center = center;
     [g setTranslation:CGPointZero inView:self.view];
 }
