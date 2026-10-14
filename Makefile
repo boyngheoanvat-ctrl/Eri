@@ -19,10 +19,17 @@ libtool_FILES = \
     src/ai/AIMemoryTool.mm \
     src/memory/MemoryResult.mm \
     src/memory/MemoryEditor.mm \
+    src/memory/MemoryVC.mm \
+    src/method/MethodCaller.mm \
+    src/method/MethodCallerVC.mm \
     src/dump/IL2CPPResolver.mm \
     src/dump/DumperVC.mm
 
-libtool_CFLAGS = -fobjc-arc -Isrc -Isrc/core -Isrc/ui -Isrc/ai -Isrc/dump -Wno-everything
+libtool_CFLAGS = -fobjc-arc \
+    -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
+    -Isrc/memory -Isrc/method -Isrc/dump \
+    -Wno-everything
+
 libtool_FRAMEWORKS = Foundation UIKit CoreGraphics
 libtool_LIBRARIES = objc
 libtool_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
