@@ -18,6 +18,7 @@ libtool_FILES = \
     src/ai/AITool.mm \
     src/ai/AIMemoryTool.mm \
     src/ai/AIESPTool.mm \
+    src/ai/GameFingerprint.mm \
     src/memory/MemoryResult.mm \
     src/memory/MemoryEditor.mm \
     src/memory/MemoryVC.mm \
@@ -25,6 +26,11 @@ libtool_FILES = \
     src/memory/MethodCallerVC.mm \
     src/dump/IL2CPPResolver.mm \
     src/dump/DumperVC.mm \
+    src/dump/RuntimeEnumerator.mm \
+    src/dump/MetadataParser.mm \
+    src/dump/DumperSelfTest.mm \
+    src/dump/DumperSelfTest2.mm \
+    src/dump/DumperSelfTest3.mm \
     src/lua/LuaEngine.mm \
     src/lua/LuaVC.mm \
     src/esp/ESPOverlay.mm \
@@ -32,7 +38,7 @@ libtool_FILES = \
     src/esp/IL2CPPHeapWalker.mm \
     src/esp/ESPClassFinder.mm
 
-libtool_CFLAGS = -fobjc-arc \
+libtool_CFLAGS = -fobjc-arc -std=c++17 \
     -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
     -Isrc/memory -Isrc/dump -Isrc/lua -Isrc/esp \
     -Ilibs \
