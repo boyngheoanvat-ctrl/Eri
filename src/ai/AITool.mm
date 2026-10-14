@@ -98,12 +98,17 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
         }]];
 }
 
-#pragma mark - Timeout wrapper
+- (NSDictionary *)openAISchema {
+    return @{@"type": @"function", @"function": @{
+        @"name": self.name ?: @"", @"description": self.toolDescription ?: @"",
+        @"parameters": self.parameters ?: @{@"type": @"object", @"properties": @{}}}};
+}
+
+#pragma mark - Timeout
 
 + (id)runWithTimeout:(id (^)(void))block {
     __block id result = nil;
     __block BOOL done = NO;
-
     dispatch_semaphore_t sema = dispatch_semaphore_create(0);
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -116,24 +121,21 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
         dispatch_semaphore_signal(sema);
     });
 
-    // Timeout 5 giây
     dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC);
     long waitResult = dispatch_semaphore_wait(sema, timeout);
 
     if (waitResult != 0 || !done) {
-        return @{@"error": @"Timeout - game qua lon, thu lai sau"};
+        return @{@"error": @"Timeout - game qua lon"};
     }
-
     return result ?: @{@"error": @"No result"};
 }
 
-#pragma mark - Class helper
+#pragma mark - Helpers
 
 + (Il2CppClass *)findClass:(NSString *)className {
     if (className.length == 0) return NULL;
     IL2CPPResolver *r = [IL2CPPResolver shared];
     if (![r resolve]) return NULL;
-
     Il2CppDomain *domain = [r domain_get];
     if (!domain) return NULL;
 
@@ -159,80 +161,7 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
     return NULL;
 }
 
-#pragma mark - findHack (giảm limit)
-
-+ (id)findHack:(NSString *)hackType {
-    if (hackType.length == 0) return @{@"error": @"required"};
-
-    NSDictionary *patterns = @{
-        @"map": @[@"map", @"teleport", @"warp", @"position"],
-        @"speed": @[@"speed", @"velocity", @"move"],
-        @"damage": @[@"damage", @"attack", @"hit"],
-        @"health": @[@"health", @"hp", @"life", @"god"],
-        @"money": @[@"money", @"gold", @"coin"],
-    };
-    NSArray *keywords = patterns[hackType.lowercaseString] ?: @[hackType];
-
-    IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (![r resolve]) return @{@"error": @"IL2CPP not resolved"};
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain) return @{@"error": @"No domain"};
-
-    NSMutableArray *found = [NSMutableArray array];
-
-    @try {
-        // Chỉ 3 assembly đầu, tối đa 5 kết quả
-        for (int a = 0; a < domain->assembly_count && a < 3 && found.count < 5; a++) {
-            Il2CppAssembly *asm_ = domain->assemblies[a];
-            if (!asm_) continue;
-            void *imgPtr = *(void **)asm_;
-            if (!imgPtr) continue;
-            Il2CppImage *image = (Il2CppImage *)imgPtr;
-            if (!image || !image->name) continue;
-
-            size_t count = [r image_get_class_count:image];
-            // Chỉ 2000 class đầu
-            size_t maxClasses = MIN(count, (size_t)2000);
-
-            for (size_t i = 0; i < maxClasses && found.count < 5; i++) {
-                Il2CppClass *klass = [r image_get_class:image index:i];
-                if (!klass) continue;
-                const char *cname = [r class_get_name:klass];
-                if (!cname) continue;
-                NSString *className = [NSString stringWithUTF8String:cname];
-
-                uint16_t mCount = 0;
-                const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
-                if (!mList) continue;
-
-                for (uint16_t j = 0; j < mCount && found.count < 5; j++) {
-                    const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
-                    if (!mn) continue;
-                    NSString *mName = [NSString stringWithUTF8String:mn];
-                    NSString *mLower = mName.lowercaseString;
-                    for (NSString *kw in keywords) {
-                        if ([mLower containsString:kw.lowercaseString]) {
-                            void *ptr = [r method_get_pointer:(MethodInfo *)mList[j]];
-                            uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
-                            [found addObject:@{@"class": className, @"method": mName,
-                                                @"rva": [NSString stringWithFormat:@"0x%llX", rva]}];
-                            break;
-                        }
-                    }
-                }
-                if (mList) free(mList);
-            }
-        }
-    } @catch (NSException *e) { return @{@"error": e.reason}; }
-
-    if (found.count == 0) {
-        return @{@"count": @0, @"methods": @[], @"note": @"Khong tim thay - thu 'search_classes' truoc"};
-    }
-
-    return @{@"count": @(found.count), @"methods": found};
-}
-
-#pragma mark - Other tools
+#pragma mark - Tool implementations
 
 + (id)searchClasses:(NSString *)keyword {
     if (keyword.length == 0) return @{@"error": @"keyword required"};
@@ -275,11 +204,10 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
 
 + (id)searchMethods:(NSString *)className keyword:(NSString *)keyword {
     if (className.length == 0) return @{@"error": @"class_name required"};
-    IL2CPPResolver *r = [ IL2CPPResolver shared];
-    if (!0[r resolve]) return @{@"error":;
- @"IL2CPP not    resolved"};
+    IL2CPPResolver *r = [IL2CPPResolver shared];
+    if (![r resolve]) return @{@"error": @"IL2CPP not resolved"};
 
-    Il const2CppClass *klass Method = [self findClass:className];
+    Il2CppClass *klass = [self findClass:className];
     if (!klass) return @{@"error": @"Class not found"};
 
     NSString *kwLower = keyword.lowercaseString;
@@ -325,6 +253,71 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
     return @{@"error": @"Method not found"};
 }
 
++ (id)findHack:(NSString *)hackType {
+    if (hackType.length == 0) return @{@"error": @"required"};
+
+    NSDictionary *patterns = @{
+        @"map": @[@"map", @"teleport", @"warp", @"position"],
+        @"speed": @[@"speed", @"velocity", @"move"],
+        @"damage": @[@"damage", @"attack", @"hit"],
+        @"health": @[@"health", @"hp", @"life", @"god"],
+        @"money": @[@"money", @"gold", @"coin"],
+    };
+    NSArray *keywords = patterns[hackType.lowercaseString] ?: @[hackType];
+
+    IL2CPPResolver *r = [IL2CPPResolver shared];
+    if (![r resolve]) return @{@"error": @"IL2CPP not resolved"};
+    Il2CppDomain *domain = [r domain_get];
+    if (!domain) return @{@"error": @"No domain"};
+
+    NSMutableArray *found = [NSMutableArray array];
+
+    @try {
+        for (int a = 0; a < domain->assembly_count && a < 3 && found.count < 5; a++) {
+            Il2CppAssembly *asm_ = domain->assemblies[a];
+            if (!asm_) continue;
+            void *imgPtr = *(void **)asm_;
+            if (!imgPtr) continue;
+            Il2CppImage *image = (Il2CppImage *)imgPtr;
+            if (!image || !image->name) continue;
+
+            size_t count = [r image_get_class_count:image];
+            size_t maxClasses = MIN(count, (size_t)2000);
+
+            for (size_t i = 0; i < maxClasses && found.count < 5; i++) {
+                Il2CppClass *klass = [r image_get_class:image index:i];
+                if (!klass) continue;
+                const char *cname = [r class_get_name:klass];
+                if (!cname) continue;
+                NSString *className = [NSString stringWithUTF8String:cname];
+
+                uint16_t mCount = 0;
+                const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
+                if (!mList) continue;
+
+                for (uint16_t j = 0; j < mCount && found.count < 5; j++) {
+                    const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
+                    if (!mn) continue;
+                    NSString *mName = [NSString stringWithUTF8String:mn];
+                    NSString *mLower = mName.lowercaseString;
+                    for (NSString *kw in keywords) {
+                        if ([mLower containsString:kw.lowercaseString]) {
+                            void *ptr = [r method_get_pointer:(MethodInfo *)mList[j]];
+                            uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
+                            [found addObject:@{@"class": className, @"method": mName,
+                                                @"rva": [NSString stringWithFormat:@"0x%llX", rva]}];
+                            break;
+                        }
+                    }
+                }
+                if (mList) free(mList);
+            }
+        }
+    } @catch (NSException *e) { return @{@"error": e.reason}; }
+
+    return @{@"count": @(found.count), @"methods": found};
+}
+
 + (id)dumpClassRuntime:(NSString *)className {
     IL2CPPResolver *r = [IL2CPPResolver shared];
     if (![r resolve]) return @{@"error": @"IL2CPP not resolved"};
@@ -348,7 +341,8 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
     if (fList) free(fList);
 
     NSMutableArray *methods = [NSMutableArray array];
-    uint16_t mCount =Info **mList = [r class_get_methods:klass count:&mCount];
+    uint16_t mCount = 0;
+    const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
     for (uint16_t j = 0; j < mCount && methods.count < 50; j++) {
         const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
         void *ptr = [r method_get_pointer:(MethodInfo *)mList[j]];
