@@ -6,6 +6,7 @@
 #import "DumperVC.h"
 #import "MemoryVC.h"
 #import "MethodCallerVC.h"
+#import "LuaVC.h"
 
 @interface ToolViewController ()
 @property (nonatomic, strong) UIView *backdrop;
@@ -23,11 +24,13 @@
 @property (nonatomic, strong) ToolRailButton *dumpButton;
 @property (nonatomic, strong) ToolRailButton *memoryButton;
 @property (nonatomic, strong) ToolRailButton *methodButton;
+@property (nonatomic, strong) ToolRailButton *luaButton;
 
 @property (nonatomic, strong) AIChatVC *aiVC;
 @property (nonatomic, strong) DumperVC *dumpVC;
 @property (nonatomic, strong) MemoryVC *memoryVC;
 @property (nonatomic, strong) MethodCallerVC *methodVC;
+@property (nonatomic, strong) LuaVC *luaVC;
 @property (nonatomic, strong) UIViewController *currentVC;
 @property (nonatomic, assign) NSInteger currentTab;
 
@@ -49,7 +52,6 @@
 - (void)buildUI {
     CGRect screen = self.view.bounds;
 
-    // Backdrop
     self.backdrop = [[UIView alloc] initWithFrame:screen];
     self.backdrop.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.5];
     self.backdrop.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -62,7 +64,6 @@
     CGFloat panelX = (screen.size.width - panelW) / 2.0;
     CGFloat panelY = (screen.size.height - panelH) / 2.0;
 
-    // Panel
     self.panel = [[UIView alloc] initWithFrame:CGRectMake(panelX, panelY, panelW, panelH)];
     self.panel.backgroundColor = [ToolTheme shared].background;
     self.panel.layer.cornerRadius = 12;
@@ -75,11 +76,9 @@
                                    UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:self.panel];
 
-    // Pan kéo panel
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
     [self.panel addGestureRecognizer:pan];
 
-    // Title bar
     self.titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, panelW, 36)];
     self.titleBar.backgroundColor = [ToolTheme shared].surfaceAlt;
     self.titleBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
@@ -114,7 +113,6 @@
     [self.closeButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.titleBar addSubview:self.closeButton];
 
-    // Rail
     CGFloat railW = 60;
     CGFloat railH = panelH - 36;
     self.railView = [[UIView alloc] initWithFrame:CGRectMake(0, 36, railW, railH)];
@@ -127,9 +125,9 @@
     railDivider.autoresizingMask = UIViewAutoresizingFlexibleHeight;
     [self.railView addSubview:railDivider];
 
-    CGFloat btnH = 56;
-    CGFloat spacing = 6;
-    CGFloat totalH = (btnH * 4) + (spacing * 3);
+    CGFloat btnH = 50;
+    CGFloat spacing = 4;
+    CGFloat totalH = (btnH * 5) + (spacing * 4);
     self.railStack = [[UIStackView alloc] initWithFrame:CGRectMake(0, 8, railW, totalH)];
     self.railStack.axis = UILayoutConstraintAxisVertical;
     self.railStack.spacing = spacing;
@@ -145,15 +143,15 @@
     [self.railStack addArrangedSubview:self.memoryButton];
     self.methodButton = [self makeRailButton:@"Call" symbol:@"▶" tag:3];
     [self.railStack addArrangedSubview:self.methodButton];
+    self.luaButton = [self makeRailButton:@"Lua" symbol:@"μ" tag:4];
+    [self.railStack addArrangedSubview:self.luaButton];
 
-    // Content
     self.contentView = [[UIView alloc] initWithFrame:CGRectMake(railW, 36, panelW - railW, panelH - 36)];
     self.contentView.backgroundColor = [ToolTheme shared].background;
     self.contentView.clipsToBounds = YES;
     self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.panel addSubview:self.contentView];
 
-    // Resize handle
     CGFloat handleSize = 28;
     self.resizeHandle = [[UIView alloc] initWithFrame:
         CGRectMake(panelW - handleSize, panelH - handleSize, handleSize, handleSize)];
@@ -192,6 +190,7 @@
     self.dumpVC = [[DumperVC alloc] init];
     self.memoryVC = [[MemoryVC alloc] init];
     self.methodVC = [[MethodCallerVC alloc] init];
+    self.luaVC = [[LuaVC alloc] init];
 }
 
 - (void)selectTab:(NSInteger)index {
@@ -205,6 +204,7 @@
     else if (index == 1) { newVC = self.dumpVC; self.subtitleLabel.text = @"IL2CPP Dumper"; }
     else if (index == 2) { newVC = self.memoryVC; self.subtitleLabel.text = @"Memory Editor"; }
     else if (index == 3) { newVC = self.methodVC; self.subtitleLabel.text = @"Method Caller"; }
+    else if (index == 4) { newVC = self.luaVC; self.subtitleLabel.text = @"Lua Console"; }
 
     if (!newVC) return;
 
@@ -221,6 +221,7 @@
     self.dumpButton.active = (index == 1);
     self.memoryButton.active = (index == 2);
     self.methodButton.active = (index == 3);
+    self.luaButton.active = (index == 4);
 }
 
 - (void)closeTapped { [[ToolWindow shared] hide]; }
@@ -248,7 +249,6 @@
         CGFloat newW = self.dragStartSize.width + p.x;
         CGFloat newH = self.dragStartSize.height + p.y;
 
-        // Kéo tự do, không giới hạn
         self.panel.frame = CGRectMake(self.dragStartPoint.x, self.dragStartPoint.y, newW, newH);
         [self updateLayoutForPanelSize:CGSizeMake(newW, newH)];
     }
@@ -291,6 +291,7 @@
     [self.dumpVC reload];
     [self.memoryVC reload];
     [self.methodVC reload];
+    [self.luaVC reload];
 }
 
 @end
