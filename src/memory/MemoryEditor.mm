@@ -34,14 +34,8 @@
                                          &info_count, &object_name);
         if (kr != KERN_SUCCESS) break;
 
-        // Chỉ scan region read/write
         if ((info.protection & (VM_PROT_READ | VM_PROT_WRITE)) == (VM_PROT_READ | VM_PROT_WRITE)) {
-            [self scanRegion:address
-                        size:size
-                       value:value
-                        type:type
-                      results:results
-                       limit:limit];
+            [self scanRegion:address size:size value:value type:type results:results limit:limit];
         }
 
         address += size;
@@ -57,7 +51,7 @@
            results:(NSMutableArray *)results
              limit:(NSInteger)limit {
 
-    if (size > 1024 * 1024 * 50) return; // skip region > 50MB
+    if (size > 1024 * 1024 * 50) return;
 
     vm_offset_t data = 0;
     mach_msg_type_number_t dataCnt = 0;
@@ -67,11 +61,10 @@
 
     uint8_t *bytes = (uint8_t *)data;
 
-    // Build byte pattern
     NSData *pattern = [self dataForValue:value type:type];
     if (!pattern) { vm_deallocate(mach_task_self(), data, dataCnt); return; }
 
-    const uint8_t *patBytes = pattern.bytes;
+    const uint8_t *patBytes = (const uint8_t *)pattern.bytes;
     NSUInteger patLen = pattern.length;
 
     for (NSUInteger i = 0; i <= size - patLen && results.count < (NSUInteger)limit; i++) {
@@ -89,12 +82,9 @@
                                        value:(NSString *)value
                                         type:(MemValueType)type
                                        limit:(NSInteger)limit {
-    // Scan ±1MB quanh địa chỉ
     NSMutableArray *results = [NSMutableArray array];
-
     vm_address_t base = addr > 0x100000 ? addr - 0x100000 : 0;
-    vm_size_t size = 0x200000; // 2MB
-
+    vm_size_t size = 0x200000;
     [self scanRegion:base size:size value:value type:type results:results limit:limit];
     return results;
 }
@@ -156,7 +146,7 @@
     } else if (type == MemValueTypeByte) {
         uint8_t v; memcpy(&v, bytes, 1);
         result = [NSString stringWithFormat:@"%d", v];
-    } else if (type == MemValue_TypeWord) {
+    } else if (type == MemValueTypeWord) {
         uint16_t v; memcpy(&v, bytes, 2);
         result = [NSString stringWithFormat:@"%d", v];
     }
@@ -169,8 +159,8 @@
     NSData *data = [self dataForValue:value type:type];
     if (!data) return NO;
 
-    kern_return_t kr =64 vm_write(mach_task_self(), addr,
-                                _t (vm_offset_t)data.bytes,
+    kern_return_t kr = vm_write(mach_task_self(), addr,
+                                 (vm_offset_t)data.bytes,
                                  (mach_msg_type_number_t)data.length);
 
     return kr == KERN_SUCCESS;
@@ -179,7 +169,7 @@
 - (NSString *)regionInfoAt:(vm_address_t)addr {
     vm_address_t region = addr;
     vm_size_t size = 0;
-    vm_region_basic_info_data info;
+    vm_region_basic_info_data_64_t info;
     mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
     mach_port_t object_name = MACH_PORT_NULL;
 
