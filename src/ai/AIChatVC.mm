@@ -1,6 +1,7 @@
 #import "AIChatVC.h"
 #import "AIProvider.h"
 #import "AITool.h"
+#import "AIMemoryTool.h"
 #import "ToolTheme.h"
 
 @interface AIChatVC () <AIStreamDelegate, UITableViewDataSource, UITableViewDelegate>
@@ -20,13 +21,15 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     self.items = [NSMutableArray array];
 
+    // Đăng ký tool
     [AITool registerAll];
+    [AIMemoryTool registerAll];
 
     [self buildUI];
 
     [self.items addObject:@{
         @"type": @"ai",
-        @"text": @"AI Agent ready. Hoi: tim ham hack map"
+        @"text": @"AI Agent ready.\nHoi: tim gia tri 100, hack mau, tim ham map"
     }];
     [self.tableView reloadData];
 }
@@ -36,8 +39,7 @@
     CGFloat h = CGRectGetHeight(self.view.bounds);
     CGFloat inputH = 50;
 
-    self.tableView = [[UITableView alloc] initWithFrame:
-        CGRectMake(0, 0, w, h - inputH)
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, w, h - inputH)
                                                      style:UITableViewStylePlain];
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
@@ -111,9 +113,24 @@
     self.sendButton.alpha = 0.5;
     [self.spinner startAnimating];
 
+    // System prompt
+    NSString *sysPrompt =
+        @"AI agent hack game IL2CPP. Tra loi tieng Viet ngan gon.\n"
+        @"Tool:\n"
+        @"- search_memory(value, type): tim gia tri trong memory\n"
+        @"- edit_memory(address, value, type): sua gia tri\n"
+        @"- read_memory(address, type): doc gia tri\n"
+        @"- search_classes(keyword): tim class\n"
+        @"- search_methods(class_name, method_keyword): tim method\n"
+        @"- get_method_rva(class_name, method_name): lay RVA\n"
+        @"- find_hack_methods(hack_type): tim ham hack\n"
+        @"- read_file(filename, keyword): grep file\n"
+        @"- list_files(): liet ke file\n"
+        @"Quy tac: hoi 'tim gia tri X' → search_memory; hoi 'sua X thanh Y' → edit_memory.\n"
+        @"Neu tool loi, KHONG goi lai. Tra loi user.";
+
     NSMutableArray *messages = [NSMutableArray array];
-    [messages addObject:@{@"role": @"system",
-        @"content": @"AI agent tim ma hack IL2CPP. Tra loi tieng Viet ngan gon, kem RVA."}];
+    [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
 
     for (NSDictionary *item in self.items) {
         NSString *type = item[@"type"];
@@ -182,6 +199,7 @@
         NSDictionary *d = (NSDictionary *)result;
         if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
         else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ ket qua", d[@"count"]];
+        else if (d[@"success"]) summary = [d[@"success"] boolValue] ? @"OK" : @"Fail";
     }
 
     [self.items addObject:@{
