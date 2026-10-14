@@ -1,11 +1,13 @@
 #import "ESPOverlay.h"
 #import "IL2CPPResolver.h"
+#import "IL2CPPHeapWalker.h"
 #import "ToolTheme.h"
 #import <QuartzCore/QuartzCore.h>
 
 @interface ESPOverlay ()
 @property (nonatomic, strong) CADisplayLink *displayLink;
 @property (nonatomic, strong) NSMutableArray *entities;
+@property (nonatomic, assign) NSInteger frameCount;
 @end
 
 @implementation ESPOverlay
@@ -26,6 +28,7 @@
         instance.showBox = YES;
         instance.showLine = NO;
         instance.entities = [NSMutableArray array];
+        instance.frameCount = 0;
     });
     return instance;
 }
@@ -37,41 +40,20 @@
     self.hidden = !self.enabled;
 }
 
-- (void)show {
-    self.enabled = YES;
-    self.hidden = NO;
-    [self startDrawing];
-}
-
-- (void)hide {
-    self.enabled = NO;
-    self.hidden = YES;
-    [self stopDrawing];
-}
-
-- (void)toggle {
-    if (self.enabled) [self hide];
-    else [self show];
-}
-
-- (void)reload {
-    [self setNeedsDisplay];
-}
+- (void)show { self.enabled = YES; self.hidden = NO; [self startDrawing]; }
+- (void)hide { self.enabled = NO; self.hidden = YES; [self stopDrawing]; }
+- (void)toggle { if (self.enabled) [self hide]; else [self show]; }
+- (void)reload { [self setNeedsDisplay]; }
 
 #pragma mark - Display Link
 
 - (void)startDrawing {
     if (self.displayLink) return;
 
-    self.displayLink = [CADisplayLink displayLinkWithTarget:self
-                                                    selector:@selector(tick:)];
+    self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
 
-    // Dùng respondsToSelector thay @available → tránh lỗi __isPlatformVersionAtLeast
-    if ([self.displayLink respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-        self.displayLink.preferredFrameRateRange = CAFrameRateRangeMake(15, 30, 30);
-    } else {
-        self.displayLink.preferredFramesPerSecond = 30;
-    }
+    // Không dùng preferredFrameRateRange để tránh warning iOS 15
+    self.displayLink.preferredFramesPerSecond = 15;
 
     [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
@@ -83,6 +65,11 @@
 
 - (void)tick:(CADisplayLink *)link {
     if (!self.enabled) return;
+
+    self.frameCount++;
+    // Chỉ scan mỗi 5 frame (tránh lag)
+    if (self.frameCount % 5 != 0) return;
+
     [self collectEntities];
     [self setNeedsDisplay];
 }
@@ -95,44 +82,86 @@
     IL2CPPResolver *r = [IL2CPPResolver shared];
     if (![r resolve]) return;
 
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain) return;
+    // Enumerate tất cả object ShowEntity từ heap
+    __weak typeof(self) ws = self;
+    [[IL2CPPHeapWalker shared] enumerateObjectsOfClass:@"ShowEntity"
+                                                 block:^(void *objPtr, Il2CppClass *klass) {
+        [ws addEntity:objPtr resolver:r];
+    } limit:50];
+}
 
-    Il2CppClass *entityClass = [self findClass:@"ShowEntity" resolver:r domain:domain];
+- (void)addEntity:(void *)entityPtr resolver:(IL2CPPResolver *)r {
+    if (!entityPtr) return;
+
+    Il2CppClass *entityClass = [self classOfObject:entityPtr];
     if (!entityClass) return;
 
-    MethodInfo *getPosition = [self findMethod:entityClass name:@"get_Position"];
-    if (!getPosition) return;
+    MethodInfo *mGetPos = [self findMethod:entityClass name:@"get_Position" resolver:r];
+    MethodInfo *mGetHp = [self findMethod:entityClass name:@"get_m_Hp" resolver:r];
+    MethodInfo *mGetHpMax = [self findMethod:entityClass name:@"get_m_HpMax" resolver:r];
+    MethodInfo *mGetName = [self findMethod:entityClass name:@"get_m_RoleName" resolver:r];
+    MethodInfo *mGetDead = [self findMethod:entityClass name:@"get_m_bDeath" resolver:r];
+    MethodInfo *mGetSelf = [self findMethod:entityClass name:@"get_m_bSelf" resolver:r];
 
-    // TODO: Enumerate ShowEntity objects từ GC heap
-    // Cần il2cpp_gc_heap_foreach hoặc list entity trong game
-}
+    if (!mGetPos) return;
 
-- (Il2CppClass *)findClass:(NSString *)name resolver:(IL2CPPResolver *)r domain:(Il2CppDomain *)domain {
-    NSString *lower = name.lowercaseString;
-    for (int a = 0; a < domain->assembly_count; a++) {
-        Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
-        void *imgPtr = *(void **)asm_;
-        if (!imgPtr) continue;
-        Il2CppImage *image = (Il2CppImage *)imgPtr;
-        if (!image || !image->name) continue;
+    // Is dead?
+    if (mGetDead && [self invokeBoolMethod:mGetDead onObject:entityPtr resolver:r]) return;
 
-        size_t count = [r image_get_class_count:image];
-        for (size_t i = 0; i < count; i++) {
-            Il2CppClass *klass = [r image_get_class:image index:i];
-            if (!klass) continue;
-            const char *cname = [r class_get_name:klass];
-            if (!cname) continue;
-            NSString *n = [NSString stringWithUTF8String:cname];
-            if ([n.lowercaseString isEqualToString:lower]) return klass;
-        }
+    // Is self?
+    BOOL isSelf = mGetSelf ? [self invokeBoolMethod:mGetSelf onObject:entityPtr resolver:r] : NO;
+
+    // Position
+    Vector3 worldPos = [self invokeVector3Method:mGetPos onObject:entityPtr resolver:r];
+
+    // HP
+    float hp = mGetHp ? [self invokeFloatMethod:mGetHp onObject:entityPtr resolver:r] : 0;
+    float hpMax = mGetHpMax ? [self invokeFloatMethod:mGetHpMax onObject:entityPtr resolver:r] : 0;
+    float hpPercent = hpMax > 0 ? hp / hpMax : 1.0;
+
+    // Name
+    NSString *name = @"";
+    if (mGetName) {
+        void *namePtr = [self invokeObjMethod:mGetName onObject:entityPtr resolver:r];
+        name = [self il2cppStringToNSString:namePtr];
     }
-    return NULL;
+
+    // Convert 3D → 2D
+    CGPoint screenPos = [self worldToScreen:worldPos];
+    CGSize screen = self.bounds.size;
+
+    if (screenPos.x < 0 || screenPos.x > screen.width) return;
+    if (screenPos.y < 0 || screenPos.y > screen.height) return;
+
+    // Box size theo distance
+    CGFloat distance = sqrtf(worldPos.x*worldPos.x + worldPos.y*worldPos.y + worldPos.z*worldPos.z);
+    CGFloat scale = 800.0 / MAX(distance, 100);
+    scale = MAX(0.3, MIN(2.0, scale));
+
+    CGFloat boxW = 50 * scale;
+    CGFloat boxH = 70 * scale;
+    CGRect box = CGRectMake(screenPos.x - boxW/2, screenPos.y - boxH, boxW, boxH);
+
+    UIColor *color = isSelf ? [UIColor greenColor] : [UIColor redColor];
+
+    [self.entities addObject:@{
+        @"box": [NSValue valueWithCGRect:box],
+        @"hp_percent": @(hpPercent),
+        @"name": name.length > 0 ? name : @"?",
+        @"color": color,
+        @"distance": @(distance)
+    }];
 }
 
-- (MethodInfo *)findMethod:(Il2CppClass *)klass name:(NSString *)name {
-    IL2CPPResolver *r = [IL2CPPResolver shared];
+#pragma mark - Method Invocation
+
+- (Il2CppClass *)classOfObject:(void *)objPtr {
+    if (!objPtr) return NULL;
+    void *klassPtr = *(void **)objPtr;
+    return (Il2CppClass *)klassPtr;
+}
+
+- (MethodInfo *)findMethod:(Il2CppClass *)klass name:(NSString *)name resolver:(IL2CPPResolver *)r {
     uint16_t mCount = 0;
     const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
     MethodInfo *found = NULL;
@@ -149,34 +178,89 @@
     return found;
 }
 
+- (void *)invokeObjMethod:(MethodInfo *)method onObject:(void *)obj resolver:(IL2CPPResolver *)r {
+    if (!method || !obj) return NULL;
+    typedef void *(*fn_t)(void *, void *);
+    fn_t fn = (fn_t)[r method_get_pointer:method];
+    if (!fn) return NULL;
+    return fn(obj, NULL);
+}
+
+- (float)invokeFloatMethod:(MethodInfo *)method onObject:(void *)obj resolver:(IL2CPPResolver *)r {
+    if (!method || !obj) return 0;
+    typedef float (*fn_t)(void *, void *);
+    fn_t fn = (fn_t)[r method_get_pointer:method];
+    if (!fn) return 0;
+    return fn(obj, NULL);
+}
+
+- (BOOL)invokeBoolMethod:(MethodInfo *)method onObject:(void *)obj resolver:(IL2CPPResolver *)r {
+    if (!method || !obj) return NO;
+    typedef BOOL (*fn_t)(void *, void *);
+    fn_t fn = (fn_t)[r method_get_pointer:method];
+    if (!fn) return NO;
+    return fn(obj, NULL);
+}
+
+- (Vector3)invokeVector3Method:(MethodInfo *)method onObject:(void *)obj resolver:(IL2CPPResolver *)r {
+    Vector3 result = {0, 0, 0};
+    if (!method || !obj) return result;
+
+    typedef void (*fn_t)(void *, void *, void *);
+    fn_t fn = (fn_t)[r method_get_pointer:method];
+    if (!fn) return result;
+
+    fn(obj, NULL, &result);
+    return result;
+}
+
+- (NSString *)il2cppStringToNSString:(void *)strPtr {
+    if (!strPtr) return @"";
+    uint32_t len = *(uint32_t *)strPtr;
+    if (len > 256) len = 256;
+    const UniChar *chars = (const UniChar *)((char *)strPtr + 0x10);
+    return [NSString stringWithCharacters:chars length:len];
+}
+
+#pragma mark - World to Screen
+
+- (CGPoint)worldToScreen:(Vector3)world {
+    // TODO: Cần camera matrix từ game
+    // Fallback: dùng công thức đơn giản
+    CGSize screen = self.bounds.size;
+    return CGPointMake(screen.width / 2 + world.x * 5,
+                        screen.height / 2 - world.z * 5);
+}
+
 #pragma mark - Draw
 
 - (void)drawRect:(CGRect)rect {
     if (!self.enabled) return;
-
     CGContextRef ctx = UIGraphicsGetCurrentContext();
     if (!ctx) return;
 
-    CGContextSetStrokeColorWithColor(ctx,
-        [UIColor colorWithRed:0.30 green:0.70 blue:1.0 alpha:0.8].CGColor);
-    CGContextSetLineWidth(ctx, 2);
-
+    // Status label
     NSDictionary *attr = @{
         NSForegroundColorAttributeName: [UIColor colorWithRed:0.30 green:0.90 blue:0.50 alpha:1.0],
-        NSFontAttributeName: [UIFont fontWithName:@"Menlo-Bold" size:12] ?: [UIFont boldSystemFontOfSize:12]
+        NSFontAttributeName: [UIFont fontWithName:@"Menlo-Bold" size:11] ?: [UIFont boldSystemFontOfSize:11]
     };
-    [@"[ESP] Active" drawAtPoint:CGPointMake(20, 60) withAttributes:attr];
+    NSString *statusStr = [NSString stringWithFormat:@"[ESP] %lu entities",
+                            (unsigned long)self.entities.count];
+    [statusStr drawAtPoint:CGPointMake(20, 60) withAttributes:attr];
 
+    // Vẽ từng entity
     for (NSDictionary *e in self.entities) {
         CGRect box = [e[@"box"] CGRectValue];
         UIColor *color = e[@"color"] ?: [UIColor redColor];
 
+        // Box
         if (self.showBox) {
             CGContextSetStrokeColorWithColor(ctx, color.CGColor);
             CGContextSetLineWidth(ctx, 1.5);
             CGContextStrokeRect(ctx, box);
         }
 
+        // HP bar
         if (self.showHP) {
             CGFloat hpPercent = [e[@"hp_percent"] floatValue];
             CGRect hpBg = CGRectMake(box.origin.x, box.origin.y - 8, box.size.width, 4);
@@ -190,6 +274,7 @@
             CGContextFillRect(ctx, hpFill);
         }
 
+        // Name
         if (self.showName) {
             NSString *name = e[@"name"] ?: @"";
             NSDictionary *nameAttr = @{
@@ -200,10 +285,11 @@
                withAttributes:nameAttr];
         }
 
+        // Distance
         if (self.showDistance) {
             NSNumber *dist = e[@"distance"];
             if (dist) {
-                NSString *distStr = [NSString stringWithFormat:@"%.0fm", dist.floatValue];
+                NSString *distStr = [NSString stringWithFormat:@"%.0fm", dist.floatValue / 100];
                 NSDictionary *distAttr = @{
                     NSForegroundColorAttributeName: [UIColor yellowColor],
                     NSFontAttributeName: [UIFont systemFontOfSize:9]
@@ -213,7 +299,10 @@
             }
         }
 
+        // Line từ tâm dưới màn hình
         if (self.showLine) {
+            CGContextSetStrokeColorWithColor(ctx, color.CGColor);
+            CGContextSetLineWidth(ctx, 1.0);
             CGContextMoveToPoint(ctx, self.bounds.size.width / 2, self.bounds.size.height);
             CGContextAddLineToPoint(ctx, box.origin.x + box.size.width / 2,
                                      box.origin.y + box.size.height);
