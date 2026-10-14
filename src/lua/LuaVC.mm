@@ -98,7 +98,7 @@
     self.consoleView.editable = NO;
     self.consoleView.layer.cornerRadius = 4;
     self.consoleView.layer.borderWidth = 1;
-    self.consoleView.layer.borderColor = [ToolTheme shared].border.CG:@Color;
+    self.consoleView.layer.borderColor = [ToolTheme shared].border.CGColor;
     self.consoleView.text = @"-- Lua Console --\n";
     self.consoleView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
     [self.view addSubview:self.consoleView];
@@ -123,7 +123,7 @@
     if (script.length == 0) return;
 
     [self.editorView resignFirstResponder];
-    [self log"> Running script..."];
+    [self log:@"[Lua] Running script..."];
 
     __weak typeof(self) ws = self;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
