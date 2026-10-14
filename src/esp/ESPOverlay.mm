@@ -80,11 +80,14 @@
     IL2CPPResolver *r = [IL2CPPResolver shared];
     if (![r resolve]) return;
 
-    __weak typeof(self) ws = self;
-    [[IL2CPPHeapWalker shared] enumerateObjectsOfClass:@"ShowEntity"
-                                                 block:^(void *objPtr, Il2CppClass *klass) {
-        [ws addEntity:objPtr resolver:r];
-    } limit:50];
+    NSArray<NSValue *> *instances = [[IL2CPPHeapWalker shared]
+        collectInstancesOfClass:@"ShowEntity" limit:50];
+
+    for (NSValue *v in instances) {
+        void *objPtr = v.pointerValue;
+        if (!objPtr) continue;
+        [self addEntity:objPtr resolver:r];
+    }
 }
 
 - (void)addEntity:(void *)entityPtr resolver:(IL2CPPResolver *)r {
@@ -148,6 +151,7 @@
 - (Il2CppClass *)classOfObject:(void *)objPtr {
     if (!objPtr) return NULL;
     void *klassPtr = *(void **)objPtr;
+    if (!klassPtr) return NULL;
     return (Il2CppClass *)klassPtr;
 }
 
@@ -177,7 +181,7 @@
     typedef void *(*fn_t)(void *, void *);
     fn_t fn = (fn_t)[r method_get_pointer:method];
     if (!fn) return NULL;
-    return fn(obj, NULL);
+    return fn(obj, method);
 }
 
 - (float)invokeFloatMethod:(MethodInfo *)method onObject:(void *)obj resolver:(IL2CPPResolver *)r {
@@ -185,7 +189,7 @@
     typedef float (*fn_t)(void *, void *);
     fn_t fn = (fn_t)[r method_get_pointer:method];
     if (!fn) return 0;
-    return fn(obj, NULL);
+    return fn(obj, method);
 }
 
 - (BOOL)invokeBoolMethod:(MethodInfo *)method onObject:(void *)obj resolver:(IL2CPPResolver *)r {
@@ -193,7 +197,7 @@
     typedef BOOL (*fn_t)(void *, void *);
     fn_t fn = (fn_t)[r method_get_pointer:method];
     if (!fn) return NO;
-    return fn(obj, NULL);
+    return fn(obj, method);
 }
 
 - (Vector3)invokeVector3Method:(MethodInfo *)method onObject:(void *)obj resolver:(IL2CPPResolver *)r {
@@ -202,15 +206,16 @@
     typedef void (*fn_t)(void *, void *, void *);
     fn_t fn = (fn_t)[r method_get_pointer:method];
     if (!fn) return result;
-    fn(obj, NULL, &result);
+    fn(obj, method, &result);
     return result;
 }
 
 - (NSString *)il2cppStringToNSString:(void *)strPtr {
     if (!strPtr) return @"";
-    uint32_t len = *(uint32_t *)strPtr;
-    if (len > 256) len = 256;
-    const UniChar *chars = (const UniChar *)((char *)strPtr + 0x10);
+    // Layout String: [0x00 klass][0x08 monitor][0x10 length][0x14 pad][0x18 chars]
+    int32_t len = *(int32_t *)((char *)strPtr + 0x10);
+    if (len <= 0 || len > 256) return @"";
+    const UniChar *chars = (const UniChar *)((char *)strPtr + 0x18);
     return [NSString stringWithCharacters:chars length:len];
 }
 
