@@ -17,13 +17,8 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
     return t;
 }
 
-+ (NSArray<AITool *> *)allTools {
-    return gTools.allValues ?: @[];
-}
-
-+ (AITool *)toolNamed:(NSString *)name {
-    return gTools[name];
-}
++ (NSArray<AITool *> *)allTools { return gTools.allValues ?: @[]; }
++ (AITool *)toolNamed:(NSString *)name { return gTools[name]; }
 
 + (void)registerTool:(AITool *)tool {
     static dispatch_once_t onceToken;
@@ -32,19 +27,17 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
 }
 
 + (void)registerAll {
-    // search_classes
     [self registerTool:[AITool toolWithName:@"search_classes"
         description:@"Tim class trong runtime IL2CPP"
         parameters:@{@"type": @"object", @"properties": @{
-            @"keyword": @{@"type": @"string", @"description": @"Tu khoa"}
+            @"keyword": @{@"type": @"string"}
         }, @"required": @[@"keyword"]}
         handler:^id(NSDictionary *args) {
             return [AITool searchClasses:args[@"keyword"] ?: @""];
         }]];
 
-    // search_methods
     [self registerTool:[AITool toolWithName:@"search_methods"
-        description:@"Tim method trong class runtime, tra ve RVA"
+        description:@"Tim method trong class runtime"
         parameters:@{@"type": @"object", @"properties": @{
             @"class_name": @{@"type": @"string"},
             @"method_keyword": @{@"type": @"string"}
@@ -54,7 +47,6 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
                                  keyword:args[@"method_keyword"] ?: @""];
         }]];
 
-    // get_method_rva
     [self registerTool:[AITool toolWithName:@"get_method_rva"
         description:@"Lay RVA method"
         parameters:@{@"type": @"object", @"properties": @{
@@ -66,9 +58,8 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
                                  method:args[@"method_name"] ?: @""];
         }]];
 
-    // find_hack_methods
     [self registerTool:[AITool toolWithName:@"find_hack_methods"
-        description:@"Tim ham hack (map/speed/damage/health/money)"
+        description:@"Tim ham hack"
         parameters:@{@"type": @"object", @"properties": @{
             @"hack_type": @{@"type": @"string"}
         }, @"required": @[@"hack_type"]}
@@ -76,9 +67,8 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
             return [AITool findHack:args[@"hack_type"] ?: @""];
         }]];
 
-    // read_file
     [self registerTool:[AITool toolWithName:@"read_file"
-        description:@"Grep keyword trong file .txt"
+        description:@"Grep keyword trong file"
         parameters:@{@"type": @"object", @"properties": @{
             @"filename": @{@"type": @"string"},
             @"keyword": @{@"type": @"string"}
@@ -88,9 +78,8 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
                             keyword:args[@"keyword"] ?: @""];
         }]];
 
-    // list_files
     [self registerTool:[AITool toolWithName:@"list_files"
-        description:@"Liet ke file trong Documents"
+        description:@"Liet ke file"
         parameters:@{@"type": @"object", @"properties": @{}}
         handler:^id(NSDictionary *args) {
             return [AITool listFiles];
@@ -108,7 +97,7 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
     };
 }
 
-#pragma mark - Tool implementations
+#pragma mark - Implementations
 
 + (id)searchClasses:(NSString *)keyword {
     if (keyword.length == 0) return @{@"error": @"keyword required"};
@@ -331,11 +320,13 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
 
     NSString *kwLower = keyword.lowercaseString;
     NSMutableArray *matches = [NSMutableArray array];
+
     for (NSInteger i = 0; i < (NSInteger)lines.count && matches.count < 20; i++) {
-        if ([lines[i].lowercaseString containsString:kwLower]) {
+        NSString *line = (NSString *)lines[i];
+        if ([line.lowercaseString containsString:kwLower]) {
             [matches addObject:@{
                 @"line": @(i + 1),
-                @"text": [lines[i] stringByTrimmingCharactersInSet:
+                @"text": [line stringByTrimmingCharactersInSet:
                          [NSCharacterSet whitespaceCharacterSet]]
             }];
         }
