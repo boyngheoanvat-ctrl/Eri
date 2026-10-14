@@ -3,6 +3,7 @@
 #import "AITool.h"
 #import "AIMemoryTool.h"
 #import "AIESPTool.h"
+#import "GameFingerprint.h"
 #import "ToolTheme.h"
 
 static const CGFloat kInputBarHeight = 50;
@@ -16,7 +17,6 @@ static const CGFloat kInputBarHeight = 50;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *items;
 @property (nonatomic, assign) BOOL isWaiting;
 @property (nonatomic, strong) NSMutableString *currentAIResponse;
-@property (nonatomic, strong) UIPanGestureRecognizer *panOutside;
 @end
 
 @implementation AIChatVC
@@ -33,10 +33,10 @@ static const CGFloat kInputBarHeight = 50;
     [self buildUI];
     [self setupKeyboardObservers];
 
-    [self.items addObject:@{
-        @"type": @"ai",
-        @"text": @"AI Agent ready.\nHoi: hack map, tim class quan ly entity"
-    }];
+    NSString *game = [[GameFingerprint shared] detectedGame];
+    NSString *welcome = [NSString stringWithFormat:
+        @"AI Agent ready.\nGame: %@\nHoi: hack map, hack speed, tim class...", game];
+    [self.items addObject:@{@"type": @"ai", @"text": welcome}];
     [self.tableView reloadData];
     [self scrollToBottomAnimated:NO];
 }
@@ -51,7 +51,6 @@ static const CGFloat kInputBarHeight = 50;
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
 
-    // Table view (chat log) — chiếm toàn bộ trừ input bar
     self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, w, h - kInputBarHeight)
                                                      style:UITableViewStylePlain];
     self.tableView.dataSource = self;
@@ -61,16 +60,16 @@ static const CGFloat kInputBarHeight = 50;
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 40;
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
-    self.tableView.alwaysBounceVertical = YES;          // <-- cho phép kéo dù ít tin
-    self.tableView.showsVerticalScrollIndicator = YES;  // <-- hiện thanh scroll bên phải
+    self.tableView.alwaysBounceVertical = YES;
+    self.tableView.showsVerticalScrollIndicator = YES;
     self.tableView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
-    self.tableView.scrollEnabled = YES;                 // <-- ĐẢM BẢO scroll bật
+    self.tableView.scrollEnabled = YES;
+    self.tableView.delaysContentTouches = NO;
+    self.tableView.canCancelContentTouches = YES;
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    // contentInset để tin cuối không bị input bar che
     self.tableView.contentInset = UIEdgeInsetsMake(8, 0, 8, 0);
     [self.view addSubview:self.tableView];
 
-    // Input area — ghim đáy
     self.inputArea = [[UIView alloc] initWithFrame:CGRectMake(0, h - kInputBarHeight, w, kInputBarHeight)];
     self.inputArea.backgroundColor = [ToolTheme shared].surface;
     self.inputArea.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
@@ -115,6 +114,7 @@ static const CGFloat kInputBarHeight = 50;
     self.spinner.color = [ToolTheme shared].accent;
     self.spinner.center = self.view.center;
     self.spinner.hidesWhenStopped = YES;
+    self.spinner.userInteractionEnabled = NO;
     [self.view addSubview:self.spinner];
 }
 
@@ -123,12 +123,10 @@ static const CGFloat kInputBarHeight = 50;
 - (void)setupKeyboardObservers {
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(keyboardWillShow:)
-                                                 name:UIKeyboardWillShowNotification
-                                               object:nil];
+                                                 name:UIKeyboardWillShowNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(keyboardWillHide:)
-                                                 name:UIKeyboardWillHideNotification
-                                               object:nil];
+                                                 name:UIKeyboardWillHideNotification object:nil];
 }
 
 - (void)keyboardWillShow:(NSNotification *)note {
@@ -142,7 +140,6 @@ static const CGFloat kInputBarHeight = 50;
         CGFloat w = CGRectGetWidth(self.view.bounds);
         CGFloat h = CGRectGetHeight(self.view.bounds);
         CGFloat visibleH = h - overlap;
-
         self.tableView.frame = CGRectMake(0, 0, w, visibleH - kInputBarHeight);
         self.inputArea.frame = CGRectMake(0, visibleH - kInputBarHeight, w, kInputBarHeight);
     } completion:^(BOOL finished) {
@@ -153,28 +150,12 @@ static const CGFloat kInputBarHeight = 50;
 - (void)keyboardWillHide:(NSNotification *)note {
     NSDictionary *info = note.userInfo;
     NSTimeInterval dur = [info[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
-
     [UIView animateWithDuration:dur animations:^{
         CGFloat w = CGRectGetWidth(self.view.bounds);
         CGFloat h = CGRectGetHeight(self.view.bounds);
         self.tableView.frame = CGRectMake(0, 0, w, h - kInputBarHeight);
         self.inputArea.frame = CGRectMake(0, h - kInputBarHeight, w, kInputBarHeight);
     }];
-}
-
-#pragma mark - Gesture passthrough
-
-// Cho phép tableView nhận pan gesture ngay cả khi nằm trong draggable window
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
-shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
-    return YES;
-}
-
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldReceiveTouch:(UITouch *)touch {
-    // Table view và input field ưu tiên nhận touch
-    if ([touch.view isDescendantOfView:self.tableView]) return YES;
-    if ([touch.view isDescendantOfView:self.inputArea]) return YES;
-    return YES;
 }
 
 #pragma mark - Send
@@ -194,22 +175,29 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
     self.sendButton.alpha = 0.5;
     [self.spinner startAnimating];
 
-    NSString *sysPrompt =
-        @"AI agent hack game IL2CPP. Tra loi tieng Viet ngan gon.\n"
-        @"Tool:\n"
-        @"- find_hack_methods(hack_type): tim ham hack NHANH (map/speed/damage/health/money)\n"
-        @"- search_classes(keyword): tim class\n"
-        @"- dump_class_runtime(class_name): dump class\n"
-        @"- find_entity_manager(): tim class quan ly entity\n"
-        @"- find_camera_class(): tim class Camera\n"
-        @"- search_memory(value, type): tim gia tri\n"
-        @"- edit_memory(address, value, type): sua gia tri\n"
-        @"- read_file(filename, keyword): grep file\n"
-        @"QUY TAC QUAN TRONG:\n"
-        @"1. Hoi 'hack map' → goi find_hack_methods('map') 1 LAN DUY NHAT\n"
-        @"2. Neu tool tra ve error hoac 0 ket qua → DUNG LAI, tra loi user\n"
-        @"3. KHONG GOI TOOL LAP LAI qua 3 lan\n"
-        @"4. Tra loi user ngay sau khi co ket qua";
+    NSString *game = [[GameFingerprint shared] detectedGame];
+
+    NSString *sysPrompt = [NSString stringWithFormat:
+        @"Ban la AI agent hack game IL2CPP iOS. Tra loi tieng Viet ngan gon, chinh xac.\n"
+        @"Game hien tai: %@\n"
+        @"\n"
+        @"=== TOOL ===\n"
+        @"1. find_concept(concept) — DUNG DAU TIEN\n"
+        @"   concept: map, speed, damage, health, mana, money, cooldown, ammo, level\n"
+        @"2. find_method_global(keyword) — tim method toan bo\n"
+        @"3. dump_class_runtime(class_name) — xem chi tiet class\n"
+        @"4. search_classes(keyword) — tim class\n"
+        @"5. find_classes_by_method(method_name)\n"
+        @"6. find_method_in_class(class_name, keyword)\n"
+        @"7. find_field_in_class(class_name, keyword)\n"
+        @"8. read_file(filename, keyword)\n"
+        @"\n"
+        @"=== QUY TAC ===\n"
+        @"1. Cau hoi 'hack X' → find_concept('X')\n"
+        @"2. Neu 0 ket qua → find_method_global voi tu khoa tuong tu\n"
+        @"3. Cau hoi ve class cu the → dump_class_runtime\n"
+        @"4. Tra loi RO: game + class + method + RVA\n"
+        @"5. Khong bia RVA. Khong lap tool qua 3 lan.", game];
 
     NSMutableArray *messages = [NSMutableArray array];
     [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
@@ -236,14 +224,14 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
         [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
     });
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)),
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (ws.isWaiting) {
             ws.isWaiting = NO;
             ws.sendButton.enabled = YES;
             ws.sendButton.alpha = 1.0;
             [ws.spinner stopAnimating];
-            [ws.items addObject:@{@"type": @"error", @"text": @"Timeout 20s"}];
+            [ws.items addObject:@{@"type": @"error", @"text": @"Timeout 60s"}];
             [ws.tableView reloadData];
             [ws scrollToBottomAnimated:YES];
         }
@@ -263,14 +251,13 @@ shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other 
     });
 }
 
-// Giữ nguyên tên cũ để không phá code cũ
 - (void)scrollToBottom { [self scrollToBottomAnimated:YES]; }
 
 #pragma mark - AIStreamDelegate
 
 - (void)aiStreamDidReceiveText:(NSString *)text {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.currentAIResponse appendString:text];
+        [self.currentAIResponse appendString:text ?: @""];
         NSInteger lastIdx = (NSInteger)self.items.count - 1;
         if (lastIdx >= 0 && [self.items[lastIdx][@"type"] isEqualToString:@"ai"]) {
             self.items[lastIdx] = @{@"type": @"ai", @"text": [self.currentAIResponse copy]};
