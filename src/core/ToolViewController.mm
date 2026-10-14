@@ -71,7 +71,6 @@
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
     [self.panel addGestureRecognizer:pan];
 
-    // Title bar
     self.titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, panelW, 36)];
     self.titleBar.backgroundColor = [ToolTheme shared].surfaceAlt;
     self.titleBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
@@ -106,7 +105,6 @@
     [self.closeButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.titleBar addSubview:self.closeButton];
 
-    // Rail
     CGFloat railW = 60;
     CGFloat railH = panelH - 36;
     self.railView = [[UIView alloc] initWithFrame:CGRectMake(0, 36, railW, railH)];
@@ -138,7 +136,6 @@
     self.methodButton = [self makeRailButton:@"Call" symbol:@"▶" tag:3];
     [self.railStack addArrangedSubview:self.methodButton];
 
-    // Content
     self.contentView = [[UIView alloc] initWithFrame:CGRectMake(railW, 36, panelW - railW, panelH - 36)];
     self.contentView.backgroundColor = [ToolTheme shared].background;
     self.contentView.clipsToBounds = YES;
@@ -154,12 +151,12 @@
 }
 
 - (void)railButtonTapped:(ToolRailButton *)sender {
- alloc    [self selectTab:sender.tag];
+    [self selectTab:sender.tag];
 }
 
-]- (void)buildVCs {
-    self.aiVC = init [[];
-AIChatVC    self.dumpVC = [[DumperVC alloc] init];
+- (void)buildVCs {
+    self.aiVC = [[AIChatVC alloc] init];
+    self.dumpVC = [[DumperVC alloc] init];
     self.memoryVC = [[MemoryVC alloc] init];
     self.methodVC = [[MethodCallerVC alloc] init];
 }
