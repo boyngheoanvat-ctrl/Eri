@@ -50,7 +50,7 @@ jobs:
             -framework UIKit \
             -framework CoreGraphics \
             -install_name @rpath/libtool.dylib \
-            -Isrc -Isrc/core -Isrc/ui -Isrc/ai -Isrc/dump \
+            -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai -Isrc/dump \
             -o libtool.dylib \
             $SRC
 
