@@ -29,11 +29,9 @@ static const CGFloat kInputBarHeight = 50;
     self.items = [NSMutableArray array];
     NSLog(@"[AI] after init vars");
 
-    NSLog(@"[AI] AITool registerAll...");
+    NSLog(@"[AI] registerAll tools...");
     [AITool registerAll];
-    NSLog(@"[AI] AIMemoryTool registerAll...");
     [AIMemoryTool registerAll];
-    NSLog(@"[AI] AIESPTool registerAll...");
     [AIESPTool registerAll];
     NSLog(@"[AI] all registerAll DONE");
 
@@ -45,8 +43,15 @@ static const CGFloat kInputBarHeight = 50;
     [self setupKeyboardObservers];
     NSLog(@"[AI] after setupKeyboardObservers");
 
-    // KHÔNG gọi GameFingerprint ở đây — lazy load khi user hỏi
+    // GameFingerprint có scan an toàn (guard)
     NSString *game = @"Unknown";
+    @try {
+        game = [[GameFingerprint shared] detectedGame];
+    } @catch (NSException *e) {
+        NSLog(@"[AI] GameFingerprint crash: %@", e);
+        game = @"Unknown";
+    }
+
     NSString *welcome = [NSString stringWithFormat:
         @"AI Agent ready.\nGame: %@\nHoi: hack map, hack speed, tim class...", game];
     [self.items addObject:@{@"type": @"ai", @"text": welcome}];
@@ -202,8 +207,8 @@ static const CGFloat kInputBarHeight = 50;
         @"Game hien tai: %@\n"
         @"\n"
         @"=== TOOL ===\n"
-        @"1. find_concept(concept) — DUNG DAU TIEN\n"
-        @"   concept: map, speed, damage, health, mana, money, cooldown, ammo, level\n"
+,        @"1. find_concept(concept) — DUNG DAU TIEN\n"
+        @"   concept: map, speed, damage, health, mana, money cooldown, ammo, level\n"
         @"2. find_method_global(keyword) — tim method toan bo\n"
         @"3. dump_class_runtime(class_name) — xem chi tiet class\n"
         @"4. search_classes(keyword) — tim class\n"
