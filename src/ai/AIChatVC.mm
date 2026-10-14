@@ -23,24 +23,37 @@ static const CGFloat kInputBarHeight = 50;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    NSLog(@"[TEST-AI] viewDidLoad START");
+    NSLog(@"[AI] viewDidLoad START");
 
     self.view.backgroundColor = [ToolTheme shared].background;
     self.items = [NSMutableArray array];
-    NSLog(@"[TEST-AI] after init vars");
+    NSLog(@"[AI] after init vars");
 
-    // ===== TẮT HẾT — BẬT DẦN THEO HƯỚNG DẪN =====
-    // [AITool registerAll];
-    // [AIMemoryTool registerAll];
-    // [AIESPTool registerAll];
-    // [self buildUI];
-    // [self setupKeyboardObservers];
-    // NSString *game = [[GameFingerprint shared] detectedGame];
+    NSLog(@"[AI] AITool registerAll...");
+    [AITool registerAll];
+    NSLog(@"[AI] AIMemoryTool registerAll...");
+    [AIMemoryTool registerAll];
+    NSLog(@"[AI] AIESPTool registerAll...");
+    [AIESPTool registerAll];
+    NSLog(@"[AI] all registerAll DONE");
 
-    NSLog(@"[TEST-AI] viewDidLoad DONE — nothing");
+    NSLog(@"[AI] buildUI...");
+    [self buildUI];
+    NSLog(@"[AI] after buildUI");
 
-    // View cần có gì đó để không bị nil
-    self.view.backgroundColor = [UIColor blackColor];
+    NSLog(@"[AI] setupKeyboardObservers...");
+    [self setupKeyboardObservers];
+    NSLog(@"[AI] after setupKeyboardObservers");
+
+    // KHÔNG gọi GameFingerprint ở đây — lazy load khi user hỏi
+    NSString *game = @"Unknown";
+    NSString *welcome = [NSString stringWithFormat:
+        @"AI Agent ready.\nGame: %@\nHoi: hack map, hack speed, tim class...", game];
+    [self.items addObject:@{@"type": @"ai", @"text": welcome}];
+    [self.tableView reloadData];
+    [self scrollToBottomAnimated:NO];
+
+    NSLog(@"[AI] viewDidLoad DONE");
 }
 
 - (void)dealloc {
@@ -177,7 +190,12 @@ static const CGFloat kInputBarHeight = 50;
     self.sendButton.alpha = 0.5;
     [self.spinner startAnimating];
 
-    NSString *game = [[GameFingerprint shared] detectedGame];
+    NSString *game = @"Unknown";
+    @try {
+        game = [[GameFingerprint shared] detectedGame];
+    } @catch (NSException *e) {
+        NSLog(@"[AI] GameFingerprint crash: %@", e);
+    }
 
     NSString *sysPrompt = [NSString stringWithFormat:
         @"Ban la AI agent hack game IL2CPP iOS. Tra loi tieng Viet ngan gon, chinh xac.\n"
