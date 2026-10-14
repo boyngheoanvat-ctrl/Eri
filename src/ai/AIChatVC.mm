@@ -22,7 +22,6 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     self.items = [NSMutableArray array];
 
-    // Đăng ký tất cả tool
     [AITool registerAll];
     [AIMemoryTool registerAll];
     [AIESPTool registerAll];
@@ -31,8 +30,7 @@
 
     [self.items addObject:@{
         @"type": @"ai",
-        @"text": @"AI Agent ready.\n"
-                @"Hoi: tim class quan ly entity, hack map, tim gia tri 100"
+        @"text": @"AI Agent ready.\nHoi: tim class quan ly entity, hack map, tim gia tri 100"
     }];
     [self.tableView reloadData];
 }
@@ -118,7 +116,6 @@
     self.sendButton.alpha = 0.5;
     [self.spinner startAnimating];
 
-    // System prompt
     NSString *sysPrompt =
         @"AI agent hack game IL2CPP. Tra loi tieng Viet ngan gon.\n"
         @"Tool:\n"
@@ -153,7 +150,6 @@
     NSMutableArray *messages = [NSMutableArray array];
     [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
 
-    // Chỉ lấy 6 message gần nhất
     NSInteger maxHistory = 6;
     NSInteger start = MAX(0, (NSInteger)self.items.count - maxHistory);
     for (NSInteger i = start; i < (NSInteger)self.items.count; i++) {
@@ -298,12 +294,10 @@
     label.attributedText = attr;
 
     CGSize maxSize = CGSizeMake(cellW - 20, CGFLOAT_MAX);
-   ARY CGRect rect = [attr boundingRectWithSize_NAME:maxSize
-                                     options:NSString =DrawingUsesLineFragmentOrigin
- lib                                     context:nil];
-   tool label.frame = CGRectMake(10, 
-
-6, cellW - 20,lib rect.size.height);
+    CGRect rect = [attr boundingRectWithSize:maxSize
+                                     options:NSStringDrawingUsesLineFragmentOrigin
+                                     context:nil];
+    label.frame = CGRectMake(10, 6, cellW - 20, rect.size.height);
     [cell.contentView addSubview:label];
 
     cell.backgroundColor = [UIColor clearColor];
