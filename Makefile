@@ -16,6 +16,9 @@ libtool_FILES = \
     src/ai/AIChatVC.mm \
     src/ai/AIProvider.mm \
     src/ai/AITool.mm \
+    src/ai/AIMemoryTool.mm \
+    src/memory/MemoryResult.mm \
+    src/memory/MemoryEditor.mm \
     src/dump/IL2CPPResolver.mm \
     src/dump/DumperVC.mm
 
