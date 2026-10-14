@@ -47,18 +47,18 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-
-    NSLog(@"[TEST-B1] viewDidLoad START");
+    NSLog(@"[TEST-B2] viewDidLoad START");
 
     self.view.frame = [UIScreen mainScreen].bounds;
     self.view.backgroundColor = [UIColor redColor];
 
-    NSLog(@"[TEST-B1] viewDidLoad DONE");
+    [self buildUI];
+    NSLog(@"[TEST-B2] after buildUI");
 
-    // ===== BƯỚC 1: COMMENT 3 DÒNG NÀY =====
-    // [self buildUI];
     // [self buildVCs];
     // [self selectTab:0];
+
+    NSLog(@"[TEST-B2] viewDidLoad DONE");
 }
 
 - (void)buildUI {
