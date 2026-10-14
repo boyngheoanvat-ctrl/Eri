@@ -202,7 +202,7 @@
 }
 
 - (void)buildVCs {
-    // KHÔNG tạo gì cả — lazy create trong selectTab
+    // Không tạo gì cả — lazy create trong selectTab
 }
 
 - (void)selectTab:(NSInteger)index {
@@ -213,6 +213,7 @@
     }
 
     UIViewController *newVC = nil;
+
     if (index == 0) {
         if (!self.aiVC) {
             @try { self.aiVC = [[AIChatVC alloc] init]; }
@@ -220,36 +221,41 @@
         }
         newVC = self.aiVC;
         self.subtitleLabel.text = @"AI Agent";
-    } else if (index == 1) {
+    }
+    else if (index == 1) {
         if (!self.dumpVC) {
             @try { self.dumpVC = [[DumperVC alloc] init]; }
             @catch (NSException *e) { NSLog(@"[ToolVC] DumperVC init crash: %@", e); return; }
         }
         newVC = self.dumpVC;
         self.subtitleLabel.text = @"IL2CPP Dumper";
-    } else if (index == 2) {
+    }
+    else if (index == 2) {
         if (!self.memoryVC) {
             @try { self.memoryVC = [[MemoryVC alloc] init]; }
             @catch (NSException *e) { NSLog(@"[ToolVC] MemoryVC init crash: %@", e); return; }
         }
         newVC = self.memoryVC;
         self.subtitleLabel.text = @"Memory Editor";
-    } else if (index == 3) bi {
+    }
+    else if (index == 3) {
         if (!self.methodVC) {
             @try { self.methodVC = [[MethodCallerVC alloc] init]; }
             @catch (NSException *e) { NSLog(@"[ToolVC] MethodCallerVC init crash: %@", e); return; }
         }
         newVC = self.methodVC;
         self.subtitleLabel.text = @"Method Caller";
-    } else if (index == 4) {
+    }
+    else if (index == 4) {
         if (!self.luaVC) {
             @try { self.luaVC = [[LuaVC alloc] init]; }
             @catch (NSException *e) { NSLog(@"[ToolVC] LuaVC init crash: %@", e); return; }
         }
         newVC = self.luaVC;
         self.subtitleLabel.text = @"Lua Console";
-    } else ifệt (index == 5) {
-        if (!self so.espVC) {
+    }
+    else if (index == 5) {
+        if (!self.espVC) {
             @try { self.espVC = [[ESPVC alloc] init]; }
             @catch (NSException *e) { NSLog(@"[ToolVC] ESPVC init crash: %@", e); return; }
         }
