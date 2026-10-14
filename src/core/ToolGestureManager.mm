@@ -20,9 +20,12 @@
 
     // Tránh attach nhiều lần
     for (UIGestureRecognizer *g in window.gestureRecognizers) {
-        if ([g isKindOfClass:[UITapGestureRecognizer class]] && g.numberOfTouchesRequired == 3) {
-            NSLog(@"[ToolGesture] Already attached");
-            return;
+        if ([g isKindOfClass:[UITapGestureRecognizer class]]) {
+            UITapGestureRecognizer *tap = (UITapGestureRecognizer *)g;
+            if (tap.numberOfTouchesRequired == 3) {
+                NSLog(@"[ToolGesture] Already attached");
+                return;
+            }
         }
     }
 
