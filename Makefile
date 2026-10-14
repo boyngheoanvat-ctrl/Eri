@@ -3,9 +3,7 @@ TARGET = iphone:clang:latest:14.0
 
 include $(THEOS)/makefiles/common.mk
 
-LIBRARY_NAME = libtool
-
-libtool_FILES = \
+LIBRtool_FILES = \
     src/libtool.mm \
     src/FloatingButton.mm \
     src/core/ToolWindow.mm \
@@ -17,6 +15,7 @@ libtool_FILES = \
     src/ai/AIProvider.mm \
     src/ai/AITool.mm \
     src/ai/AIMemoryTool.mm \
+    src/ai/AIESPTool.mm \
     src/memory/MemoryResult.mm \
     src/memory/MemoryEditor.mm \
     src/memory/MemoryVC.mm \
@@ -27,7 +26,9 @@ libtool_FILES = \
     src/lua/LuaEngine.mm \
     src/lua/LuaVC.mm \
     src/esp/ESPOverlay.mm \
-    src/esp/ESPVC.mm
+    src/esp/ESPVC.mm \
+    src/esp/IL2CPPHeapWalker.mm \
+    src/esp/ESPClassFinder.mm
 
 libtool_CFLAGS = -fobjc-arc \
     -I. \
