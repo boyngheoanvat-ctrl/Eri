@@ -1,6 +1,5 @@
 #import "IL2CPPHeapWalker.h"
-#import <objc/runtime.h>
-#import <dlfcn.h>
+#import "IL2CPPResolver.h"
 
 @implementation IL2CPPHeapWalker
 
@@ -11,134 +10,109 @@
     return instance;
 }
 
-- (void)enumerateObjectsOfClass:(NSString *)className
-                          block:(HeapObjectBlock)block
-                          limit:(NSInteger)limit {
-    if (className.length == 0 || !block) return;
+- (NSArray<NSDictionary *> *)findClassesWithStaticFields:(NSString *)keyword {
+    NSMutableArray<NSDictionary *> *result = [NSMutableArray array];
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (![r resolve]) return;
+    if (![r resolve]) return result;
 
-    Il2CppClass *targetClass = [self findClass:className resolver:r];
-    if (!targetClass) return;
+    Il2CppDomain *domain = [r domain_get];
+    if (!domain || !domain->assemblies) return result;
 
-    [self enumerateViaStaticFields:targetClass resolver:r block:block limit:limit];
-}
+    int maxAssemblies = MIN((int)domain->assembly_count, 5);
 
-#pragma mark - Enumerate via static fields
+    for (int a = 0; a < maxAssemblies; a++) {
+        @autoreleasepool {
+            Il2CppAssembly *assembly = domain->assemblies[a];
+            if (!assembly) continue;
 
-- (void)enumerateViaStaticFields:(Il2CppClass *)targetClass
-                        resolver:(IL2CPPResolver *)r
-                           block:(HeapObjectBlock)block
-                           limit:(NSInteger)limit {
+            Il2CppImage *image = [r assembly_get_image:assembly];
+            if (!image) continue;
 
-    NSArray *candidateClasses = @[
-        @"ShowPlayerManager", @"EntityManager", @"GameManager",
-        @"ShowEntityManager", @"BattleManager", @"PlayerManager",
-        @"EntityList", @"ShowEntityList", @"ShowPlayer",
-        @"SceneManager", @"ShowSceneManager", @"GameEntityManager"
-    ];
+            const char *imgNameC = [r image_get_name:image];
+            if (!imgNameC) continue;
+            NSString *imgName = [NSString stringWithUTF8String:imgNameC];
 
-    for (NSString *candidate in candidateClasses) {
-        Il2CppClass *managerClass = [self findClass:candidate resolver:r];
-        if (!managerClass) continue;
+            size_t classCount = [r image_get_class_count:image];
+            if (classCount == 0) continue;
 
-        uint16_t fCount = 0;
-        const FieldInfo **fList = [r class_get_fields:managerClass count:&fCount];
-        for (uint16_t i = 0; i < fCount; i++) {
-            const char *fn = [r field_get_name:(FieldInfo *)fList[i]];
-            if (!fn) continue;
-            NSString *fieldName = [NSString stringWithUTF8String:fn];
-            NSString *lower = fieldName.lowercaseString;
+            for (size_t i = 0; i < classCount; i++) {
+                @autoreleasepool {
+                    Il2CppClass *klass = [r image_get_class:image index:i];
+                    if (!klass) continue;
 
-            if ([lower containsString:@"entit"] ||
-                [lower containsString:@"player"] ||
-                [lower containsString:@"list"] ||
-                [lower containsString:@"all"]) {
+                    const char *cname = [r class_get_name:klass];
+                    if (!cname) continue;
+                    NSString *clsName = [NSString stringWithUTF8String:cname];
+                    if (!clsName) continue;
 
-                void *fieldValue = [self getStaticFieldValue:managerClass
-                                                       field:(FieldInfo *)fList[i]
-                                                    resolver:r];
-                if (!fieldValue) continue;
+                    // Lọc theo keyword nếu có
+                    if (keyword.length > 0 &&
+                        [clsName rangeOfString:keyword options:NSCaseInsensitiveSearch].location == NSNotFound) {
+                        continue;
+                    }
 
-                [self enumerateList:fieldValue
-                        targetClass:targetClass
-                              block:block
-                              limit:limit];
+                    // Kiểm tra có static_fields không
+                    void *staticData = [r class_get_static_field_data:klass];
+                    if (!staticData) continue;
+
+                    uint16_t fCount = 0;
+                    NSArray<NSValue *> *fList = [r class_get_fields:klass count:&fCount];
+
+                    NSMutableArray *staticFields = [NSMutableArray array];
+                    for (uint16_t j = 0; j < fCount; j++) {
+                        FieldInfo *f = (FieldInfo *)fList[j].pointerValue;
+                        if (!f) continue;
+
+                        const char *fn = [r field_get_name:f];
+                        if (!fn) continue;
+
+                        int32_t off = [r field_get_offset:f];
+
+                        // Chỉ lấy field có offset >= 0 (field instance)
+                        // Static field có offset âm hoặc offset đặc biệt
+                        if (off < 0) {
+                            NSString *fname = [NSString stringWithUTF8String:fn];
+                            [staticFields addObject:@{
+                                @"name": fname ?: @"",
+                                @"offset": @(off),
+                            }];
+                        }
+                    }
+
+                    if (staticFields.count > 0) {
+                        [result addObject:@{
+                            @"class": clsName,
+                            @"namespace": [NSString stringWithUTF8String:([r class_get_namespace:klass] ?: "")] ?: @"",
+                            @"image": imgName ?: @"",
+                            @"staticFields": staticFields,
+                            @"staticData": [NSValue valueWithPointer:staticData],
+                        }];
+                    }
+                }
             }
         }
-        if (fList) free(fList);
     }
+
+    return result;
 }
 
-- (void *)getStaticFieldValue:(Il2CppClass *)klass
-                        field:(FieldInfo *)field
-                     resolver:(IL2CPPResolver *)r {
+- (void *)getStaticFieldAddress:(Il2CppClass *)klass field:(FieldInfo *)field {
     if (!klass || !field) return NULL;
-    if (!klass->static_fields) return NULL;
 
-    void *addr = (char *)klass->static_fields + field->offset;
-    return *(void **)addr;
-}
+    IL2CPPResolver *r = [IL2CPPResolver shared];
+    void *staticData = [r class_get_static_field_data:klass];
+    if (!staticData) return NULL;
 
-- (void)enumerateList:(void *)listPtr
-          targetClass:(Il2CppClass *)targetClass
-                block:(HeapObjectBlock)block
-                limit:(NSInteger)limit {
-    if (!listPtr) return;
+    int32_t off = [r field_get_offset:field];
 
-    void *items = *(void **)((char *)listPtr + 0x10);
-    uint32_t size = *(uint32_t *)((char *)listPtr + 0x18);
-
-    if (!items || size == 0 || size > 500) return;
-
-    NSInteger count = 0;
-    for (uint32_t i = 0; i < size && count < limit; i++) {
-        void *item = *(void **)((char *)items + i * 8);
-        if (!item) continue;
-
-        Il2CppClass *itemClass = [self classOfObject:item];
-        if (!itemClass) continue;
-
-        const char *cname = itemClass->name;
-        if (cname && strcmp(cname, targetClass->name) == 0) {
-            block(item, itemClass);
-            count++;
-        }
+    // Field static thường có offset âm hoặc là offset trong vùng static data
+    // Đối chiếu il2cpp.h để chắc chắn
+    if (off < 0) {
+        // Offset âm: tính từ staticData - offset (thường vậy, tuỳ version)
+        return (char *)staticData + off;
     }
-}
-
-- (Il2CppClass *)classOfObject:(void *)objPtr {
-    if (!objPtr) return NULL;
-    void *klassPtr = *(void **)objPtr;
-    if (!klassPtr) return NULL;
-    return (Il2CppClass *)klassPtr;
-}
-
-- (Il2CppClass *)findClass:(NSString *)name resolver:(IL2CPPResolver *)r {
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain) return NULL;
-
-    NSString *lower = name.lowercaseString;
-    for (int a = 0; a < domain->assembly_count; a++) {
-        Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
-        void *imgPtr = *(void **)asm_;
-        if (!imgPtr) continue;
-        Il2CppImage *image = (Il2CppImage *)imgPtr;
-        if (!image || !image->name) continue;
-
-        size_t count = [r image_get_class_count:image];
-        for (size_t i = 0; i < count; i++) {
-            Il2CppClass *klass = [r image_get_class:image index:i];
-            if (!klass) continue;
-            const char *cname = [r class_get_name:klass];
-            if (!cname) continue;
-            NSString *n = [NSString stringWithUTF8String:cname];
-            if ([n.lowercaseString isEqualToString:lower]) return klass;
-        }
-    }
-    return NULL;
+    return (char *)staticData + off;
 }
 
 @end
