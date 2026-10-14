@@ -100,10 +100,12 @@
     for (int a = 0; a < domain->assembly_count; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
         if (!asm_) continue;
-        void *imgPtr = *(void **)asm_;
-        if (!imgPtr) continue;
-        Il2CppImage *image = (Il2CppImage *)imgPtr;
-        if (!image || !image->name) continue;
+
+        Il2CppImage *image = [r assembly_get_image:asm_];
+        if (!image) continue;
+
+        const char *imgNameC = [r image_get_name:image];
+        if (!imgNameC) continue;
 
         size_t count = [r image_get_class_count:image];
         for (size_t i = 0; i < count; i++) {
@@ -112,15 +114,19 @@
             const char *cname = [r class_get_name:klass];
             if (!cname) continue;
             NSString *name = [NSString stringWithUTF8String:cname];
+            if (!name) continue;
             if (![name.lowercaseString containsString:clsLower]) continue;
 
             uint16_t mCount = 0;
-            const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
+            NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
+
             for (uint16_t j = 0; j < mCount; j++) {
-                const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
+                MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
+                if (!m) continue;
+                const char *mn = [r method_get_name:m];
                 if (!mn) continue;
                 NSString *mn_str = [NSString stringWithUTF8String:mn];
-                if (![mn_str isEqualToString:mName]) continue;
+                if (!mn_str || ![mn_str isEqualToString:mName]) continue;
 
                 [self log:[NSString stringWithFormat:@"Tim thay: %@", mn_str]];
 
@@ -135,15 +141,13 @@
                 }
 
                 id result = [[MethodCaller shared]
-                    callMethod:(MethodInfo *)mList[j]
+                    callMethod:m
                     onObject:nil
                     args:args];
 
                 [self log:[NSString stringWithFormat:@"Ket qua: %@", result]];
-                if (mList) free(mList);
                 return;
             }
-            if (mList) free(mList);
             [self log:@"Khong tim thay method"];
             return;
         }
@@ -155,7 +159,7 @@
 - (void)log:(NSString *)text {
     dispatch_async(dispatch_get_main_queue(), ^{
         NSString *current = self.resultView.text ?: @"";
-        self.resultView.text = [current stringByAppendingFormat:@"%@\n", text];
+        self.resultView.text = [current stringByAppendingFormat:@"%@\n", text ?: @""];
         [self.resultView scrollRangeToVisible:NSMakeRange(self.resultView.text.length - 1, 1)];
         self.statusLabel.text = text;
     });
