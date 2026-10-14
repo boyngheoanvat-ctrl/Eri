@@ -21,40 +21,40 @@ static const CGFloat kInputBarHeight = 50;
 
 @implementation AIChatVC
 
-#pragma mark - TEST A: tắt hết registerAll
+#pragma mark - TEST B: chỉ bật AITool registerAll
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    NSLog(@"[TEST-A] viewDidLoad START");
+    NSLog(@"[TEST-B] viewDidLoad START");
 
     self.view.backgroundColor = [ToolTheme shared].background;
     self.items = [NSMutableArray array];
-    NSLog(@"[TEST-A] after init vars");
+    NSLog(@"[TEST-B] after init vars");
 
-    // ===== TẮT HẾT registerAll =====
-    // [AITool registerAll];
+    // CHỈ BẬT AITool
+    NSLog(@"[TEST-B] AITool registerAll START");
+    [AITool registerAll];
+    NSLog(@"[TEST-B] AITool registerAll DONE");
+
     // [AIMemoryTool registerAll];
     // [AIESPTool registerAll];
 
-    NSLog(@"[TEST-A] before buildUI");
+    NSLog(@"[TEST-B] before buildUI");
     [self buildUI];
-    NSLog(@"[TEST-A] after buildUI");
+    NSLog(@"[TEST-B] after buildUI");
 
-    NSLog(@"[TEST-A] before setupKeyboardObservers");
+    NSLog(@"[TEST-B] before setupKeyboardObservers");
     [self setupKeyboardObservers];
-    NSLog(@"[TEST-A] after setupKeyboardObservers");
+    NSLog(@"[TEST-B] after setupKeyboardObservers");
 
-    // ===== TẮT LUÔN GameFingerprint =====
-    // NSString *game = [[GameFingerprint shared] detectedGame];
     NSString *game = @"Unknown";
-
     NSString *welcome = [NSString stringWithFormat:
         @"AI Agent ready.\nGame: %@\nHoi: hack map, hack speed, tim class...", game];
     [self.items addObject:@{@"type": @"ai", @"text": welcome}];
     [self.tableView reloadData];
     [self scrollToBottomAnimated:NO];
 
-    NSLog(@"[TEST-A] viewDidLoad DONE");
+    NSLog(@"[TEST-B] viewDidLoad DONE");
 }
 
 - (void)dealloc {
@@ -174,7 +174,7 @@ static const CGFloat kInputBarHeight = 50;
     }];
 }
 
-#pragma mark - Send (TEST: không gọi tool)
+#pragma mark - Send (TEST: không gọi AI)
 
 - (void)sendTapped {
     NSString *text = self.inputField.text;
@@ -191,10 +191,10 @@ static const CGFloat kInputBarHeight = 50;
     self.sendButton.alpha = 0.5;
     [self.spinner startAnimating];
 
-    // TEST: không gọi AI, chỉ trả lời local
+    // TEST: trả lời local, không gọi AI
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        [self.items addObject:@{@"type": @"ai", @"text": @"[TEST-A] Da nhan tin nhan (khong goi AI)"}];
+        [self.items addObject:@{@"type": @"ai", @"text": @"[TEST-B] Da nhan tin nhan (khong goi AI)"}];
         [self.tableView reloadData];
         [self scrollToBottomAnimated:YES];
 
