@@ -55,7 +55,6 @@
     [self buildUI];
     NSLog(@"[TEST-B3] after buildUI");
 
-    // [self buildVCs];
     [self selectTab:0];
     NSLog(@"[TEST-B3] after selectTab:0");
 
@@ -219,11 +218,10 @@
 
     UIViewController *newVC = nil;
 
-    if (index == 0) p {
-        NSLog(@"[TEST-B3.x] creating AIChatVC...");
-        if (!self.aiVC) { self;
-.aiVC = [[AIChatVC alloc] init]; }
-        NSLog(@"[   TEST-B center3] AIChatVC created");
+    if (index == 0) {
+        NSLog(@"[TEST-B3] creating AIChatVC...");
+        if (!self.aiVC) { self.aiVC = [[AIChatVC alloc] init]; }
+        NSLog(@"[TEST-B3] AIChatVC created");
         newVC = self.aiVC;
         self.subtitleLabel.text = @"AI Agent";
     }
@@ -280,10 +278,15 @@
 
 - (void)handlePan:(UIPanGestureRecognizer *)g {
     if (self.isResizing) return;
+
     CGPoint p = [g translationInView:self.view];
     CGPoint center = self.panel.center;
-    center.x +=.y += p.y;
+
+    center.x += p.x;
+    center.y += p.y;
+
     self.panel.center = center;
+
     [g setTranslation:CGPointZero inView:self.view];
 }
 
