@@ -7,6 +7,8 @@
 #import "MemoryVC.h"
 #import "MethodCallerVC.h"
 #import "LuaVC.h"
+#import "ESPVC.h"
+#import "ESPOverlay.h"
 
 @interface ToolViewController ()
 @property (nonatomic, strong) UIView *backdrop;
@@ -25,12 +27,14 @@
 @property (nonatomic, strong) ToolRailButton *memoryButton;
 @property (nonatomic, strong) ToolRailButton *methodButton;
 @property (nonatomic, strong) ToolRailButton *luaButton;
+@property (nonatomic, strong) ToolRailButton *espButton;
 
 @property (nonatomic, strong) AIChatVC *aiVC;
 @property (nonatomic, strong) DumperVC *dumpVC;
 @property (nonatomic, strong) MemoryVC *memoryVC;
 @property (nonatomic, strong) MethodCallerVC *methodVC;
 @property (nonatomic, strong) LuaVC *luaVC;
+@property (nonatomic, strong) ESPVC *espVC;
 @property (nonatomic, strong) UIViewController *currentVC;
 @property (nonatomic, assign) NSInteger currentTab;
 
@@ -125,9 +129,9 @@
     railDivider.autoresizingMask = UIViewAutoresizingFlexibleHeight;
     [self.railView addSubview:railDivider];
 
-    CGFloat btnH = 50;
+    CGFloat btnH = 46;
     CGFloat spacing = 4;
-    CGFloat totalH = (btnH * 5) + (spacing * 4);
+    CGFloat totalH = (btnH * 6) + (spacing * 5);
     self.railStack = [[UIStackView alloc] initWithFrame:CGRectMake(0, 8, railW, totalH)];
     self.railStack.axis = UILayoutConstraintAxisVertical;
     self.railStack.spacing = spacing;
@@ -145,6 +149,8 @@
     [self.railStack addArrangedSubview:self.methodButton];
     self.luaButton = [self makeRailButton:@"Lua" symbol:@"μ" tag:4];
     [self.railStack addArrangedSubview:self.luaButton];
+    self.espButton = [self makeRailButton:@"ESP" symbol:@"◉" tag:5];
+    [self.railStack addArrangedSubview:self.espButton];
 
     self.contentView = [[UIView alloc] initWithFrame:CGRectMake(railW, 36, panelW - railW, panelH - 36)];
     self.contentView.backgroundColor = [ToolTheme shared].background;
@@ -191,6 +197,7 @@
     self.memoryVC = [[MemoryVC alloc] init];
     self.methodVC = [[MethodCallerVC alloc] init];
     self.luaVC = [[LuaVC alloc] init];
+    self.espVC = [[ESPVC alloc] init];
 }
 
 - (void)selectTab:(NSInteger)index {
@@ -205,6 +212,7 @@
     else if (index == 2) { newVC = self.memoryVC; self.subtitleLabel.text = @"Memory Editor"; }
     else if (index == 3) { newVC = self.methodVC; self.subtitleLabel.text = @"Method Caller"; }
     else if (index == 4) { newVC = self.luaVC; self.subtitleLabel.text = @"Lua Console"; }
+    else if (index == 5) { newVC = self.espVC; self.subtitleLabel.text = @"ESP Overlay"; }
 
     if (!newVC) return;
 
@@ -222,6 +230,7 @@
     self.memoryButton.active = (index == 2);
     self.methodButton.active = (index == 3);
     self.luaButton.active = (index == 4);
+    self.espButton.active = (index == 5);
 }
 
 - (void)closeTapped { [[ToolWindow shared] hide]; }
@@ -248,7 +257,6 @@
     if (g.state == UIGestureRecognizerStateChanged) {
         CGFloat newW = self.dragStartSize.width + p.x;
         CGFloat newH = self.dragStartSize.height + p.y;
-
         self.panel.frame = CGRectMake(self.dragStartPoint.x, self.dragStartPoint.y, newW, newH);
         [self updateLayoutForPanelSize:CGSizeMake(newW, newH)];
     }
@@ -292,6 +300,7 @@
     [self.memoryVC reload];
     [self.methodVC reload];
     [self.luaVC reload];
+    [self.espVC reload];
 }
 
 @end
