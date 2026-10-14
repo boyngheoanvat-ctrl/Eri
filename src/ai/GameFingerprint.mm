@@ -13,7 +13,6 @@ static BOOL gScanned = NO;
     dispatch_once(&onceToken, ^{
         instance = [[GameFingerprint alloc] init];
         [instance setupSynonyms];
-        // KHÔNG scan ở đây — lazy scan trong detectedGame
     });
     return instance;
 }
@@ -95,30 +94,35 @@ static BOOL gScanned = NO;
 
     Il2CppDomain *domain = [r domain_get];
     if (!domain || !domain->assemblies || domain->assembly_count == 0) {
-        NSLog(@"[GameFingerprint] IL2CPP not ready yet");
+        NSLog(@"[GameFingerprint] IL2CPP not ready");
         gDetectedGame = @"Unknown";
         gScanned = NO;
         return;
     }
 
-    BOOL hasCanSight    = [self hasAnyMethodNamed:@[@"CanSight"]];
-    BOOL hasCalcVisible = [self hasAnyMethodNamed:@[@"CalcVisible", @"RefreshVisible"]];
-    BOOL hasSetVisible  = [self hasAnyMethodNamed:@[@"SetVisible"]];
-    BOOL hasShowEntity  = [self hasAnyClassNamed:@[@"ShowEntity", @"LogicFighter"]];
+    @try {
+        BOOL hasCanSight    = [self hasAnyMethodNamed:@[@"CanSight"]];
+        BOOL hasCalcVisible = [self hasAnyMethodNamed:@[@"CalcVisible", @"RefreshVisible"]];
+        BOOL hasSetVisible  = [self hasAnyMethodNamed:@[@"SetVisible"]];
+        BOOL hasShowEntity  = [self hasAnyClassNamed:@[@"ShowEntity", @"LogicFighter"]];
 
-    if (hasCanSight && hasShowEntity) {
-        gDetectedGame = @"MLBB (Mobile Legends)";
-    } else if (hasCalcVisible || hasSetVisible) {
-        gDetectedGame = @"LienQuan (Arena of Valor)";
-    } else {
-        NSString *bid = [[NSBundle mainBundle] bundleIdentifier].lowercaseString ?: @"";
-        if ([bid containsString:@"freefire"]) {
-            gDetectedGame = @"Free Fire";
-        } else if ([bid containsString:@"pubg"] || [bid containsString:@"tencent"]) {
-            gDetectedGame = @"PUBG Mobile";
+        if (hasCanSight && hasShowEntity) {
+            gDetectedGame = @"MLBB (Mobile Legends)";
+        } else if (hasCalcVisible || hasSetVisible) {
+            gDetectedGame = @"LienQuan (Arena of Valor)";
         } else {
-            gDetectedGame = @"Unity Game (IL2CPP)";
+            NSString *bid = [[NSBundle mainBundle] bundleIdentifier].lowercaseString ?: @"";
+            if ([bid containsString:@"freefire"]) {
+                gDetectedGame = @"Free Fire";
+            } else if ([bid containsString:@"pubg"] || [bid containsString:@"tencent"]) {
+                gDetectedGame = @"PUBG Mobile";
+            } else {
+                gDetectedGame = @"Unity Game (IL2CPP)";
+            }
         }
+    } @catch (NSException *e) {
+        NSLog(@"[GameFingerprint] scan crash: %@", e);
+        gDetectedGame = @"Unknown";
     }
 
     NSLog(@"[GameFingerprint] detected = %@", gDetectedGame);
