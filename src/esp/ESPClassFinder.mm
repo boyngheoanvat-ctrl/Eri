@@ -10,269 +10,138 @@
     return instance;
 }
 
-#pragma mark - Find Entity Manager Classes
-
-- (NSArray<NSDictionary *> *)findEntityManagerClasses {
-    NSMutableArray *results = [NSMutableArray array];
+- (NSArray<NSDictionary *> *)findClassesByName:(NSString *)name {
+    NSMutableArray<NSDictionary *> *result = [NSMutableArray array];
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (![r resolve]) return results;
+    if (![r resolve]) return result;
 
     Il2CppDomain *domain = [r domain_get];
-    if (!domain) return results;
+    if (!domain || !domain->assemblies) return result;
 
-    // Tên có keyword gợi ý manager
-    NSArray *keywords = @[@"manager", @"entity", @"showplayer", @"battle",
-                           @"controller", @"system"];
+    int maxAssemblies = MIN((int)domain->assembly_count, 5);
+    NSString *search = name.lowercaseString;
 
-    for (int a = 0; a < domain->assembly_count; a++) {
-        Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
-        void *imgPtr = *(void **)asm_;
-        if (!imgPtr) continue;
-        Il2CppImage *image = (Il2CppImage *)imgPtr;
-        if (!image || !image->name) continue;
+    for (int a = 0; a < maxAssemblies; a++) {
+        @autoreleasepool {
+            Il2CppAssembly *assembly = domain->assemblies[a];
+            if (!assembly) continue;
 
-        size_t count = [r image_get_class_count:image];
-        for (size_t i = 0; i < count; i++) {
-            Il2CppClass *klass = [r image_get_class:image index:i];
-            if (!klass) continue;
-            const char *cname = [r class_get_name:klass];
-            if (!cname) continue;
-            NSString *name = [NSString stringWithUTF8String:cname];
-            NSString *lower = name.lowercaseString;
+            Il2CppImage *image = [r assembly_get_image:assembly];
+            if (!image) continue;
 
-            for (NSString *kw in keywords) {
-                if ([lower containsString:kw]) {
-                    // Đếm static field
-                    NSInteger staticFieldCount = 0;
-                    NSInteger listFieldCount = 0;
-                    uint16_t fCount = 0;
-                    const FieldInfo **fList = [r class_get_fields:klass count:&fCount];
-                    for (uint16_t j = 0; j < fCount; j++) {
-                        const char *fn = [r field_get_name:(FieldInfo *)fList[j]];
-                        if (fn) {
-                            NSString *fname = [NSString stringWithUTF8String:fn];
-                            if ([fname.lowercaseString containsString:@"list"] ||
-                                [fname.lowercaseString containsString:@"entit"]) {
-                                listFieldCount++;
-                            }
-                        }
+            const char *imgNameC = [r image_get_name:image];
+            if (!imgNameC) continue;
+            NSString *imgName = [NSString stringWithUTF8String:imgNameC];
+
+            size_t classCount = [r image_get_class_count:image];
+            if (classCount == 0) continue;
+
+            for (size_t i = 0; i < classCount; i++) {
+                @autoreleasepool {
+                    Il2CppClass *klass = [r image_get_class:image index:i];
+                    if (!klass) continue;
+
+                    const char *cname = [r class_get_name:klass];
+                    if (!cname) continue;
+                    NSString *clsName = [NSString stringWithUTF8String:cname];
+                    if (!clsName) continue;
+
+                    if (search.length > 0 &&
+                        [clsName.lowercaseString rangeOfString:search].location == NSNotFound) {
+                        continue;
                     }
-                    if (fList) free(fList);
 
-                    [results addObject:@{
-                        @"name": name,
-                        @"namespace": [r class_get_namespace:klass]
-                            ? [NSString stringWithUTF8String:[r class_get_namespace:klass]] : @"",
-                        @"method_count": @(klass->method_count),
-                        @"field_count": @(klass->field_count),
-                        @"list_field_count": @(listFieldCount),
-                        @"score": @(listFieldCount * 10 + (klass->method_count > 5 ? 5 : 0))
-                    }];
-                    break;
-                }
-            }
-        }
-    }
+                    const char *cns = [r class_get_namespace:klass];
+                    NSString *nsName = (cns && [NSString stringWithUTF8String:cns])
+                                      ? [NSString stringWithUTF8String:cns] : @"";
 
-    // Sort theo score
-    [results sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
-        return [b[@"score"] compare:a[@"score"]];
-    }];
-
-    return results;
-}
-
-#pragma mark - Find Camera Classes
-
-- (NSArray<NSDictionary *> *)findCameraClasses {
-    NSMutableArray *results = [NSMutableArray array];
-
-    IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (![r resolve]) return results;
-
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain) return results;
-
-    for (int a = 0; a < domain->assembly_count; a++) {
-        Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
-        void *imgPtr = *(void **)asm_;
-        if (!imgPtr) continue;
-        Il2CppImage *image = (Il2CppImage *)imgPtr;
-        if (!image || !image->name) continue;
-
-        size_t count = [r image_get_class_count:image];
-        for (size_t i = 0; i < count; i++) {
-            Il2CppClass *klass = [r image_get_class:image index:i];
-            if (!klass) continue;
-            const char *cname = [r class_get_name:klass];
-            if (!cname) continue;
-            NSString *name = [NSString stringWithUTF8String:cname];
-            if (![name.lowercaseString containsString:@"camera"]) continue;
-
-            // Tìm method WorldToScreen
-            BOOL hasWorldToScreen = NO;
-            uint16_t mCount = 0;
-            const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
-            for (uint16_t j = 0; j < mCount; j++) {
-                const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
-                if (mn && strstr(mn, "WorldToScreen")) {
-                    hasWorldToScreen = YES;
-                    break;
-                }
-            }
-            if (mList) free(mList);
-
-            [results addObject:@{
-                @"name": name,
-                @"namespace": [r class_get_namespace:klass]
-                    ? [NSString stringWithUTF8String:[r class_get_namespace:klass]] : @"",
-                @"has_world_to_screen": @(hasWorldToScreen),
-                @"score": @(hasWorldToScreen ? 100 : 10)
-            }];
-        }
-    }
-
-    [results sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
-        return [b[@"score"] compare:a[@"score"]];
-    }];
-
-    return results;
-}
-
-#pragma mark - Find Classes With Static Entity List
-
-- (NSArray<NSDictionary *> *)findClassesWithStaticEntityList {
-    NSMutableArray *results = [NSMutableArray array];
-
-    IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (![r resolve]) return results;
-
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain) return results;
-
-    for (int a = 0; a < domain->assembly_count; a++) {
-        Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
-        void *imgPtr = *(void **)asm_;
-        if (!imgPtr) continue;
-        Il2CppImage *image = (Il2CppImage *)imgPtr;
-        if (!image || !image->name) continue;
-
-        size_t count = [r image_get_class_count:image];
-        for (size_t i = 0; i < count; i++) {
-            Il2CppClass *klass = [r image_get_class:image index:i];
-            if (!klass) continue;
-
-            // Chỉ class có static_fields
-            if (!klass->static_fields) continue;
-
-            NSMutableArray *staticFields = [NSMutableArray array];
-            uint16_t fCount = 0;
-            const FieldInfo **fList = [r class_get_fields:klass count:&fCount];
-            for (uint16_t j = 0; j < fCount; j++) {
-                const char *fn = [r field_get_name:(FieldInfo *)fList[j]];
-                if (!fn) continue;
-                NSString *fname = [NSString stringWithUTF8String:fn];
-
-                // Field static thường có "m_" hoặc "s_" prefix
-                if ([fname hasPrefix:@"m_"] || [fname hasPrefix:@"s_"] ||
-                    [fname hasPrefix:@"g_"] || [fname.lowercaseString containsString:@"all"] ||
-                    [fname.lowercaseString containsString:@"list"]) {
-                    [staticFields addObject:fname];
-                }
-            }
-            if (fList) free(fList);
-
-            if (staticFields.count > 0) {
-                const char *cname = [r class_get_name:klass];
-                if (!cname) continue;
-                [results addObject:@{
-                    @"name": [NSString stringWithUTF8String:cname],
-                    @"namespace": [r class_get_namespace:klass]
-                        ? [NSString stringWithUTF8String:[r class_get_namespace:klass]] : @"",
-                    @"static_fields": staticFields,
-                    @"score": @(staticFields.count * 5)
-                }];
-            }
-        }
-    }
-
-    [results sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
-        return [b[@"score"] compare:a[@"score"]];
-    }];
-
-    return results;
-}
-
-#pragma mark - Find Methods Returning Entity List
-
-- (NSArray<NSDictionary *> *)findMethodsReturningEntityList {
-    NSMutableArray *results = [NSMutableArray array];
-
-    IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (![r resolve]) return results;
-
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain) return results;
-
-    for (int a = 0; a < domain->assembly_count; a++) {
-        Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
-        void *imgPtr = *(void **)asm_;
-        if (!imgPtr) continue;
-        Il2CppImage *image = (Il2CppImage *)imgPtr;
-        if (!image || !image->name) continue;
-
-        size_t count = [r image_get_class_count:image];
-        for (size_t i = 0; i < count; i++) {
-            Il2CppClass *klass = [r image_get_class:image index:i];
-            if (!klass) continue;
-            const char *cname = [r class_get_name:klass];
-            if (!cname) continue;
-            NSString *className = [NSString stringWithUTF8String:cname];
-
-            uint16_t mCount = 0;
-            const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
-            for (uint16_t j = 0; j < mCount; j++) {
-                const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
-                if (!mn) continue;
-                NSString *mname = [NSString stringWithUTF8String:mn];
-
-                // Method trả về list entity
-                if (([mname hasPrefix:@"get_"] || [mname containsString:@"Get"]) &&
-                    ([mname.lowercaseString containsString:@"entit"] ||
-                     [mname.lowercaseString containsString:@"player"] ||
-                     [mname.lowercaseString containsString:@"list"] ||
-                     [mname.lowercaseString containsString:@"all"])) {
-
-                    [results addObject:@{
-                        @"class": className,
-                        @"method": mname,
-                        @"score": @10
+                    [result addObject:@{
+                        @"name": clsName,
+                        @"namespace": nsName ?: @"",
+                        @"image": imgName ?: @"",
+                        @"ptr": [NSValue valueWithPointer:klass],
                     }];
                 }
             }
-            if (mList) free(mList);
         }
     }
 
-    return results;
+    return result;
 }
 
-#pragma mark - Full Scan
+- (NSArray<NSDictionary *> *)listFieldsOfClass:(Il2CppClass *)klass {
+    NSMutableArray<NSDictionary *> *result = [NSMutableArray array];
+    if (!klass) return result;
 
-- (NSDictionary *)fullScanReport {
-    NSMutableDictionary *report = [NSMutableDictionary dictionary];
+    IL2CPPResolver *r = [IL2CPPResolver shared];
 
-    report[@"entity_managers"] = [self findEntityManagerClasses];
-    report[@"camera_classes"] = [self findCameraClasses];
-    report[@"static_list_classes"] = [self findClassesWithStaticEntityList];
-    report[@"entity_list_methods"] = [self findMethodsReturningEntityList];
+    uint16_t fCount = 0;
+    NSArray<NSValue *> *fList = [r class_get_fields:klass count:&fCount];
 
-    return report;
+    for (uint16_t i = 0; i < fCount; i++) {
+        FieldInfo *f = (FieldInfo *)fList[i].pointerValue;
+        if (!f) continue;
+
+        const char *fn = [r field_get_name:f];
+        if (!fn) continue;
+
+        NSString *fname = [NSString stringWithUTF8String:fn];
+        int32_t off = [r field_get_offset:f];
+        uint32_t token = [r field_get_token:f];
+
+        [result addObject:@{
+            @"name": fname ?: @"",
+            @"offset": @(off),
+            @"token": @(token),
+            @"ptr": [NSValue valueWithPointer:f],
+        }];
+    }
+
+    return result;
+}
+
+- (NSArray<NSDictionary *> *)listMethodsOfClass:(Il2CppClass *)klass {
+    NSMutableArray<NSDictionary *> *result = [NSMutableArray array];
+    if (!klass) return result;
+
+    IL2CPPResolver *r = [IL2CPPResolver shared];
+
+    uint16_t mCount = 0;
+    NSArray<NSValue *> *mList = [r class_get_methods:&mCount];
+
+    for (uint16_t i = 0; i < mCount; i++) {
+        MethodInfo *m = (MethodInfo *)mList[i].pointerValue;
+        if (!m) continue;
+
+        const char *mn = [r method_get_name:m];
+        if (!mn) continue;
+
+        NSString *mname = [NSString stringWithUTF8String:mn];
+        uint32_t token = [r method_get_token:m];
+        void *ptr = [r method_get_pointer:m];
+
+        [result addObject:@{
+            @"name": mname ?: @"",
+            @"token": @(token),
+            @"rva": @((uint64_t)(uintptr_t)ptr),
+            @"ptr": [NSValue valueWithPointer:m],
+        }];
+    }
+
+    return result;
+}
+
+- (Il2CppClass *)findClass:(NSString *)name {
+    NSArray<NSDictionary *> *found = [self findClassesByName:name];
+    for (NSDictionary *d in found) {
+        NSString *clsName = d[@"name"];
+        if ([clsName isEqualToString:name]) {
+            NSValue *v = d[@"ptr"];
+            return (Il2CppClass *)v.pointerValue;
+        }
+    }
+    return NULL;
 }
 
 @end
