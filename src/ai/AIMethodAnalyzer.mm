@@ -1,4 +1,5 @@
 #import "AIMethodAnalyzer.h"
+#import "IL2CPPResolver.h"
 #import <dlfcn.h>
 
 @implementation AIMethodAnalyzer
@@ -26,7 +27,7 @@
     return @{
         @"class": className,
         @"method": methodName,
-        @"address": [NSString stringWithFormat:@"0x%llX", (uint64_t)ptr],
+        @"address": [NSString stringWithFormat:@"0x%llX", (uint64_t)(uintptr_t)ptr],
         @"is_static": @((method->flags & 0x0010) != 0),
         @"param_count": @(method->parameter_count)
     };
@@ -76,10 +77,12 @@
     for (int a = 0; a < domain->assembly_count; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
         if (!asm_) continue;
-        void *imgPtr = *(void **)asm_;
-        if (!imgPtr) continue;
-        Il2CppImage *image = (Il2CppImage *)imgPtr;
-        if (!image || !image->name) continue;
+
+        Il2CppImage *image = [r assembly_get_image:asm_];
+        if (!image) continue;
+
+        const char *imgNameC = [r image_get_name:image];
+        if (!imgNameC) continue;
 
         size_t count = [r image_get_class_count:image];
         for (size_t i = 0; i < count; i++) {
@@ -88,6 +91,7 @@
             const char *cname = [r class_get_name:klass];
             if (!cname) continue;
             NSString *n = [NSString stringWithUTF8String:cname];
+            if (!n) continue;
             if ([n.lowercaseString isEqualToString:lower]) return klass;
         }
     }
@@ -95,16 +99,20 @@
 }
 
 - (MethodInfo *)findMethod:(Il2CppClass *)klass name:(NSString *)name resolver:(IL2CPPResolver *)r {
+    if (!klass || !name) return NULL;
+
     uint16_t mCount = 0;
-    const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
+    NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
+
     MethodInfo *found = NULL;
     for (uint16_t j = 0; j < mCount; j++) {
-        const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
+        MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
+        if (!m) continue;
+        const char *mn = [r method_get_name:m];
         if (!mn) continue;
         NSString *n = [NSString stringWithUTF8String:mn];
-        if ([n isEqualToString:name]) { found = (MethodInfo *)mList[j]; break; }
+        if (n && [n isEqualToString:name]) { found = m; break; }
     }
-    if (mList) free(mList);
     return found;
 }
 
