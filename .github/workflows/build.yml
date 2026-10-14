@@ -35,7 +35,43 @@ jobs:
           make CXX=clang++
           sudo cp ldid /usr/local/bin/
 
-      - name: Build dylib
+      - name: Download Lua 5.4 source
+        run: |
+          cd $HOME
+          curl -L --fail -o lua-5.4.6.tar.gz \
+            https://www.lua.org/ftp/lua-5.4.6.tar.gz
+          tar -xf lua-5.4.6.tar.gz
+          echo "Lua source downloaded"
+
+      - name: Compile Lua for iOS (arm64)
+        run: |
+          SDK=$HOME/sdks/iPhoneOS16.5.sdk
+          cd $HOME/lua-5.4.6/src
+
+          # Danh sách file .c cần compile (trừ lua.c và luac.c)
+          SRC="lapi.c lauxlib.c lbaselib.c lcode.c lcorolib.c lctype.c ldblib.c \
+               ldebug.c ldo.c ldump.c lfunc.c lgc.c linit.c liolib.c llex.c \
+               lmathlib.c lmem.c loadlib.c lobject.c lopcodes.c loslib.c \
+               lparser.c lstate.c lstring.c lstrlib.c ltable.c ltablib.c \
+               ltm.c lundump.c lutf8lib.c lvm.c lzio.c"
+
+          # Compile từng file
+          for f in $SRC; do
+            clang \
+              -target arm64-apple-ios14.0 \
+              -isysroot "$SDK" \
+              -c "$f" \
+              -DLUA_USE_IOS \
+              -DLUA_USE_POSIX \
+              -DLUA_USE_DLOPEN \
+              -o "${f%.c}.o"
+          done
+
+          # Link thành static library
+          xcrun --sdk iphoneos ar rcs liblua.a *.o
+          ls -la liblua.a
+
+      - name: Build dylib with Lua
         run: |
           SDK=$HOME/sdks/iPhoneOS16.5.sdk
           SRC=$(find src -name "*.mm" | tr '\n' ' ')
@@ -53,6 +89,8 @@ jobs:
             -install_name @rpath/libtool.dylib \
             -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
             -Isrc/memory -Isrc/dump -Isrc/lua -Isrc/esp \
+            -L$HOME/lua-5.4.6/src \
+            -llua \
             -o libtool.dylib \
             $SRC
 
