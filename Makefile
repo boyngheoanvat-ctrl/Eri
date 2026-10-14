@@ -28,9 +28,6 @@ libtool_FILES = \
     src/dump/DumperVC.mm \
     src/dump/RuntimeEnumerator.mm \
     src/dump/MetadataParser.mm \
-    src/dump/DumperSelfTest.mm \
-    src/dump/DumperSelfTest2.mm \
-    src/dump/DumperSelfTest3.mm \
     src/lua/LuaEngine.mm \
     src/lua/LuaVC.mm \
     src/esp/ESPOverlay.mm \
