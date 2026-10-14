@@ -43,7 +43,7 @@
     y += 60;
     self.genHeaderSwitch = [self addRow:@"il2cpp.h" desc:@"C header" y:y];
     y += 60;
-    self.genCsSwitch = [self addRow:@"dump.cs" desc:@"Full C# dump" y:y];
+    self.genCsSwitch = [self addRow:@"dump.cs" desc:@"Full C# dump (co the cham)" y:y];
     y += 70;
 
     self.dumpButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -158,7 +158,11 @@
 
             NSMutableArray *allClasses = [NSMutableArray array];
 
-            for (int a = 0; a < domain->assembly_count; a++) {
+            // GIỚI HẠN: Chỉ 5 assembly đầu, tối đa 5000 class
+            int maxAssemblies = MIN(domain->assembly_count, 5);
+            int maxClasses = 5000;
+
+            for (int a = 0; a < maxAssemblies && allClasses.count < maxClasses; a++) {
                 Il2CppAssembly *asm_ = domain->assemblies[a];
                 if (!asm_) continue;
                 void *imgPtr = *(void **)asm_;
@@ -169,7 +173,7 @@
                 NSString *imgName = [NSString stringWithUTF8String:image->name];
                 size_t classCount = [r image_get_class_count:image];
 
-                for (size_t i = 0; i < classCount; i++) {
+                for (size_t i = 0; i < classCount && allClasses.count < maxClasses; i++) {
                     Il2CppClass *klass = [r image_get_class:image index:i];
                     if (!klass) continue;
                     const char *cname = [r class_get_name:klass];
@@ -185,29 +189,35 @@
                 }
 
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    ws.progressView.progress = (CGFloat)(a + 1) / domain->assembly_count;
-                    ws.statusLabel.text = [NSString stringWithFormat:@"Quet %d/%d", a + 1, domain->assembly_count];
+                    ws.progressView.progress = (CGFloat)(a + 1) / maxAssemblies;
+                    ws.statusLabel.text = [NSString stringWithFormat:@"Quet %d/%d", a + 1, maxAssemblies];
                 });
             }
 
-            // script.json
+            // ===== script.json =====
             if (doScript) {
                 NSMutableArray *jsonOut = [NSMutableArray array];
                 for (NSDictionary *info in allClasses) {
-                    [jsonOut addObject:@{@"Name": info[@"name"], @"Namespace": info[@"namespace"], @"Image": info[@"image"]}];
+                    [jsonOut addObject:@{@"Name": info[@"name"],
+                                          @"Namespace": info[@"namespace"],
+                                          @"Image": info[@"image"]}];
                 }
-                NSData *data = [NSJSONSerialization dataWithJSONObject:jsonOut options:NSJSONWritingPrettyPrinted error:nil];
-                [data writeToFile:[outDir stringByAppendingPathComponent:@"script.json"] atomically:YES];
+                NSData *data = [NSJSONSerialization dataWithJSONObject:jsonOut
+                                                                options:NSJSONWritingPrettyPrinted
+                                                                  error:nil];
+                [data writeToFile:[outDir stringByAppendingPathComponent:@"script.json"]
+                       atomically:YES];
             }
 
-            // il2cpp.h
+            // ===== il2cpp.h =====
             if (doHeader) {
                 NSMutableString *h = [NSMutableString string];
                 [h appendString:@"// Auto-generated il2cpp.h\n#pragma once\n#include <stdint.h>\n\n"];
                 for (NSDictionary *info in allClasses) {
                     NSString *name = info[@"name"];
                     NSString *ns = info[@"namespace"];
-                    NSString *full = ns.length > 0 ? [NSString stringWithFormat:@"%@_%@", ns, name] : name;
+                    NSString *full = ns.length > 0
+                        ? [NSString stringWithFormat:@"%@_%@", ns, name] : name;
                     full = [full stringByReplacingOccurrencesOfString:@"." withString:@"_"];
                     full = [full stringByReplacingOccurrencesOfString:@"`" withString:@"_"];
                     full = [full stringByReplacingOccurrencesOfString:@"<" withString:@"_"];
@@ -218,57 +228,92 @@
                     atomically:YES encoding:NSUTF8StringEncoding error:nil];
             }
 
-            // dump.cs
+            // ===== dump.cs (GIỚI HẠN 30 method + 20 field / class) =====
             if (doCs) {
-                NSMutableString *cs = [NSMutableString string];
-                [cs appendString:@"// Auto-generated dump.cs\n"];
-                [cs appendString:@"// IL2CPP Dump\n\n"];
+                NSString *csPath = [outDir stringByAppendingPathComponent:@"dump.cs"];
 
-                for (NSDictionary *info in allClasses) {
-                    NSString *cls = info[@"name"];
-                    NSString *ns = info[@"namespace"];
+                // Xóa file cũ
+                [[NSFileManager defaultManager] removeItemAtPath:csPath error:nil];
+                [[NSFileManager defaultManager] createFileAtPath:csPath
+                                                        contents:[NSData data]
+                                                      attributes:nil];
 
-                    NSValue *klassValue = (NSValue *)info[@"klass"];
-                    if (![klassValue isKindOfClass:[NSValue class]]) continue;
-                    Il2CppClass *klass = (Il2CppClass *)klassValue.pointerValue;
-                    if (!klass) continue;
+                NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:csPath];
 
-                    if (ns.length > 0) [cs appendFormat:@"namespace %@ {\n", ns];
-                    [cs appendFormat:@"class %@ {\n", cls];
-                    [cs appendString:@"    // Methods\n"];
+                // Header
+                NSString *header = @"// Auto-generated dump.cs\n// IL2CPP Dump\n\n";
+                [fh writeData:[header dataUsingEncoding:NSUTF8StringEncoding]];
 
-                    uint16_t mCount = 0;
-                    const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
-                    for (uint16_t j = 0; j < mCount; j++) {
-                        const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
-                        uint32_t token = [r method_get_token:(MethodInfo *)mList[j]];
-                        void *ptr = [r method_get_pointer:(MethodInfo *)mList[j]];
-                        uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
-                        if (mn) {
-                            [cs appendFormat:@"    void %s(); // RVA: 0x%llX Token: 0x%X\n", mn, rva, token];
+                for (NSUInteger idx = 0; idx < allClasses.count; idx++) {
+                    @autoreleasepool {
+                        NSDictionary *info = allClasses[idx];
+                        NSString *cls = info[@"name"];
+                        NSString *ns = info[@"namespace"];
+
+                        NSValue *klassValue = (NSValue *)info[@"klass"];
+                        if (![klassValue isKindOfClass:[NSValue class]]) continue;
+                        Il2CppClass *klass = (Il2CppClass *)klassValue.pointerValue;
+                        if (!klass) continue;
+
+                        NSMutableString *cs = [NSMutableString string];
+                        if (ns.length > 0) [cs appendFormat:@"namespace %@ {\n", ns];
+                        [cs appendFormat:@"class %@ {\n", cls];
+
+                        // Methods — TỐI ĐA 30
+                        [cs appendString:@"    // Methods\n"];
+                        uint16_t mCount = 0;
+                        const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
+                        uint16_t maxM = MIN(mCount, 30);
+                        for (uint16_t j = 0; j < maxM; j++) {
+                            const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
+                            uint32_t token = [r method_get_token:(MethodInfo *)mList[j]];
+                            void *ptr = [r method_get_pointer:(MethodInfo *)mList[j]];
+                            uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
+                            if (mn) {
+                                [cs appendFormat:@"    void %s(); // RVA: 0x%llX Token: 0x%X\n",
+                                 mn, rva, token];
+                            }
+                        }
+                        if (mList) free(mList);
+                        if (mCount > 30) {
+                            [cs appendFormat:@"    // ... (%d methods total)\n", mCount];
+                        }
+
+                        // Fields — TỐI ĐA 20
+                        [cs appendString:@"\n    // Fields\n"];
+                        uint16_t fCount = 0;
+                        const FieldInfo **fList = [r class_get_fields:klass count:&fCount];
+                        uint16_t maxF = MIN(fCount, 20);
+                        for (uint16_t j = 0; j < maxF; j++) {
+                            const char *fn = [r field_get_name:(FieldInfo *)fList[j]];
+                            int32_t off = [r field_get_offset:(FieldInfo *)fList[j]];
+                            if (fn) {
+                                [cs appendFormat:@"    void *%s; // Offset: 0x%X\n", fn, off];
+                            }
+                        }
+                        if (fList) free(fList);
+                        if (fCount > 20) {
+                            [cs appendFormat:@"    // ... (%d fields total)\n", fCount];
+                        }
+
+                        [cs appendString:@"}\n"];
+                        if (ns.length > 0) [cs appendString:@"}\n"];
+                        [cs appendString:@"\n"];
+
+                        [fh writeData:[cs dataUsingEncoding:NSUTF8StringEncoding]];
+
+                        // Cập nhật progress mỗi 500 class
+                        if (idx % 500 == 0) {
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                ws.progressView.progress = 0.5 + ((CGFloat)idx / allClasses.count) * 0.5;
+                                ws.statusLabel.text = [NSString stringWithFormat:@"Ghi dump.cs %lu/%lu",
+                                                        (unsigned long)idx, (unsigned long)allClasses.count];
+                            });
                         }
                     }
-                    if (mList) free(mList);
-
-                    [cs appendString:@"\n    // Fields\n"];
-                    uint16_t fCount = 0;
-                    const FieldInfo **fList = [r class_get_fields:klass count:&fCount];
-                    for (uint16_t j = 0; j < fCount; j++) {
-                        const char *fn = [r field_get_name:(FieldInfo *)fList[j]];
-                        int32_t off = [r field_get_offset:(FieldInfo *)fList[j]];
-                        if (fn) {
-                            [cs appendFormat:@"    void *%s; // Offset: 0x%X\n", fn, off];
-                        }
-                    }
-                    if (fList) free(fList);
-
-                    [cs appendString:@"}\n"];
-                    if (ns.length > 0) [cs appendString:@"}\n"];
-                    [cs appendString:@"\n"];
                 }
 
-                [cs writeToFile:[outDir stringByAppendingPathComponent:@"dump.cs"]
-                     atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                [fh closeFile];
             }
 
             dispatch_async(dispatch_get_main_queue(), ^{
