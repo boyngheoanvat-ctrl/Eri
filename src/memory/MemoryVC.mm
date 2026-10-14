@@ -33,6 +33,7 @@
     CGFloat y = 8;
     CGFloat pad = 8;
 
+    // Type selector
     self.typeControl = [[UISegmentedControl alloc] initWithItems:@[@"Int32", @"Int64", @"Float", @"Double"]];
     self.typeControl.frame = CGRectMake(pad, y, w - pad * 2, 30);
     self.typeControl.selectedSegmentIndex = 0;
@@ -47,6 +48,7 @@
     [self.view addSubview:self.typeControl];
     y += 36;
 
+    // Value field
     self.valueField = [[UITextField alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, 34)];
     self.valueField.backgroundColor = [ToolTheme shared].surface;
     self.valueField.textColor = [ToolTheme shared].textPrimary;
@@ -61,19 +63,27 @@
     [self.view addSubview:self.valueField];
     y += 40;
 
+    // 3 buttons
     CGFloat btnW = (w - pad * 4) / 3;
     CGFloat btnH = 34;
 
-    self.searchButton = [self makeButton:@"Tim" x:pad y:y w:btnW h:btnH color:[ToolTheme shared].accent];
-    [self.searchButton addTarget:self action:@selector(searchTapped) forControlEvents:UIControlEventTouchUpInside];
+    self.searchButton = [self makeButton:@"Tim" x:pad y:y w:btnW h:btnH
+                                    color:[ToolTheme shared].accent];
+    [self.searchButton addTarget:self action:@selector(searchTapped)
+                forControlEvents:UIControlEventTouchUpInside];
 
-    self.filterButton = [self makeButton:@"Loc" x:pad * 2 + btnW y:y w:btnW h:btnH color:[ToolTheme shared].warning];
-    [self.filterButton addTarget:self action:@selector(filterTapped) forControlEvents:UIControlEventTouchUpInside];
+    self.filterButton = [self makeButton:@"Loc" x:pad * 2 + btnW y:y w:btnW h:btnH
+                                    color:[ToolTheme shared].warning];
+    [self.filterButton addTarget:self action:@selector(filterTapped)
+                forControlEvents:UIControlEventTouchUpInside];
 
-    self.editAllButton = [self makeButton:@"Edit All" x:pad * 3 + btnW * 2 y:y w:btnW h:btnH color:[ToolTheme shared].danger];
-    [self.editAllButton addTarget:self action:@selector(editAllTapped) forControlEvents:UIControlEventTouchUpInside];
+    self.editAllButton = [self makeButton:@"Edit All" x:pad * 3 + btnW * 2 y:y w:btnW h:btnH
+                                     color:[ToolTheme shared].danger];
+    [self.editAllButton addTarget:self action:@selector(editAllTapped)
+                 forControlEvents:UIControlEventTouchUpInside];
     y += 42;
 
+    // Status
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, 18)];
     self.statusLabel.text = @"San sang";
     self.statusLabel.textColor = [ToolTheme shared].textMuted;
@@ -81,6 +91,7 @@
     [self.view addSubview:self.statusLabel];
     y += 22;
 
+    // Table
     self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, y, w, h - y)
                                                      style:UITableViewStylePlain];
     self.tableView.dataSource = self;
@@ -92,6 +103,7 @@
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"cell"];
     [self.view addSubview:self.tableView];
 
+    // Spinner
     self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.spinner.color = [ToolTheme shared].accent;
     self.spinner.center = self.view.center;
@@ -119,6 +131,8 @@
     else if (idx == 3) self.currentType = MemValueTypeDouble;
 }
 
+#pragma mark - Search
+
 - (void)searchTapped {
     NSString *value = self.valueField.text;
     if (value.length == 0) return;
@@ -136,22 +150,28 @@
     __weak typeof(self) ws = self;
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSArray<MemoryResult *> *found = [[MemoryEditor shared] searchValue:value type:type limit:200];
+        NSArray<MemoryResult *> *found = [[MemoryEditor shared]
+            searchValue:value type:type limit:200];
+
         dispatch_async(dispatch_get_main_queue(), ^{
             [ws.allResults addObjectsFromArray:found];
             [ws.filteredResults addObjectsFromArray:found];
             [ws.tableView reloadData];
-            ws.statusLabel.text = [NSString stringWithFormat:@"Tim thay %lu ket qua", (unsigned long)found.count];
+            ws.statusLabel.text = [NSString stringWithFormat:@"Tim thay %lu ket qua",
+                                    (unsigned long)found.count];
             [ws.spinner stopAnimating];
             ws.searchButton.enabled = YES;
         });
     });
 }
 
+#pragma mark - Filter
+
 - (void)filterTapped {
     UIAlertController *alert = [UIAlertController
         alertControllerWithTitle:@"Loc ket qua" message:@"Chi hien gia tri trong khoang"
                   preferredStyle:UIAlertControllerStyleAlert];
+
     [alert addTextFieldWithConfigurationHandler:^(UITextField *tf) {
         tf.placeholder = @"Min (>=)";
         tf.keyboardType = UIKeyboardTypeDecimalPad;
@@ -160,9 +180,13 @@
         tf.placeholder = @"Max (<=)";
         tf.keyboardType = UIKeyboardTypeDecimalPad;
     }];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Ap dung" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Ap dung"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *a) {
         NSString *minStr = alert.textFields[0].text;
         NSString *maxStr = alert.textFields[1].text;
+
         [self.filteredResults removeAllObjects];
         for (MemoryResult *r in self.allResults) {
             double v = r.stringValue.doubleValue;
@@ -171,42 +195,74 @@
             [self.filteredResults addObject:r];
         }
         [self.tableView reloadData];
-        self.statusLabel.text = [NSString stringWithFormat:@"Loc: %lu ket qua", (unsigned long)self.filteredResults.count];
+        self.statusLabel.text = [NSString stringWithFormat:@"Loc: %lu ket qua",
+                                  (unsigned long)self.filteredResults.count];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Xoa loc" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) {
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Xoa loc"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction *a) {
         [self.filteredResults removeAllObjects];
         [self.filteredResults addObjectsFromArray:self.allResults];
         [self.tableView reloadData];
-        self.statusLabel.text = [NSString stringWithFormat:@"%lu ket qua", (unsigned long)self.filteredResults.count];
+        self.statusLabel.text = [NSString stringWithFormat:@"%lu ket qua",
+                                  (unsigned long)self.filteredResults.count];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Huy" style:UIAlertActionStyleCancel handler:nil]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Huy"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+
     [self presentViewController:alert animated:YES completion:nil];
 }
+
+#pragma mark - Edit All
 
 - (void)editAllTapped {
     if (self.filteredResults.count == 0) {
         self.statusLabel.text = @"Khong co ket qua de sua";
         return;
     }
+
     UIAlertController *alert = [UIAlertController
-        alertControllerWithTitle:[NSString stringWithFormat:@"Sua %lu dia chi", (unsigned long)self.filteredResults.count]
+        alertControllerWithTitle:[NSString stringWithFormat:@"Sua %lu dia chi",
+                                   (unsigned long)self.filteredResults.count]
                          message:@"Nhap gia tri moi cho TAT CA dia chi"
                   preferredStyle:UIAlertControllerStyleAlert];
+
     [alert addTextFieldWithConfigurationHandler:^(UITextField *tf) {
         tf.placeholder = @"Gia tri moi";
         tf.keyboardType = UIKeyboardTypeDecimalPad;
     }];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Sua tat ca" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) {
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Sua tat ca"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction *a) {
         NSString *newValue = alert.textFields.firstObject.text;
         if (newValue.length == 0) return;
-        NSInteger count = [[MemoryEditor shared] editAll:self.filteredResults value:newValue type:self.currentType];
-        for (MemoryResult *r in self.filteredResults) r.stringValue = newValue;
+
+        NSInteger count = [[MemoryEditor shared]
+            editAll:self.filteredResults
+            value:newValue
+            type:self.currentType];
+
+        for (MemoryResult *r in self.filteredResults) {
+            r.stringValue = newValue;
+        }
+
         [self.tableView reloadData];
-        self.statusLabel.text = [NSString stringWithFormat:@"Da sua %ld dia chi thanh %@", (long)count, newValue];
+        self.statusLabel.text = [NSString stringWithFormat:@"Da sua %ld dia chi thanh %@",
+                                  (long)count, newValue];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Huy" style:UIAlertActionStyleCancel handler:nil]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Huy"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+
     [self presentViewController:alert animated:YES completion:nil];
 }
+
+#pragma mark - Table
 
 - (NSInteger)tableView:(UITableView *)tv numberOfRowsInSection:(NSInteger)s {
     return self.filteredResults.count;
@@ -215,6 +271,7 @@
 - (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip {
     UITableViewCell *cell = [tv dequeueReusableCellWithIdentifier:@"cell" forIndexPath:ip];
     for (UIView *v in cell.contentView.subviews) [v removeFromSuperview];
+
     MemoryResult *r = self.filteredResults[ip.row];
     CGFloat cw = CGRectGetWidth(tv.bounds);
 
@@ -244,21 +301,35 @@
 - (void)tableView:(UITableView *)tv didSelectRowAtIndexPath:(NSIndexPath *)ip {
     [tv deselectRowAtIndexPath:ip animated:YES];
     MemoryResult *r = self.filteredResults[ip.row];
+    [self showEditDialogFor:r];
+}
+
+- (void)showEditDialogFor:(MemoryResult *)r {
     NSString *title = [NSString stringWithFormat:@"0x%llX", (uint64_t)r.address];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:@"Nhap gia tri moi"
-                                                            preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:title
+                         message:@"Nhap gia tri moi"
+                  preferredStyle:UIAlertControllerStyleAlert];
+
     [alert addTextFieldWithConfigurationHandler:^(UITextField *tf) {
         tf.text = r.stringValue;
         tf.keyboardType = UIKeyboardTypeDecimalPad;
     }];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Luu" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Luu"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *a) {
         NSString *newVal = alert.textFields.firstObject.text;
         BOOL ok = [[MemoryEditor shared] writeValue:newVal at:r.address type:r.type];
         r.stringValue = newVal;
         [self.tableView reloadData];
         self.statusLabel.text = ok ? @"Sua thanh cong" : @"Sua that bai";
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Huy" style:UIAlertActionStyleCancel handler:nil]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Huy"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+
     [self presentViewController:alert animated:YES completion:nil];
 }
 
