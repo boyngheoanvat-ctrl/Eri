@@ -2,6 +2,7 @@
 #import "AIProvider.h"
 #import "AITool.h"
 #import "AIMemoryTool.h"
+#import "AIESPTool.h"
 #import "ToolTheme.h"
 
 @interface AIChatVC () <AIStreamDelegate, UITableViewDataSource, UITableViewDelegate>
@@ -21,15 +22,17 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     self.items = [NSMutableArray array];
 
-    // Đăng ký tool
+    // Đăng ký tất cả tool
     [AITool registerAll];
     [AIMemoryTool registerAll];
+    [AIESPTool registerAll];
 
     [self buildUI];
 
     [self.items addObject:@{
         @"type": @"ai",
-        @"text": @"AI Agent ready.\nHoi: class ShowEntity co gi, tim Hp trong ShowEntity, hack map, tim gia tri 100"
+        @"text": @"AI Agent ready.\n"
+                @"Hoi: tim class quan ly entity, hack map, tim gia tri 100"
     }];
     [self.tableView reloadData];
 }
@@ -39,7 +42,6 @@
     CGFloat h = CGRectGetHeight(self.view.bounds);
     CGFloat inputH = 50;
 
-    // Table
     self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, w, h - inputH)
                                                      style:UITableViewStylePlain];
     self.tableView.dataSource = self;
@@ -52,7 +54,6 @@
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.tableView];
 
-    // Input area
     UIView *inputArea = [[UIView alloc] initWithFrame:CGRectMake(0, h - inputH, w, inputH)];
     inputArea.backgroundColor = [ToolTheme shared].surface;
     inputArea.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
@@ -121,21 +122,30 @@
     NSString *sysPrompt =
         @"AI agent hack game IL2CPP. Tra loi tieng Viet ngan gon.\n"
         @"Tool:\n"
-        @"- dump_class_runtime(class_name): DUMP TOAN BO class (fields + methods + properties + RVA + offset + type)\n"
-        @"- find_in_class(class_name, keyword): tim field/method/property trong class\n"
-        @"- get_class_detail(class_name): chi tiet class (parent, size)\n"
+        @"=== ESP / CLASS FINDER ===\n"
+        @"- find_entity_manager(): tim class quan ly entity\n"
+        @"- find_camera_class(): tim class Camera\n"
+        @"- find_static_entity_lists(): tim static list entity\n"
+        @"- find_entity_list_methods(): tim method tra list\n"
+        @"- full_esp_scan(): quet toan bo\n"
+        @"=== CLASS ===\n"
+        @"- dump_class_runtime(class_name): dump class\n"
+        @"- find_in_class(class_name, keyword): tim field/method\n"
         @"- search_classes(keyword): tim class\n"
         @"- search_methods(class_name, method_keyword): tim method\n"
         @"- get_method_rva(class_name, method_name): lay RVA\n"
-        @"- find_hack_methods(hack_type): tim ham hack (map/speed/damage/health/money)\n"
-        @"- search_memory(value, type): tim gia tri memory\n"
-        @"- edit_memory(address, value, type): sua gia tri memory\n"
-        @"- read_memory(address, type): doc gia tri memory\n"
+        @"- find_hack_methods(hack_type): tim ham hack\n"
+        @"=== MEMORY ===\n"
+        @"- search_memory(value, type): tim gia tri\n"
+        @"- edit_memory(address, value, type): sua gia tri\n"
+        @"- read_memory(address, type): doc gia tri\n"
+        @"=== FILE ===\n"
         @"- read_file(filename, keyword): grep file\n"
         @"- list_files(): liet ke file\n"
         @"QUY TAC:\n"
+        @"- Hoi 'tim class quan ly entity' → find_entity_manager\n"
+        @"- Hoi 'tim camera' → find_camera_class\n"
         @"- Hoi 'class X co gi' → dump_class_runtime\n"
-        @"- Hoi 'tim field Hp trong X' → find_in_class\n"
         @"- Hoi 'hack map' → find_hack_methods('map')\n"
         @"- Hoi 'tim gia tri X' → search_memory\n"
         @"- Neu tool loi, KHONG goi lai. Tra loi user.";
@@ -143,7 +153,11 @@
     NSMutableArray *messages = [NSMutableArray array];
     [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
 
-    for (NSDictionary *item in self.items) {
+    // Chỉ lấy 6 message gần nhất
+    NSInteger maxHistory = 6;
+    NSInteger start = MAX(0, (NSInteger)self.items.count - maxHistory);
+    for (NSInteger i = start; i < (NSInteger)self.items.count; i++) {
+        NSDictionary *item = self.items[i];
         NSString *type = item[@"type"];
         if ([type isEqualToString:@"user"]) {
             [messages addObject:@{@"role": @"user", @"content": item[@"text"]}];
@@ -157,7 +171,6 @@
         [tools addObject:[t openAISchema]];
     }
 
-    // QUAN TRỌNG: Chạy background để không crash main thread
     __weak typeof(self) ws = self;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
@@ -229,9 +242,10 @@
             if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
             else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ ket qua", d[@"count"]];
             else if (d[@"success"]) summary = [d[@"success"] boolValue] ? @"OK" : @"Fail";
-            else if (d[@"edited"]) summary = [NSString stringWithFormat:@"sua %@ dia chi", d[@"edited"]];
+            else if (d[@"edited"]) summary = [NSString stringWithFormat:@"sua %@", d[@"edited"]];
             else if (d[@"field_count"]) summary = [NSString stringWithFormat:@"%@ fields, %@ methods",
                                                     d[@"field_count"], d[@"method_count"]];
+            else if (d[@"entity_managers"]) summary = @"scan hoan tat";
         }
 
         [self.items addObject:@{
@@ -284,10 +298,12 @@
     label.attributedText = attr;
 
     CGSize maxSize = CGSizeMake(cellW - 20, CGFLOAT_MAX);
-    CGRect rect = [attr boundingRectWithSize:maxSize
-                                     options:NSStringDrawingUsesLineFragmentOrigin
-                                     context:nil];
-    label.frame = CGRectMake(10, 6, cellW - 20, rect.size.height);
+   ARY CGRect rect = [attr boundingRectWithSize_NAME:maxSize
+                                     options:NSString =DrawingUsesLineFragmentOrigin
+ lib                                     context:nil];
+   tool label.frame = CGRectMake(10, 
+
+6, cellW - 20,lib rect.size.height);
     [cell.contentView addSubview:label];
 
     cell.backgroundColor = [UIColor clearColor];
