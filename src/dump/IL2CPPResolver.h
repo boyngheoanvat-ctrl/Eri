@@ -1,78 +1,94 @@
 #import <Foundation/Foundation.h>
+#include <stdint.h>
 
-typedef struct Il2CppImage {
-    const char *name; const char *nameNoExt; void *assembly;
-    uint32_t typeStart; uint32_t typeCount;
-} Il2CppImage;
+// --- Opaque forward decls (không cần biết layout đầy đủ) ---
+typedef struct Il2CppDomain    Il2CppDomain;
+typedef struct Il2CppAssembly  Il2CppAssembly;
+typedef struct Il2CppImage     Il2CppImage;
+typedef struct Il2CppClass     Il2CppClass;
+typedef struct Il2CppType      Il2CppType;
+typedef struct MethodInfo      MethodInfo;
+typedef struct FieldInfo       FieldInfo;
+typedef struct PropertyInfo    PropertyInfo;
 
-typedef struct Il2CppAssembly { void *image; } Il2CppAssembly;
+// --- Struct tối thiểu (chỉ dùng làm fallback nếu symbol dlsym fail) ---
+// Layout dưới đây theo Unity 2019–2022. Nếu version khác, sửa lại cho khớp il2cpp.h.
+struct Il2CppDomain {
+    int32_t       domain_id;
+    int32_t       _pad;
+    void         *method_table;
+    Il2CppAssembly **assemblies;
+    size_t         assembly_count;
+};
 
-typedef struct Il2CppType {
-    void *data; unsigned int attrs : 16; unsigned int type : 8;
-    unsigned int num_mods : 6; unsigned int byref : 1;
-    unsigned int pinned : 1; unsigned int valuetype : 1;
-} Il2CppType;
-
-typedef struct Il2CppClass {
-    const void *image; void *gc_desc; const char *name; const char *namespaze;
-    Il2CppType *byval_arg; Il2CppType *this_arg;
-    void *element_class; void *castClass; void *declaringType; void *parent;
-    void *generic_class; void *typeMetadataHandle; void *interopData;
-    void *klass; void *fields; void *events; void *properties;
-    void *methods; void *nestedTypes; void *implementedInterfaces;
-    int32_t interfaceOffsets; void *static_fields; void *rgctx_data; void *typeHierarchy;
-    uint32_t instance_size; int32_t vtable_size;
-    uint16_t flags; uint16_t token; uint16_t method_count; uint16_t property_count;
-    uint16_t field_count; uint16_t event_count; uint16_t nested_type_count;
-    uint16_t vtable_count; uint16_t interfaces_count; uint16_t interface_offsets_count;
-} Il2CppClass;
-
-typedef struct MethodInfo {
-    void *methodPointer; void *invoker_method; const char *name; Il2CppClass *klass;
-    void *return_type; void *parameters; uint32_t token;
-    uint16_t flags; uint16_t iflags; uint16_t slot; uint8_t parameter_count;
-} MethodInfo;
-
-typedef struct FieldInfo {
-    const char *name; Il2CppType *type; Il2CppClass *parent;
-    int32_t offset; uint32_t token;
-} FieldInfo;
-
-typedef struct PropertyInfo {
-    Il2CppClass *parent; const char *name; MethodInfo *get;
-    MethodInfo *set; uint32_t attrs; uint32_t token;
-} PropertyInfo;
-
-typedef struct Il2CppDomain {
-    int32_t domain_id; int32_t assembly_count;
-    Il2CppAssembly **assemblies; void *setup;
-} Il2CppDomain;
+struct Il2CppClass {
+    const void    *image;
+    void          *gc_desc;
+    const char    *name;
+    const char    *namespaze;
+    void          *byval_arg;
+    void          *this_arg;
+    Il2CppClass   *element_class;
+    Il2CppClass   *castClass;
+    Il2CppClass   *declaringType;
+    Il2CppClass   *parent;
+    Il2CppClass   *generic_class;
+    void          *typeMetadataHandle;
+    void          *interopData;
+    Il2CppClass   *klass;
+    void          *fields;
+    void          *events;
+    void          *properties;
+    void          *methods;
+    Il2CppClass   *nestedTypes;
+    uint16_t       method_count;
+    uint16_t       property_count;
+    uint16_t       field_count;
+    uint16_t       event_count;
+    uint16_t       nested_type_count;
+    // ... còn nữa nhưng không dùng
+};
 
 @interface IL2CPPResolver : NSObject
-@property (nonatomic, assign, readonly) BOOL isResolved;
 
 + (instancetype)shared;
-- (BOOL)resolve;
-- (Il2CppDomain *)domain_get;
-- (size_t)image_get_class_count:(Il2CppImage *)image;
-- (Il2CppClass *)image_get_class:(Il2CppImage *)image index:(size_t)index;
-- (const char *)class_get_name:(Il2CppClass *)klass;
-- (const char *)class_get_namespace:(Il2CppClass *)klass;
-- (const MethodInfo **)class_get_methods:(Il2CppClass *)klass count:(uint16_t *)count;
-- (const FieldInfo **)class_get_fields:(Il2CppClass *)klass count:(uint16_t *)count;
-- (const PropertyInfo **)class_get_properties:(Il2CppClass *)klass count:(uint16_t *)count;
-- (const char *)method_get_name:(MethodInfo *)method;
-- (const char *)field_get_name:(FieldInfo *)field;
-- (const char *)property_get_name:(PropertyInfo *)prop;
-- (int32_t)field_get_offset:(FieldInfo *)field;
-- (uint32_t)method_get_token:(MethodInfo *)method;
-- (uint32_t)field_get_token:(FieldInfo *)field;
-- (void *)method_get_pointer:(MethodInfo *)method;
-- (Il2CppClass *)class_get_parent:(Il2CppClass *)klass;
 
-// Type API
-- (const char *)type_get_name:(Il2CppType *)type;
-- (const char *)field_get_type_name:(FieldInfo *)field;
+- (BOOL)resolve;
+- (BOOL)isResolved;
+
+// Core
+- (Il2CppDomain *)domain_get;
+- (Il2CppImage  *)assembly_get_image:(Il2CppAssembly *)assembly;
+- (const char   *)image_get_name:(Il2CppImage *)image;
+- (size_t        )image_get_class_count:(Il2CppImage *)image;
+- (Il2CppClass  *)image_get_class:(Il2CppImage *)image index:(size_t)index;
+
+// Class
+- (const char   *)class_get_name:(Il2CppClass *)k;
+- (const char   *)class_get_namespace:(Il2CppClass *)k;
+- (Il2CppClass  *)class_get_parent:(Il2CppClass *)klass;
+
+// Methods / Fields / Properties -> trả NSArray<NSValue *> để không phải free thủ công
+- (NSArray<NSValue *> *)class_get_methods:(Il2CppClass *)klass count:(uint16_t *)count;
+- (NSArray<NSValue *> *)class_get_fields:(Il2CppClass *)klass count:(uint16_t *)count;
+- (NSArray<NSValue *> *)class_get_properties:(Il2CppClass *)klass count:(uint16_t *)count;
+
+// Method info
+- (const char *)method_get_name:(MethodInfo *)m;
+- (uint32_t   )method_get_token:(MethodInfo *)m;
+- (void      *)method_get_pointer:(MethodInfo *)m;
 - (const char *)method_get_return_type:(MethodInfo *)method;
+
+// Field info
+- (const char *)field_get_name:(FieldInfo *)f;
+- (int32_t    )field_get_offset:(FieldInfo *)f;
+- (uint32_t   )field_get_token:(FieldInfo *)f;
+- (const char *)field_get_type_name:(FieldInfo *)field;
+
+// Property info
+- (const char *)property_get_name:(PropertyInfo *)p;
+
+// Type info
+- (const char *)type_get_name:(Il2CppType *)type;
 
 @end
