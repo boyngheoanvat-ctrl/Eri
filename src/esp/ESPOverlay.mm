@@ -52,8 +52,6 @@
     if (self.displayLink) return;
 
     self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
-
-    // KHÔNG dùng preferredFrameRateRange (iOS 15) → tránh warning
     self.displayLink.preferredFramesPerSecond = 15;
 
     [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
@@ -95,12 +93,12 @@
     Il2CppClass *entityClass = [self classOfObject:entityPtr];
     if (!entityClass) return;
 
-    MethodInfo *mGetPos = [self findMethod:entityClass name:@"get_Position" resolver:r];
-    MethodInfo *mGetHp = [self findMethod:entityClass name:@"get_m_Hp" resolver:r];
-    MethodInfo *mGetHpMax = [self findMethod:entityClass name:@"get_m_HpMax" resolver:r];
-    MethodInfo *mGetName = [self findMethod:entityClass name:@"get_m_RoleName" resolver:r];
-    MethodInfo *mGetDead = [self findMethod:entityClass name:@"get_m_bDeath" resolver:r];
-    MethodInfo *mGetSelf = [self findMethod:entityClass name:@"get_m_bSelf" resolver:r];
+    MethodInfo *mGetPos    = [self findMethod:entityClass name:@"get_Position"    resolver:r];
+    MethodInfo *mGetHp     = [self findMethod:entityClass name:@"get_m_Hp"        resolver:r];
+    MethodInfo *mGetHpMax  = [self findMethod:entityClass name:@"get_m_HpMax"     resolver:r];
+    MethodInfo *mGetName   = [self findMethod:entityClass name:@"get_m_RoleName"  resolver:r];
+    MethodInfo *mGetDead   = [self findMethod:entityClass name:@"get_m_bDeath"    resolver:r];
+    MethodInfo *mGetSelf   = [self findMethod:entityClass name:@"get_m_bSelf"     resolver:r];
 
     if (!mGetPos) return;
 
@@ -110,8 +108,8 @@
 
     Vector3 worldPos = [self invokeVector3Method:mGetPos onObject:entityPtr resolver:r];
 
-    float hp = mGetHp ? [self invokeFloatMethod:mGetHp onObject:entityPtr resolver:r] : 0;
-    float hpMax = mGetHpMax ? [self invokeFloatMethod:mGetHpMax onObject:entityPtr resolver:r] : 0;
+    float hp     = mGetHp    ? [self invokeFloatMethod:mGetHp    onObject:entityPtr resolver:r] : 0;
+    float hpMax  = mGetHpMax ? [self invokeFloatMethod:mGetHpMax onObject:entityPtr resolver:r] : 0;
     float hpPercent = hpMax > 0 ? hp / hpMax : 1.0;
 
     NSString *name = @"";
@@ -154,16 +152,23 @@
 }
 
 - (MethodInfo *)findMethod:(Il2CppClass *)klass name:(NSString *)name resolver:(IL2CPPResolver *)r {
+    if (!klass || !name) return NULL;
+
     uint16_t mCount = 0;
-    const MethodInfo **mList = [r class_get_methods:klass count:&mCount];
+    NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
+
     MethodInfo *found = NULL;
     for (uint16_t j = 0; j < mCount; j++) {
-        const char *mn = [r method_get_name:(MethodInfo *)mList[j]];
+        MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
+        if (!m) continue;
+        const char *mn = [r method_get_name:m];
         if (!mn) continue;
         NSString *n = [NSString stringWithUTF8String:mn];
-        if ([n isEqualToString:name]) { found = (MethodInfo *)mList[j]; break; }
+        if (n && [n isEqualToString:name]) {
+            found = m;
+            break;
+        }
     }
-    if (mList) free(mList);
     return found;
 }
 
@@ -244,7 +249,7 @@
 
         if (self.showHP) {
             CGFloat hpPercent = [e[@"hp_percent"] floatValue];
-            CGRect hpBg = CGRectMake(box.origin.x, box.origin.y - 8, box.size.width, 4);
+            CGRect hpBg   = CGRectMake(box.origin.x, box.origin.y - 8, box.size.width, 4);
             CGRect hpFill = CGRectMake(hpBg.origin.x, hpBg.origin.y,
                                         hpBg.size.width * hpPercent, hpBg.size.height);
             CGContextSetFillColorWithColor(ctx, [UIColor blackColor].CGColor);
