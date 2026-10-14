@@ -3,7 +3,7 @@
 #import "IL2CPPResolver.h"
 #import "ToolTheme.h"
 
-@interface MethodCallerVC () <UITableViewDataSource, UITableViewDelegate>
+@interface MethodCallerVC ()
 @property (nonatomic, strong) UITextField *classField;
 @property (nonatomic, strong) UITextField *methodField;
 @property (nonatomic, strong) UITextField *argsField;
@@ -25,7 +25,6 @@
     CGFloat h = CGRectGetHeight(self.view.bounds);
     CGFloat y = 10;
 
-    // Class field
     self.classField = [self makeField:@"Class name (VD: PlayerController)" y:y];
     y += 44;
     self.methodField = [self makeField:@"Method name (VD: SetHealth)" y:y];
@@ -33,7 +32,6 @@
     self.argsField = [self makeField:@"Args (cach nhau dau phay)" y:y];
     y += 54;
 
-    // Call button
     self.callButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.callButton.frame = CGRectMake(10, y, w - 20, 44);
     self.callButton.backgroundColor = [ToolTheme shared].accent;
@@ -46,7 +44,6 @@
     [self.view addSubview:self.callButton];
     y += 54;
 
-    // Status
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, y, w - 20, 20)];
     self.statusLabel.text = @"San sang";
     self.statusLabel.textColor = [ToolTheme shared].textMuted;
@@ -54,7 +51,6 @@
     [self.view addSubview:self.statusLabel];
     y += 26;
 
-    // Result view
     self.resultView = [[UITextView alloc] initWithFrame:CGRectMake(10, y, w - 20, h - y - 20)];
     self.resultView.backgroundColor = [ToolTheme shared].surface;
     self.resultView.textColor = [ToolTheme shared].textPrimary;
@@ -94,10 +90,7 @@
     [self log:[NSString stringWithFormat:@"> Call %@.%@", clsName, mName]];
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (![r resolve]) {
-        [self log:@"IL2CPP not resolved"];
-        return;
-    }
+    if (![r resolve]) { [self log:@"IL2CPP not resolved"]; return; }
 
     Il2CppDomain *domain = [r domain_get];
     if (!domain) { [self log:@"No domain"]; return; }
@@ -129,9 +122,8 @@
                 NSString *mn_str = [NSString stringWithUTF8String:mn];
                 if (![mn_str isEqualToString:mName]) continue;
 
-                [self log:[NSString stringWithFormat:@"Tim thay method: %@", mn_str]];
+                [self log:[NSString stringWithFormat:@"Tim thay: %@", mn_str]];
 
-                // Parse args
                 NSMutableArray *args = [NSMutableArray array];
                 if (self.argsField.text.length > 0) {
                     NSArray *parts = [self.argsField.text componentsSeparatedByString:@","];
@@ -142,7 +134,6 @@
                     }
                 }
 
-                // Gọi method
                 id result = [[MethodCaller shared]
                     callMethod:(MethodInfo *)mList[j]
                     onObject:nil
