@@ -20,17 +20,28 @@ libtool_FILES = \
     src/memory/MemoryResult.mm \
     src/memory/MemoryEditor.mm \
     src/memory/MemoryVC.mm \
-    src/method/MethodCaller.mm \
-    src/method/MethodCallerVC.mm \
+    src/memory/MethodCaller.mm \
+    src/memory/MethodCallerVC.mm \
     src/dump/IL2CPPResolver.mm \
-    src/dump/DumperVC.mm
+    src/dump/DumperVC.mm \
+    src/lua/LuaEngine.mm \
+    src/lua/LuaVC.mm \
+    src/esp/ESPOverlay.mm \
+    src/esp/ESPVC.mm
 
 libtool_CFLAGS = -fobjc-arc \
-    -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
-    -Isrc/memory -Isrc/method -Isrc/dump \
+    -I. \
+    -Isrc \
+    -Isrc/core \
+    -Isrc/ui \
+    -Isrc/ai \
+    -Isrc/memory \
+    -Isrc/dump \
+    -Isrc/lua \
+    -Isrc/esp \
     -Wno-everything
 
-libtool_FRAMEWORKS = Foundation UIKit CoreGraphics
+libtool_FRAMEWORKS = Foundation UIKit CoreGraphics QuartzCore
 libtool_LIBRARIES = objc
 libtool_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
 
