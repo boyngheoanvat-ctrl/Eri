@@ -44,17 +44,13 @@
 - (void)buildUI {
     CGRect screen = self.view.bounds;
 
-    // Backdrop mờ
     self.backdrop = [[UIView alloc] initWithFrame:screen];
     self.backdrop.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.5];
     self.backdrop.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-
-    UITapGestureRecognizer *bgTap = [[UITapGestureRecognizer alloc] initWithTarget:self
-                                                                             action:@selector(closeTapped)];
+    UITapGestureRecognizer *bgTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(closeTapped)];
     [self.backdrop addGestureRecognizer:bgTap];
     [self.view addSubview:self.backdrop];
 
-    // Panel nhỏ hơn màn hình
     CGFloat panelW = MIN(screen.size.width - 40, 600);
     CGFloat panelH = MIN(screen.size.height - 120, 500);
     CGFloat panelX = (screen.size.width - panelW) / 2.0;
@@ -72,12 +68,10 @@
                                    UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:self.panel];
 
-    // Kéo panel bằng title bar
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self
-                                                                          action:@selector(handlePan:)];
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
     [self.panel addGestureRecognizer:pan];
 
-    // ===== TITLE BAR =====
+    // Title bar
     self.titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, panelW, 36)];
     self.titleBar.backgroundColor = [ToolTheme shared].surfaceAlt;
     self.titleBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
@@ -109,14 +103,12 @@
     self.closeButton.backgroundColor = [ToolTheme shared].mutedFill;
     self.closeButton.layer.cornerRadius = 5;
     self.closeButton.titleLabel.font = [UIFont boldSystemFontOfSize:12];
-    [self.closeButton addTarget:self action:@selector(closeTapped)
-               forControlEvents:UIControlEventTouchUpInside];
+    [self.closeButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.titleBar addSubview:self.closeButton];
 
-    // ===== RAIL =====
+    // Rail
     CGFloat railW = 60;
     CGFloat railH = panelH - 36;
-
     self.railView = [[UIView alloc] initWithFrame:CGRectMake(0, 36, railW, railH)];
     self.railView.backgroundColor = [ToolTheme shared].surface;
     self.railView.autoresizingMask = UIViewAutoresizingFlexibleHeight;
@@ -127,13 +119,10 @@
     railDivider.autoresizingMask = UIViewAutoresizingFlexibleHeight;
     [self.railView addSubview:railDivider];
 
-    // Stack 4 nút
     CGFloat btnH = 56;
     CGFloat spacing = 6;
     CGFloat totalH = (btnH * 4) + (spacing * 3);
-    CGFloat stackY = 8;
-
-    self.railStack = [[UIStackView alloc] initWithFrame:CGRectMake(0, stackY, railW, totalH)];
+    self.railStack = [[UIStackView alloc] initWithFrame:CGRectMake(0, 8, railW, totalH)];
     self.railStack.axis = UILayoutConstraintAxisVertical;
     self.railStack.spacing = spacing;
     self.railStack.distribution = UIStackViewDistributionFillEqually;
@@ -142,19 +131,15 @@
 
     self.aiButton = [self makeRailButton:@"AI" symbol:@"AI" tag:0];
     [self.railStack addArrangedSubview:self.aiButton];
-
     self.dumpButton = [self makeRailButton:@"Dump" symbol:@"▼" tag:1];
     [self.railStack addArrangedSubview:self.dumpButton];
-
     self.memoryButton = [self makeRailButton:@"Mem" symbol:@"⚡" tag:2];
     [self.railStack addArrangedSubview:self.memoryButton];
-
     self.methodButton = [self makeRailButton:@"Call" symbol:@"▶" tag:3];
     [self.railStack addArrangedSubview:self.methodButton];
 
-    // ===== CONTENT =====
-    self.contentView = [[UIView alloc] initWithFrame:
-        CGRectMake(railW, 36, panelW - railW, panelH - 36)];
+    // Content
+    self.contentView = [[UIView alloc] initWithFrame:CGRectMake(railW, 36, panelW - railW, panelH - 36)];
     self.contentView.backgroundColor = [ToolTheme shared].background;
     self.contentView.clipsToBounds = YES;
     self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -164,18 +149,17 @@
 - (ToolRailButton *)makeRailButton:(NSString *)title symbol:(NSString *)symbol tag:(NSInteger)tag {
     ToolRailButton *btn = [[ToolRailButton alloc] initWithTitle:title symbol:symbol];
     btn.tag = tag;
-    [btn addTarget:self action:@selector(railButtonTapped:)
-  forControlEvents:UIControlEventTouchUpInside];
+    [btn addTarget:self action:@selector(railButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     return btn;
 }
 
 - (void)railButtonTapped:(ToolRailButton *)sender {
-    [self selectTab:sender.tag];
+ alloc    [self selectTab:sender.tag];
 }
 
-- (void)buildVCs {
-    self.aiVC = [[AIChatVC alloc] init];
-    self.dumpVC = [[DumperVC alloc] init];
+]- (void)buildVCs {
+    self.aiVC = init [[];
+AIChatVC    self.dumpVC = [[DumperVC alloc] init];
     self.memoryVC = [[MemoryVC alloc] init];
     self.methodVC = [[MethodCallerVC alloc] init];
 }
@@ -209,9 +193,7 @@
     self.methodButton.active = (index == 3);
 }
 
-- (void)closeTapped {
-    [[ToolWindow shared] hide];
-}
+- (void)closeTapped { [[ToolWindow shared] hide]; }
 
 - (void)handlePan:(UIPanGestureRecognizer *)g {
     CGPoint p = [g translationInView:self.view];
