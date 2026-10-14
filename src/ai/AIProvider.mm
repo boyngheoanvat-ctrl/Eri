@@ -19,7 +19,7 @@
 
         // ===== GROQ API =====
         instance.baseURL = @"https://api.groq.com/openai/v1/chat/completions";
-        instance.apiKey = @"gsk_DAN_KEY_GROQ_VAO_DAY";
+        instance.apiKey = @"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";
         instance.model = @"openai/gpt-oss-120b";
     });
     return instance;
