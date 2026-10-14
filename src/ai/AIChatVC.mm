@@ -5,14 +5,18 @@
 #import "AIESPTool.h"
 #import "ToolTheme.h"
 
-@interface AIChatVC () <AIStreamDelegate, UITableViewDataSource, UITableViewDelegate>
+static const CGFloat kInputBarHeight = 50;
+
+@interface AIChatVC () <AIStreamDelegate, UITableViewDataSource, UITableViewDelegate, UIGestureRecognizerDelegate>
 @property (nonatomic, strong) UITableView *tableView;
+@property (nonatomic, strong) UIView *inputArea;
 @property (nonatomic, strong) UITextField *inputField;
 @property (nonatomic, strong) UIButton *sendButton;
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *items;
 @property (nonatomic, assign) BOOL isWaiting;
 @property (nonatomic, strong) NSMutableString *currentAIResponse;
+@property (nonatomic, strong) UIPanGestureRecognizer *panOutside;
 @end
 
 @implementation AIChatVC
@@ -27,20 +31,28 @@
     [AIESPTool registerAll];
 
     [self buildUI];
+    [self setupKeyboardObservers];
 
     [self.items addObject:@{
         @"type": @"ai",
         @"text": @"AI Agent ready.\nHoi: hack map, tim class quan ly entity"
     }];
     [self.tableView reloadData];
+    [self scrollToBottomAnimated:NO];
 }
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+#pragma mark - UI
 
 - (void)buildUI {
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
-    CGFloat inputH = 50;
 
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, w, h - inputH)
+    // Table view (chat log) — chiếm toàn bộ trừ input bar
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, w, h - kInputBarHeight)
                                                      style:UITableViewStylePlain];
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
@@ -48,18 +60,25 @@
     self.tableView.separatorColor = [UIColor clearColor];
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 40;
-    self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
+    self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    self.tableView.alwaysBounceVertical = YES;          // <-- cho phép kéo dù ít tin
+    self.tableView.showsVerticalScrollIndicator = YES;  // <-- hiện thanh scroll bên phải
+    self.tableView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
+    self.tableView.scrollEnabled = YES;                 // <-- ĐẢM BẢO scroll bật
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    // contentInset để tin cuối không bị input bar che
+    self.tableView.contentInset = UIEdgeInsetsMake(8, 0, 8, 0);
     [self.view addSubview:self.tableView];
 
-    UIView *inputArea = [[UIView alloc] initWithFrame:CGRectMake(0, h - inputH, w, inputH)];
-    inputArea.backgroundColor = [ToolTheme shared].surface;
-    inputArea.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
-    [self.view addSubview:inputArea];
+    // Input area — ghim đáy
+    self.inputArea = [[UIView alloc] initWithFrame:CGRectMake(0, h - kInputBarHeight, w, kInputBarHeight)];
+    self.inputArea.backgroundColor = [ToolTheme shared].surface;
+    self.inputArea.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
+    [self.view addSubview:self.inputArea];
 
     UIView *topLine = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 1)];
     topLine.backgroundColor = [ToolTheme shared].divider;
-    [inputArea addSubview:topLine];
+    [self.inputArea addSubview:topLine];
 
     self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, w - 80, 30)];
     self.inputField.backgroundColor = [ToolTheme shared].background;
@@ -77,7 +96,7 @@
     self.inputField.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.inputField addTarget:self action:@selector(sendTapped)
               forControlEvents:UIControlEventEditingDidEndOnExit];
-    [inputArea addSubview:self.inputField];
+    [self.inputArea addSubview:self.inputField];
 
     self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.sendButton.frame = CGRectMake(w - 64, 10, 54, 30);
@@ -89,7 +108,7 @@
     self.sendButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
     [self.sendButton addTarget:self action:@selector(sendTapped)
               forControlEvents:UIControlEventTouchUpInside];
-    [inputArea addSubview:self.sendButton];
+    [self.inputArea addSubview:self.sendButton];
 
     self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:
         UIActivityIndicatorViewStyleMedium];
@@ -97,6 +116,65 @@
     self.spinner.center = self.view.center;
     self.spinner.hidesWhenStopped = YES;
     [self.view addSubview:self.spinner];
+}
+
+#pragma mark - Keyboard
+
+- (void)setupKeyboardObservers {
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWillShow:)
+                                                 name:UIKeyboardWillShowNotification
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWillHide:)
+                                                 name:UIKeyboardWillHideNotification
+                                               object:nil];
+}
+
+- (void)keyboardWillShow:(NSNotification *)note {
+    NSDictionary *info = note.userInfo;
+    CGRect kbFrame = [info[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    NSTimeInterval dur = [info[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    CGRect kbInView = [self.view convertRect:kbFrame fromView:nil];
+    CGFloat overlap = CGRectGetHeight(self.view.bounds) - CGRectGetMinY(kbInView);
+
+    [UIView animateWithDuration:dur animations:^{
+        CGFloat w = CGRectGetWidth(self.view.bounds);
+        CGFloat h = CGRectGetHeight(self.view.bounds);
+        CGFloat visibleH = h - overlap;
+
+        self.tableView.frame = CGRectMake(0, 0, w, visibleH - kInputBarHeight);
+        self.inputArea.frame = CGRectMake(0, visibleH - kInputBarHeight, w, kInputBarHeight);
+    } completion:^(BOOL finished) {
+        [self scrollToBottomAnimated:YES];
+    }];
+}
+
+- (void)keyboardWillHide:(NSNotification *)note {
+    NSDictionary *info = note.userInfo;
+    NSTimeInterval dur = [info[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+
+    [UIView animateWithDuration:dur animations:^{
+        CGFloat w = CGRectGetWidth(self.view.bounds);
+        CGFloat h = CGRectGetHeight(self.view.bounds);
+        self.tableView.frame = CGRectMake(0, 0, w, h - kInputBarHeight);
+        self.inputArea.frame = CGRectMake(0, h - kInputBarHeight, w, kInputBarHeight);
+    }];
+}
+
+#pragma mark - Gesture passthrough
+
+// Cho phép tableView nhận pan gesture ngay cả khi nằm trong draggable window
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
+shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
+    return YES;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldReceiveTouch:(UITouch *)touch {
+    // Table view và input field ưu tiên nhận touch
+    if ([touch.view isDescendantOfView:self.tableView]) return YES;
+    if ([touch.view isDescendantOfView:self.inputArea]) return YES;
+    return YES;
 }
 
 #pragma mark - Send
@@ -108,7 +186,7 @@
     [self.items addObject:@{@"type": @"user", @"text": text}];
     self.inputField.text = @"";
     [self.tableView reloadData];
-    [self scrollToBottom];
+    [self scrollToBottomAnimated:YES];
 
     self.isWaiting = YES;
     self.currentAIResponse = [NSMutableString string];
@@ -158,7 +236,6 @@
         [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
     });
 
-    // Timeout 20s
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (ws.isWaiting) {
@@ -168,16 +245,26 @@
             [ws.spinner stopAnimating];
             [ws.items addObject:@{@"type": @"error", @"text": @"Timeout 20s"}];
             [ws.tableView reloadData];
+            [ws scrollToBottomAnimated:YES];
         }
     });
 }
 
-- (void)scrollToBottom {
+#pragma mark - Scroll
+
+- (void)scrollToBottomAnimated:(BOOL)animated {
     if (self.items.count == 0) return;
-    NSIndexPath *last = [NSIndexPath indexPathForRow:self.items.count - 1 inSection:0];
-    [self.tableView scrollToRowAtIndexPath:last
-                          atScrollPosition:UITableViewScrollPositionBottom animated:YES];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSInteger last = (NSInteger)self.items.count - 1;
+        NSIndexPath *ip = [NSIndexPath indexPathForRow:last inSection:0];
+        [self.tableView scrollToRowAtIndexPath:ip
+                              atScrollPosition:UITableViewScrollPositionBottom
+                                      animated:animated];
+    });
 }
+
+// Giữ nguyên tên cũ để không phá code cũ
+- (void)scrollToBottom { [self scrollToBottomAnimated:YES]; }
 
 #pragma mark - AIStreamDelegate
 
@@ -191,7 +278,7 @@
             [self.items addObject:@{@"type": @"ai", @"text": [self.currentAIResponse copy]}];
         }
         [self.tableView reloadData];
-        [self scrollToBottom];
+        [self scrollToBottomAnimated:YES];
     });
 }
 
@@ -204,6 +291,7 @@
         [self.items addObject:@{@"type": @"error",
             @"text": error.localizedDescription ?: @"Loi"}];
         [self.tableView reloadData];
+        [self scrollToBottomAnimated:YES];
     });
 }
 
@@ -227,6 +315,7 @@
         [self.items addObject:@{@"type": @"tool",
             @"text": [NSString stringWithFormat:@"%@ → %@", toolName, summary]}];
         [self.tableView reloadData];
+        [self scrollToBottomAnimated:YES];
     });
 }
 
@@ -256,7 +345,7 @@
     else if (isError) { prefix = @"[error] "; prefixColor = [ToolTheme shared].danger; }
     else { prefix = @"[ai] "; prefixColor = [ToolTheme shared].success; }
 
-    NSString *full = [NSString stringWithFormat:@"%@%@", prefix, text];
+    NSString *full = [NSString stringWithFormat:@"%@%@", prefix, text ?: @""];
     CGFloat cellW = CGRectGetWidth(tv.bounds);
 
     UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(10, 6, cellW - 20, 0)];
@@ -265,7 +354,7 @@
     NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] initWithString:full];
     [attr addAttribute:NSForegroundColorAttributeName value:prefixColor range:NSMakeRange(0, prefix.length)];
     UIColor *tc = isError ? [ToolTheme shared].danger : [ToolTheme shared].textPrimary;
-    [attr addAttribute:NSForegroundColorAttributeName value:tc range:NSMakeRange(prefix.length, text.length)];
+    [attr addAttribute:NSForegroundColorAttributeName value:tc range:NSMakeRange(prefix.length, (text ?: @"").length)];
     [attr addAttribute:NSFontAttributeName value:[[ToolTheme shared] monoFont:11] range:NSMakeRange(0, full.length)];
 
     label.attributedText = attr;
