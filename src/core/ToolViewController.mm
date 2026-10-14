@@ -17,6 +17,7 @@
 @property (nonatomic, strong) UIView *railView;
 @property (nonatomic, strong) UIStackView *railStack;
 @property (nonatomic, strong) UIView *contentView;
+@property (nonatomic, strong) UIView *resizeHandle;
 
 @property (nonatomic, strong) ToolRailButton *aiButton;
 @property (nonatomic, strong) ToolRailButton *dumpButton;
@@ -29,6 +30,10 @@
 @property (nonatomic, strong) MethodCallerVC *methodVC;
 @property (nonatomic, strong) UIViewController *currentVC;
 @property (nonatomic, assign) NSInteger currentTab;
+
+@property (nonatomic, assign) CGSize dragStartSize;
+@property (nonatomic, assign) CGPoint dragStartPoint;
+@property (nonatomic, assign) BOOL isResizing;
 @end
 
 @implementation ToolViewController
@@ -44,6 +49,7 @@
 - (void)buildUI {
     CGRect screen = self.view.bounds;
 
+    // Backdrop
     self.backdrop = [[UIView alloc] initWithFrame:screen];
     self.backdrop.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.5];
     self.backdrop.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -56,6 +62,7 @@
     CGFloat panelX = (screen.size.width - panelW) / 2.0;
     CGFloat panelY = (screen.size.height - panelH) / 2.0;
 
+    // Panel
     self.panel = [[UIView alloc] initWithFrame:CGRectMake(panelX, panelY, panelW, panelH)];
     self.panel.backgroundColor = [ToolTheme shared].background;
     self.panel.layer.cornerRadius = 12;
@@ -68,9 +75,11 @@
                                    UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:self.panel];
 
+    // Pan kéo panel
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
     [self.panel addGestureRecognizer:pan];
 
+    // Title bar
     self.titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, panelW, 36)];
     self.titleBar.backgroundColor = [ToolTheme shared].surfaceAlt;
     self.titleBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
@@ -105,6 +114,7 @@
     [self.closeButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.titleBar addSubview:self.closeButton];
 
+    // Rail
     CGFloat railW = 60;
     CGFloat railH = panelH - 36;
     self.railView = [[UIView alloc] initWithFrame:CGRectMake(0, 36, railW, railH)];
@@ -136,11 +146,34 @@
     self.methodButton = [self makeRailButton:@"Call" symbol:@"▶" tag:3];
     [self.railStack addArrangedSubview:self.methodButton];
 
+    // Content
     self.contentView = [[UIView alloc] initWithFrame:CGRectMake(railW, 36, panelW - railW, panelH - 36)];
     self.contentView.backgroundColor = [ToolTheme shared].background;
     self.contentView.clipsToBounds = YES;
     self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.panel addSubview:self.contentView];
+
+    // Resize handle
+    CGFloat handleSize = 28;
+    self.resizeHandle = [[UIView alloc] initWithFrame:
+        CGRectMake(panelW - handleSize, panelH - handleSize, handleSize, handleSize)];
+    self.resizeHandle.backgroundColor = [UIColor colorWithRed:0.30 green:0.70 blue:1.0 alpha:0.5];
+    self.resizeHandle.layer.cornerRadius = handleSize / 2.0;
+    self.resizeHandle.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin |
+                                          UIViewAutoresizingFlexibleTopMargin;
+    self.resizeHandle.userInteractionEnabled = YES;
+    [self.panel addSubview:self.resizeHandle];
+
+    UILabel *dotsLabel = [[UILabel alloc] initWithFrame:self.resizeHandle.bounds];
+    dotsLabel.text = @"⋰";
+    dotsLabel.textColor = [UIColor whiteColor];
+    dotsLabel.font = [UIFont boldSystemFontOfSize:18];
+    dotsLabel.textAlignment = NSTextAlignmentCenter;
+    [self.resizeHandle addSubview:dotsLabel];
+
+    UIPanGestureRecognizer *resizePan = [[UIPanGestureRecognizer alloc] initWithTarget:self
+                                                                                action:@selector(handleResize:)];
+    [self.resizeHandle addGestureRecognizer:resizePan];
 }
 
 - (ToolRailButton *)makeRailButton:(NSString *)title symbol:(NSString *)symbol tag:(NSInteger)tag {
@@ -193,12 +226,64 @@
 - (void)closeTapped { [[ToolWindow shared] hide]; }
 
 - (void)handlePan:(UIPanGestureRecognizer *)g {
+    if (self.isResizing) return;
     CGPoint p = [g translationInView:self.view];
     CGPoint center = self.panel.center;
     center.x += p.x;
     center.y += p.y;
     self.panel.center = center;
     [g setTranslation:CGPointZero inView:self.view];
+}
+
+- (void)handleResize:(UIPanGestureRecognizer *)g {
+    CGPoint p = [g translationInView:self.view];
+
+    if (g.state == UIGestureRecognizerStateBegan) {
+        self.isResizing = YES;
+        self.dragStartSize = self.panel.frame.size;
+        self.dragStartPoint = self.panel.frame.origin;
+    }
+
+    if (g.state == UIGestureRecognizerStateChanged) {
+        CGFloat newW = self.dragStartSize.width + p.x;
+        CGFloat newH = self.dragStartSize.height + p.y;
+
+        // Kéo tự do, không giới hạn
+        self.panel.frame = CGRectMake(self.dragStartPoint.x, self.dragStartPoint.y, newW, newH);
+        [self updateLayoutForPanelSize:CGSizeMake(newW, newH)];
+    }
+
+    if (g.state == UIGestureRecognizerStateEnded ||
+        g.state == UIGestureRecognizerStateCancelled) {
+        self.isResizing = NO;
+    }
+}
+
+- (void)updateLayoutForPanelSize:(CGSize)panelSize {
+    CGFloat panelW = panelSize.width;
+    CGFloat panelH = panelSize.height;
+    CGFloat railW = 60;
+
+    self.titleBar.frame = CGRectMake(0, 0, panelW, 36);
+    self.closeButton.frame = CGRectMake(panelW - 36, 4, 28, 28);
+    self.subtitleLabel.frame = CGRectMake(100, 0, panelW - 160, 36);
+    self.railView.frame = CGRectMake(0, 36, railW, panelH - 36);
+
+    for (UIView *v in self.railView.subviews) {
+        if (v != self.railStack) {
+            v.frame = CGRectMake(railW - 1, 0, 1, panelH - 36);
+        }
+    }
+
+    self.contentView.frame = CGRectMake(railW, 36, panelW - railW, panelH - 36);
+
+    CGFloat handleSize = 28;
+    self.resizeHandle.frame = CGRectMake(panelW - handleSize, panelH - handleSize,
+                                          handleSize, handleSize);
+
+    if (self.currentVC) {
+        self.currentVC.view.frame = self.contentView.bounds;
+    }
 }
 
 - (void)reload {
