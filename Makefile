@@ -3,7 +3,9 @@ TARGET = iphone:clang:latest:14.0
 
 include $(THEOS)/makefiles/common.mk
 
-LIBRtool_FILES = \
+LIBRARY_NAME = libtool
+
+libtool_FILES = \
     src/libtool.mm \
     src/FloatingButton.mm \
     src/core/ToolWindow.mm \
