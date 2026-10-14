@@ -47,18 +47,18 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    NSLog(@"[TEST1] viewDidLoad START");
+    NSLog(@"[ToolVC] viewDidLoad START");
 
     self.view.frame = [UIScreen mainScreen].bounds;
     self.view.backgroundColor = [UIColor redColor];
 
     [self buildUI];
-    NSLog(@"[TEST1] after buildUI");
+    NSLog(@"[ToolVC] after buildUI");
 
     [self selectTab:0];
-    NSLog(@"[TEST1] after selectTab:0");
+    NSLog(@"[ToolVC] after selectTab:0");
 
-    NSLog(@"[TEST1] viewDidLoad DONE");
+    NSLog(@"[ToolVC] viewDidLoad DONE");
 }
 
 - (void)buildUI {
@@ -204,13 +204,11 @@
 }
 
 - (void)buildVCs {
-    // Không tạo gì cả
+    // Không tạo gì cả — lazy create trong selectTab
 }
 
-#pragma mark - TEST 1: dùng UIViewController trần, KHÔNG tạo AIChatVC
-
 - (void)selectTab:(NSInteger)index {
-    NSLog(@"[TEST1] selectTab %ld START", (long)index);
+    NSLog(@"[ToolVC] selectTab %ld START", (long)index);
 
     if (self.currentVC) {
         [self.currentVC.view removeFromSuperview];
@@ -218,20 +216,80 @@
         self.currentVC = nil;
     }
 
-    // TẠO VIEWCONTROLLER TRẦN
-    UIViewController *newVC = [[UIViewController alloc] init];
-    newVC.view.backgroundColor = [UIColor blueColor];
-    NSLog(@"[TEST1] created plain UIViewController");
+    UIViewController *newVC = nil;
 
-    [self addChildViewController:newVC];
-    newVC.view.frame = self.contentView.bounds;
-    newVC.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.contentView addSubview:newVC.view];
-    [newVC didMoveToParentViewController:self];
-    NSLog(@"[TEST1] addChild DONE");
+    if (index == 0) {
+        if (!self.aiVC) {
+            NSLog(@"[ToolVC] creating AIChatVC...");
+            @try {
+                self.aiVC = [[AIChatVC alloc] init];
+            } @catch (NSException *e) {
+                NSLog(@"[ToolVC] AIChatVC init crash: %@", e);
+                return;
+            }
+            NSLog(@"[ToolVC] AIChatVC created");
+        }
+        newVC = self.aiVC;
+        self.subtitleLabel.text = @"AI Agent";
+    }
+    else if (index == 1) {
+        if (!self.dumpVC) {
+            @try { self.dumpVC = [[DumperVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] DumperVC crash: %@", e); return; }
+        }
+        newVC = self.dumpVC;
+        self.subtitleLabel.text = @"IL2CPP Dumper";
+    }
+    else if (index == 2) {
+        if (!self.memoryVC) {
+            @try { self.memoryVC = [[MemoryVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] MemoryVC crash: %@", e); return; }
+        }
+        newVC = self.memoryVC;
+        self.subtitleLabel.text = @"Memory Editor";
+    }
+    else if (index == 3) {
+        if (!self.methodVC) {
+            @try { self.methodVC = [[MethodCallerVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] MethodCallerVC crash: %@", e); return; }
+        }
+        newVC = self.methodVC;
+        self.subtitleLabel.text = @"Method Caller";
+    }
+    else if (index == 4) {
+        if (!self.luaVC) {
+            @try { self.luaVC = [[LuaVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] LuaVC crash: %@", e); return; }
+        }
+        newVC = self.luaVC;
+        self.subtitleLabel.text = @"Lua Console";
+    }
+    else if (index == 5) {
+        if (!self.espVC) {
+            @try { self.espVC = [[ESPVC alloc] init]; }
+            @catch (NSException *e) { NSLog(@"[ToolVC] ESPVC crash: %@", e); return; }
+        }
+        newVC = self.espVC;
+        self.subtitleLabel.text = @"ESP Overlay";
+    }
+
+    if (!newVC) return;
+
+    NSLog(@"[ToolVC] addChild...");
+    @try {
+        [self addChildViewController:newVC];
+        newVC.view.frame = self.contentView.bounds;
+        newVC.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [self.contentView addSubview:newVC.view];
+        [newVC didMoveToParentViewController:self];
+    } @catch (NSException *e) {
+        NSLog(@"[ToolVC] addChild crash: %@", e);
+        return;
+    }
+    NSLog(@"[ToolVC] addChild DONE");
 
     self.currentVC = newVC;
-    self.subtitleLabel.text = @"AI Agent";
+    self.currentTab = index;
 
     self.aiButton.active = (index == 0);
     self.dumpButton.active = (index == 1);
@@ -240,7 +298,7 @@
     self.luaButton.active = (index == 4);
     self.espButton.active = (index == 5);
 
-    NSLog(@"[TEST1] selectTab %ld DONE", (long)index);
+    NSLog(@"[ToolVC] selectTab %ld DONE", (long)index);
 }
 
 - (void)closeTapped { [[ToolWindow shared] hide]; }
@@ -308,7 +366,12 @@
 }
 
 - (void)reload {
-    // Không làm gì — test
+    @try { if (self.aiVC) [self.aiVC reload]; } @catch (NSException *e) {}
+    @try { if (self.dumpVC) [self.dumpVC reload]; } @catch (NSException *e) {}
+    @try { if (self.memoryVC) [self.memoryVC reload]; } @catch (NSException *e) {}
+    @try { if (self.methodVC) [self.methodVC reload]; } @catch (NSException *e) {}
+    @try { if (self.luaVC) [self.luaVC reload]; } @catch (NSException *e) {}
+    @try { if (self.espVC) [self.espVC reload]; } @catch (NSException *e) {}
 }
 
 #pragma mark - UIGestureRecognizerDelegate
