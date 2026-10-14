@@ -178,7 +178,7 @@ typedef struct {
     int32_t  aname_build;
     int32_t  aname_revision;
     uint32_t aname_publicKeyIndex;
-    uint32_t aname_c fixultureIndex;
+    uint32_t aname_cultureIndex;
     uint32_t aname_hash_alg;
     uint32_t aname_hash_len;
     uint32_t aname_flags;
