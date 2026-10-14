@@ -190,6 +190,7 @@
                 });
             }
 
+            // script.json
             if (doScript) {
                 NSMutableArray *jsonOut = [NSMutableArray array];
                 for (NSDictionary *info in allClasses) {
@@ -199,6 +200,7 @@
                 [data writeToFile:[outDir stringByAppendingPathComponent:@"script.json"] atomically:YES];
             }
 
+            // il2cpp.h
             if (doHeader) {
                 NSMutableString *h = [NSMutableString string];
                 [h appendString:@"// Auto-generated il2cpp.h\n#pragma once\n#include <stdint.h>\n\n"];
@@ -216,6 +218,7 @@
                     atomically:YES encoding:NSUTF8StringEncoding error:nil];
             }
 
+            // dump.cs
             if (doCs) {
                 NSMutableString *cs = [NSMutableString string];
                 [cs appendString:@"// Auto-generated dump.cs\n"];
@@ -224,7 +227,10 @@
                 for (NSDictionary *info in allClasses) {
                     NSString *cls = info[@"name"];
                     NSString *ns = info[@"namespace"];
-                    Il2CppClass *klass = (Il2CppClass *)info[@"klass"].pointerValue;
+
+                    NSValue *klassValue = (NSValue *)info[@"klass"];
+                    if (![klassValue isKindOfClass:[NSValue class]]) continue;
+                    Il2CppClass *klass = (Il2CppClass *)klassValue.pointerValue;
                     if (!klass) continue;
 
                     if (ns.length > 0) [cs appendFormat:@"namespace %@ {\n", ns];
