@@ -1,4 +1,5 @@
 #import "ESPOverlay.h"
+#import "ESPStructs.h"
 #import "IL2CPPResolver.h"
 #import "IL2CPPHeapWalker.h"
 #import "ToolTheme.h"
