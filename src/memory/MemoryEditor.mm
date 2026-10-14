@@ -166,6 +166,22 @@
     return kr == KERN_SUCCESS;
 }
 
+#pragma mark - Edit All
+
+- (NSInteger)editAll:(NSArray<MemoryResult *> *)results
+               value:(NSString *)value
+                type:(MemValueType)type {
+    NSInteger count = 0;
+    for (MemoryResult *r in results) {
+        if ([self writeValue:value at:r.address type:type]) {
+            count++;
+        }
+    }
+    return count;
+}
+
+#pragma mark - Region Info
+
 - (NSString *)regionInfoAt:(vm_address_t)addr {
     vm_address_t region = addr;
     vm_size_t size = 0;
