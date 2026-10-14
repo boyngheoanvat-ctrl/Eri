@@ -21,31 +21,31 @@ static const CGFloat kInputBarHeight = 50;
 
 @implementation AIChatVC
 
-#pragma mark - TEST B: chỉ bật AITool registerAll
+#pragma mark - TEST C: chỉ bật AIMemoryTool registerAll
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    NSLog(@"[TEST-B] viewDidLoad START");
+    NSLog(@"[TEST-C] viewDidLoad START");
 
     self.view.backgroundColor = [ToolTheme shared].background;
     self.items = [NSMutableArray array];
-    NSLog(@"[TEST-B] after init vars");
+    NSLog(@"[TEST-C] after init vars");
 
-    // CHỈ BẬT AITool
-    NSLog(@"[TEST-B] AITool registerAll START");
-    [AITool registerAll];
-    NSLog(@"[TEST-B] AITool registerAll DONE");
+    // CHỈ BẬT AIMemoryTool
+    NSLog(@"[TEST-C] AIMemoryTool registerAll START");
+    [AIMemoryTool registerAll];
+    NSLog(@"[TEST-C] AIMemoryTool registerAll DONE");
 
-    // [AIMemoryTool registerAll];
+    // [AITool registerAll];
     // [AIESPTool registerAll];
 
-    NSLog(@"[TEST-B] before buildUI");
+    NSLog(@"[TEST-C] before buildUI");
     [self buildUI];
-    NSLog(@"[TEST-B] after buildUI");
+    NSLog(@"[TEST-C] after buildUI");
 
-    NSLog(@"[TEST-B] before setupKeyboardObservers");
+    NSLog(@"[TEST-C] before setupKeyboardObservers");
     [self setupKeyboardObservers];
-    NSLog(@"[TEST-B] after setupKeyboardObservers");
+    NSLog(@"[TEST-C] after setupKeyboardObservers");
 
     NSString *game = @"Unknown";
     NSString *welcome = [NSString stringWithFormat:
@@ -54,7 +54,7 @@ static const CGFloat kInputBarHeight = 50;
     [self.tableView reloadData];
     [self scrollToBottomAnimated:NO];
 
-    NSLog(@"[TEST-B] viewDidLoad DONE");
+    NSLog(@"[TEST-C] viewDidLoad DONE");
 }
 
 - (void)dealloc {
@@ -191,10 +191,9 @@ static const CGFloat kInputBarHeight = 50;
     self.sendButton.alpha = 0.5;
     [self.spinner startAnimating];
 
-    // TEST: trả lời local, không gọi AI
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        [self.items addObject:@{@"type": @"ai", @"text": @"[TEST-B] Da nhan tin nhan (khong goi AI)"}];
+        [self.items addObject:@{@"type": @"ai", @"text": @"[TEST-C] Da nhan tin nhan (khong goi AI)"}];
         [self.tableView reloadData];
         [self scrollToBottomAnimated:YES];
 
