@@ -7,14 +7,13 @@
 // Quét 1 lần, cache lại
 - (void)scan;
 
-// Tên game (nếu nhận diện được), không thì "Auto"
+// Tên game (nếu nhận diện được), không thì "Unknown"
 - (NSString *)detectedGame;
 
-// Tổng hợp signature đặc trưng (dùng để debug)
+// Signature đặc trưng (debug)
 - (NSDictionary *)fingerprintInfo;
 
-// Trả về method nào CÓ trong game cho khái niệm này
-// Ý tưởng: thử từng synonym, cái nào có method tồn tại → trả về
+// Tìm method match concept (map/speed/damage/...)
 - (NSArray<NSDictionary *> *)findMethodsForConcept:(NSString *)concept
                                          maxResults:(NSInteger)max;
 
