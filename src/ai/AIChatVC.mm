@@ -23,22 +23,24 @@ static const CGFloat kInputBarHeight = 50;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    NSLog(@"[TEST-AI] viewDidLoad START");
+
     self.view.backgroundColor = [ToolTheme shared].background;
     self.items = [NSMutableArray array];
+    NSLog(@"[TEST-AI] after init vars");
 
-    [AITool registerAll];
-    [AIMemoryTool registerAll];
-    [AIESPTool registerAll];
+    // ===== TẮT HẾT — BẬT DẦN THEO HƯỚNG DẪN =====
+    // [AITool registerAll];
+    // [AIMemoryTool registerAll];
+    // [AIESPTool registerAll];
+    // [self buildUI];
+    // [self setupKeyboardObservers];
+    // NSString *game = [[GameFingerprint shared] detectedGame];
 
-    [self buildUI];
-    [self setupKeyboardObservers];
+    NSLog(@"[TEST-AI] viewDidLoad DONE — nothing");
 
-    NSString *game = [[GameFingerprint shared] detectedGame];
-    NSString *welcome = [NSString stringWithFormat:
-        @"AI Agent ready.\nGame: %@\nHoi: hack map, hack speed, tim class...", game];
-    [self.items addObject:@{@"type": @"ai", @"text": welcome}];
-    [self.tableView reloadData];
-    [self scrollToBottomAnimated:NO];
+    // View cần có gì đó để không bị nil
+    self.view.backgroundColor = [UIColor blackColor];
 }
 
 - (void)dealloc {
