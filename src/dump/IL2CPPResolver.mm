@@ -17,13 +17,11 @@
 
 - (BOOL)resolve {
     if (self.handle) return YES;
-
     const char *paths[] = {
         "@executable_path/Frameworks/UnityFramework.framework/UnityFramework",
         "@executable_path/Frameworks/il2cpp.framework/il2cpp",
         "@executable_path/il2cpp",
-        "UnityFramework",
-        NULL
+        "UnityFramework", NULL
     };
     for (int i = 0; paths[i]; i++) {
         self.handle = dlopen(paths[i], RTLD_NOW);
@@ -105,16 +103,64 @@
     return list;
 }
 
+- (const PropertyInfo **)class_get_properties:(Il2CppClass *)klass count:(uint16_t *)count {
+    typedef const PropertyInfo *(*fn_t)(Il2CppClass *, void **);
+    fn_t fn = (fn_t)dlsym(self.handle, "il2cpp_class_get_properties");
+    if (!fn) {
+        if (count) *count = klass ? klass->property_count : 0;
+        return klass ? (const PropertyInfo **)klass->properties : NULL;
+    }
+    void *iter = NULL;
+    uint16_t total = klass ? klass->property_count : 0;
+    const PropertyInfo **list = (const PropertyInfo **)malloc(sizeof(void *) * (total > 0 ? total : 1));
+    uint16_t i = 0;
+    const PropertyInfo *p;
+    while ((p = fn(klass, &iter)) != NULL) {
+        if (total > 0 && i >= total) break;
+        list[i++] = p;
+    }
+    if (count) *count = i;
+    return list;
+}
+
 - (const char *)method_get_name:(MethodInfo *)m { return m ? m->name : NULL; }
 - (const char *)field_get_name:(FieldInfo *)f { return f ? f->name : NULL; }
+- (const char *)property_get_name:(PropertyInfo *)p { return p ? p->name : NULL; }
 - (int32_t)field_get_offset:(FieldInfo *)f { return f ? f->offset : 0; }
 - (uint32_t)method_get_token:(MethodInfo *)m { return m ? m->token : 0; }
+- (uint32_t)field_get_token:(FieldInfo *)f { return f ? f->token : 0; }
 
 - (void *)method_get_pointer:(MethodInfo *)m {
     typedef void *(*fn_t)(const MethodInfo *);
     fn_t fn = (fn_t)dlsym(self.handle, "il2cpp_method_get_pointer");
     if (fn) return fn(m);
     return m ? m->methodPointer : NULL;
+}
+
+- (Il2CppClass *)class_get_parent:(Il2CppClass *)klass {
+    typedef Il2CppClass *(*fn_t)(const Il2CppClass *);
+    fn_t fn = (fn_t)dlsym(self.handle, "il2cpp_class_get_parent");
+    if (fn) return fn(klass);
+    return klass ? (Il2CppClass *)klass->parent : NULL;
+}
+
+#pragma mark - Type API
+
+- (const char *)type_get_name:(Il2CppType *)type {
+    typedef const char *(*fn_t)(const Il2CppType *);
+    fn_t fn = (fn_t)dlsym(self.handle, "il2cpp_type_get_name");
+    if (fn) return fn(type);
+    return NULL;
+}
+
+- (const char *)field_get_type_name:(FieldInfo *)field {
+    if (!field || !field->type) return NULL;
+    return [self type_get_name:field->type];
+}
+
+- (const char *)method_get_return_type:(MethodInfo *)method {
+    if (!method || !method->return_type) return NULL;
+    return [self type_get_name:(Il2CppType *)method->return_type];
 }
 
 @end
