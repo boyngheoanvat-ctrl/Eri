@@ -1,13 +1,7 @@
 #import "GameFingerprint.h"
 #import "IL2CPPResolver.h"
 
-// ============================================================
-// Synonym list TỔNG QUÁT — không thuộc game nào.
-// AI sẽ thử từng cái, game nào có method thì match.
-// ============================================================
-
 static NSDictionary<NSString *, NSArray<NSString *> *> *gSynonyms = nil;
-
 static NSString *gDetectedGame = nil;
 static BOOL gScanned = NO;
 
@@ -27,7 +21,6 @@ static BOOL gScanned = NO;
 - (void)setupSynonyms {
     gSynonyms = @{
         @"map": @[
-            // Tên method cho "nhìn xuyên bản đồ" trên các game khác nhau
             @"CanSight",
             @"CalcVisible",
             @"RefreshVisible",
@@ -109,19 +102,16 @@ static BOOL gScanned = NO;
         return;
     }
 
-    // Dò signature đặc trưng bằng cách tìm method
-    BOOL hasCanSight      = [self hasAnyMethodNamed:@[@"CanSight"]];
-    BOOL hasCalcVisible   = [self hasAnyMethodNamed:@[@"CalcVisible", @"RefreshVisible"]];
-    BOOL hasSetVisible    = [self hasAnyMethodNamed:@[@"SetVisible"]];
-    BOOL hasShowEntity    = [self hasAnyClassNamed:@[@"ShowEntity", @"LogicFighter"]];
+    BOOL hasCanSight    = [self hasAnyMethodNamed:@[@"CanSight"]];
+    BOOL hasCalcVisible = [self hasAnyMethodNamed:@[@"CalcVisible", @"RefreshVisible"]];
+    BOOL hasSetVisible  = [self hasAnyMethodNamed:@[@"SetVisible"]];
+    BOOL hasShowEntity  = [self hasAnyClassNamed:@[@"ShowEntity", @"LogicFighter"]];
 
-    // Heuristic nhận diện
     if (hasCanSight && hasShowEntity) {
         gDetectedGame = @"MLBB (Mobile Legends)";
     } else if (hasCalcVisible || hasSetVisible) {
         gDetectedGame = @"LienQuan (Arena of Valor)";
     } else {
-        // Dò bundle ID làm fallback
         NSString *bid = [[NSBundle mainBundle] bundleIdentifier].lowercaseString ?: @"";
         if ([bid containsString:@"freefire"]) {
             gDetectedGame = @"Free Fire";
@@ -140,12 +130,12 @@ static BOOL gScanned = NO;
 - (NSDictionary *)fingerprintInfo {
     return @{
         @"game": gDetectedGame ?: @"Unknown",
-        @"has_CanSight":    @([self hasAnyMethodNamed:@[@"CanSight"]]),
-        @"has_CalcVisible": @([self hasAnyMethodNamed:@[@"CalcVisible"]]),
+        @"has_CanSight":       @([self hasAnyMethodNamed:@[@"CanSight"]]),
+        @"has_CalcVisible":    @([self hasAnyMethodNamed:@[@"CalcVisible"]]),
         @"has_RefreshVisible": @([self hasAnyMethodNamed:@[@"RefreshVisible"]]),
-        @"has_SetVisible":  @([self hasAnyMethodNamed:@[@"SetVisible"]]),
-        @"has_ShowEntity":  @([self hasAnyClassNamed:@[@"ShowEntity"]]),
-        @"has_LogicFighter": @([self hasAnyClassNamed:@[@"LogicFighter"]]),
+        @"has_SetVisible":     @([self hasAnyMethodNamed:@[@"SetVisible"]]),
+        @"has_ShowEntity":     @([self hasAnyClassNamed:@[@"ShowEntity"]]),
+        @"has_LogicFighter":   @([self hasAnyClassNamed:@[@"LogicFighter"]]),
     };
 }
 
@@ -241,7 +231,6 @@ static BOOL gScanned = NO;
                     NSString *className = [NSString stringWithUTF8String:cname];
                     if (!className) continue;
 
-                    // Bỏ class hệ thống
                     NSString *cl = className.lowercaseString;
                     if ([cl containsString:@"util"] ||
                         [cl containsString:@"helper"] ||
@@ -259,7 +248,6 @@ static BOOL gScanned = NO;
                         NSString *mName = [NSString stringWithUTF8String:mn];
                         if (!mName) continue;
 
-                        // Thử match với synonym
                         NSInteger synonymIdx = -1;
                         for (NSUInteger k = 0; k < synonyms.count; k++) {
                             if ([mName isEqualToString:synonyms[k]]) {
@@ -269,15 +257,13 @@ static BOOL gScanned = NO;
                         }
                         if (synonymIdx < 0) continue;
 
-                        // Score: synonym càng sớm → càng quan trọng
-                        // Class có "entity/fighter/hero/player/show" → điểm cao
                         NSUInteger score = 100 - (NSUInteger)synonymIdx;
-                        if ([cl containsString:@"showentity"])  score += 100;
-                        else if ([cl containsString:@"logicfighter"]) score += 90;
-                        else if ([cl containsString:@"entity"]) score += 60;
-                        else if ([cl containsString:@"fighter"]) score += 60;
-                        else if ([cl containsString:@"hero"])   score += 50;
-                        else if ([cl containsString:@"player"]) score += 50;
+                        if ([cl containsString:@"showentity"])         score += 100;
+                        else if ([cl containsString:@"logicfighter"])  score += 90;
+                        else if ([cl containsString:@"entity"])        score += 60;
+                        else if ([cl containsString:@"fighter"])       score += 60;
+                        else if ([cl containsString:@"hero"])          score += 50;
+                        else if ([cl containsString:@"player"])        score += 50;
 
                         void *ptr = [r method_get_pointer:m];
                         uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
