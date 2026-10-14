@@ -66,8 +66,8 @@
     self.displayLink = [CADisplayLink displayLinkWithTarget:self
                                                     selector:@selector(tick:)];
 
-    // Fix warning iOS 15
-    if (@available(iOS 15.0, *)) {
+    // Dùng respondsToSelector thay @available → tránh lỗi __isPlatformVersionAtLeast
+    if ([self.displayLink respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
         self.displayLink.preferredFrameRateRange = CAFrameRateRangeMake(15, 30, 30);
     } else {
         self.displayLink.preferredFramesPerSecond = 30;
@@ -98,37 +98,14 @@
     Il2CppDomain *domain = [r domain_get];
     if (!domain) return;
 
-    // Tìm class ShowEntity
     Il2CppClass *entityClass = [self findClass:@"ShowEntity" resolver:r domain:domain];
     if (!entityClass) return;
 
-    // Lấy methods cần thiết
     MethodInfo *getPosition = [self findMethod:entityClass name:@"get_Position"];
-    MethodInfo *getHp = [self findMethod:entityClass name:@"get_m_Hp"];
-    MethodInfo *getHpMax = [self findMethod:entityClass name:@"get_m_HpMax"];
-    MethodInfo *getName = [self findMethod:entityClass name:@"get_m_RoleName"];
-    MethodInfo *getIsDead = [self findMethod:entityClass name:@"get_m_bDeath"];
-
     if (!getPosition) return;
 
-    // TODO: Enumerate all ShowEntity objects
-    // Cần il2cpp_gc_heap_foreach hoặc tìm list entity trong game
-    //
-    // Ví dụ logic:
-    // 1. Tìm class quản lý entity (VD: EntityManager)
-    // 2. Lấy list ShowEntity
-    // 3. Với mỗi entity:
-    //    - gọi getPosition → Vector3
-    //    - gọi getHp, getHpMax → HP bar
-    //    - gọi getName → tên
-    //    - WorldToScreen → convert tọa độ
-    //    - Thêm vào self.entities
-
-    // Test: thêm 1 entity giả để test ESP
-    // (xoá khi tích hợp thật)
-    if (self.entities.count == 0) {
-        // Không thêm gì — để trống
-    }
+    // TODO: Enumerate ShowEntity objects từ GC heap
+    // Cần il2cpp_gc_heap_foreach hoặc list entity trong game
 }
 
 - (Il2CppClass *)findClass:(NSString *)name resolver:(IL2CPPResolver *)r domain:(Il2CppDomain *)domain {
@@ -180,31 +157,26 @@
     CGContextRef ctx = UIGraphicsGetCurrentContext();
     if (!ctx) return;
 
-    // Khung test
     CGContextSetStrokeColorWithColor(ctx,
         [UIColor colorWithRed:0.30 green:0.70 blue:1.0 alpha:0.8].CGColor);
     CGContextSetLineWidth(ctx, 2);
 
-    // Vẽ chữ ESP active
     NSDictionary *attr = @{
         NSForegroundColorAttributeName: [UIColor colorWithRed:0.30 green:0.90 blue:0.50 alpha:1.0],
         NSFontAttributeName: [UIFont fontWithName:@"Menlo-Bold" size:12] ?: [UIFont boldSystemFontOfSize:12]
     };
     [@"[ESP] Active" drawAtPoint:CGPointMake(20, 60) withAttributes:attr];
 
-    // Vẽ các entity nếu có
     for (NSDictionary *e in self.entities) {
         CGRect box = [e[@"box"] CGRectValue];
         UIColor *color = e[@"color"] ?: [UIColor redColor];
 
-        // Box
         if (self.showBox) {
             CGContextSetStrokeColorWithColor(ctx, color.CGColor);
             CGContextSetLineWidth(ctx, 1.5);
             CGContextStrokeRect(ctx, box);
         }
 
-        // HP bar
         if (self.showHP) {
             CGFloat hpPercent = [e[@"hp_percent"] floatValue];
             CGRect hpBg = CGRectMake(box.origin.x, box.origin.y - 8, box.size.width, 4);
@@ -218,7 +190,6 @@
             CGContextFillRect(ctx, hpFill);
         }
 
-        // Name
         if (self.showName) {
             NSString *name = e[@"name"] ?: @"";
             NSDictionary *nameAttr = @{
@@ -229,7 +200,6 @@
                withAttributes:nameAttr];
         }
 
-        // Distance
         if (self.showDistance) {
             NSNumber *dist = e[@"distance"];
             if (dist) {
@@ -243,7 +213,6 @@
             }
         }
 
-        // Line từ tâm dưới màn hình
         if (self.showLine) {
             CGContextMoveToPoint(ctx, self.bounds.size.width / 2, self.bounds.size.height);
             CGContextAddLineToPoint(ctx, box.origin.x + box.size.width / 2,
