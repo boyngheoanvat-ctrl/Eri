@@ -17,6 +17,12 @@
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
     [self buildUI];
+    [self log:@"[Lua] Ready"];
+    if ([[LuaEngine shared] isAvailable]) {
+        [self log:@"[Lua] liblua OK"];
+    } else {
+        [self log:@"[Lua] liblua NOT available"];
+    }
 }
 
 - (void)buildUI {
@@ -25,7 +31,6 @@
     CGFloat y = 8;
     CGFloat pad = 8;
 
-    // Toolbar
     CGFloat btnW = (w - pad * 5) / 4;
     CGFloat btnH = 36;
 
@@ -51,7 +56,6 @@
 
     y += btnH + 8;
 
-    // Editor
     UILabel *editorLabel = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, 16)];
     editorLabel.text = @"EDITOR";
     editorLabel.textColor = [ToolTheme shared].textMuted;
@@ -67,16 +71,18 @@
     self.editorView.layer.cornerRadius = 4;
     self.editorView.layer.borderWidth = 1;
     self.editorView.layer.borderColor = [ToolTheme shared].border.CGColor;
-    self.editorView.text = @"-- LibTool Lua Script\nprint(\"Hello from Lua!\")\n\n"
-                           @"-- Vi du:\n"
-                           @"-- gg.alert(\"test\")\n"
-                           @"-- gg.searchNumber(\"100\", gg.TYPE_DWORD)";
+    self.editorView.text = @"-- Lua Script\n"
+                           @"print(\"Hello from Lua!\")\n"
+                           @"local x = 10 + 20\n"
+                           @"print(\"x =\", x)\n"
+                           @"for i = 1, 5 do\n"
+                           @"  print(\"i =\", i)\n"
+                           @"end";
     self.editorView.autocorrectionType = UITextAutocorrectionTypeNo;
     self.editorView.autocapitalizationType = UITextAutocapitalizationTypeNone;
     [self.view addSubview:self.editorView];
     y += editorH + 8;
 
-    // Console
     UILabel *consoleLabel = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, 16)];
     consoleLabel.text = @"CONSOLE OUTPUT";
     consoleLabel.textColor = [ToolTheme shared].textMuted;
@@ -92,7 +98,7 @@
     self.consoleView.editable = NO;
     self.consoleView.layer.cornerRadius = 4;
     self.consoleView.layer.borderWidth = 1;
-    self.consoleView.layer.borderColor = [ToolTheme shared].border.CGColor;
+    self.consoleView.layer.borderColor = [ToolTheme shared].border.CG:@Color;
     self.consoleView.text = @"-- Lua Console --\n";
     self.consoleView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
     [self.view addSubview:self.consoleView];
@@ -117,7 +123,7 @@
     if (script.length == 0) return;
 
     [self.editorView resignFirstResponder];
-    [self log:@"> Running script..."];
+    [self log"> Running script..."];
 
     __weak typeof(self) ws = self;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -153,7 +159,6 @@
     });
 }
 
-- (void)reload {
-}
+- (void)reload {}
 
 @end
