@@ -2,9 +2,12 @@
 #import <dlfcn.h>
 
 // Include Lua headers (đã có sẵn trong dylib)
+// Wrapped in extern "C" so .mm (ObjC++) emits C-linkage symbols matching liblua.a
+extern "C" {
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+}
 
 @interface LuaEngine ()
 @property (nonatomic, assign) lua_State *L;
