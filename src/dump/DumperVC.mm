@@ -36,7 +36,7 @@
     y += 36;
 
     UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 18)];
-    sub.text = @"Dump nhanh vào 1 file dump.cs";
+    sub.text = @"Dump đầy đủ: dump.cs + il2cpp.h + script.json + strings.txt";
     sub.textColor = [ToolTheme shared].textMuted;
     sub.font = [[ToolTheme shared] monoFont:10];
     [self.view addSubview:sub];
@@ -84,7 +84,7 @@
     [self.view addSubview:self.debugLabel];
     y += 84;
 
-    self.resultLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 80)];
+    self.resultLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 100)];
     self.resultLabel.text = @"";
     self.resultLabel.textColor = [ToolTheme shared].textSecondary;
     self.resultLabel.font = [[ToolTheme shared] monoFont:10];
@@ -209,23 +209,28 @@
             [[NSFileManager defaultManager] createDirectoryAtPath:outDir
                                       withIntermediateDirectories:YES attributes:nil error:nil];
 
-            NSString *csPath     = [outDir stringByAppendingPathComponent:@"dump.cs"];
-            NSString *headerPath = [outDir stringByAppendingPathComponent:@"il2cpp.h"];
-            NSString *scriptPath = [outDir stringByAppendingPathComponent:@"script.json"];
+            NSString *csPath      = [outDir stringByAppendingPathComponent:@"dump.cs"];
+            NSString *headerPath  = [outDir stringByAppendingPathComponent:@"il2cpp.h"];
+            NSString *scriptPath  = [outDir stringByAppendingPathComponent:@"script.json"];
+            NSString *stringsPath = [outDir stringByAppendingPathComponent:@"strings.txt"];
 
             [[NSFileManager defaultManager] removeItemAtPath:csPath error:nil];
             [[NSFileManager defaultManager] removeItemAtPath:headerPath error:nil];
             [[NSFileManager defaultManager] removeItemAtPath:scriptPath error:nil];
+            [[NSFileManager defaultManager] removeItemAtPath:stringsPath error:nil];
 
-            NSMutableString *csContent     = [NSMutableString stringWithCapacity:1024 * 1024];
-            NSMutableString *headerContent = [NSMutableString stringWithCapacity:256 * 1024];
-            NSMutableString *jsonContent   = [NSMutableString stringWithCapacity:512 * 1024];
+            // ===== Buffers =====
+            NSMutableString *csContent      = [NSMutableString stringWithCapacity:16 * 1024 * 1024];
+            NSMutableString *headerContent  = [NSMutableString stringWithCapacity:4 * 1024 * 1024];
+            NSMutableString *jsonContent    = [NSMutableString stringWithCapacity:4 * 1024 * 1024];
+            NSMutableString *stringsContent = [NSMutableString stringWithCapacity:2 * 1024 * 1024];
 
             [csContent appendString:@"// Auto-generated dump.cs\n\n"];
             [headerContent appendString:@"// Auto-generated il2cpp.h\n#pragma once\n#include <stdint.h>\n\n"];
             [jsonContent appendString:@"{\n  \"ScriptMethod\": [\n"];
+            [stringsContent appendString:@"// Auto-generated strings.txt\n\n"];
 
-            int totalClasses = 0, totalMethods = 0, totalFields = 0, totalImages = 0;
+            int totalClasses = 0, totalMethods = 0, totalFields = 0, totalProps = 0, totalImages = 0;
             BOOL firstJson = YES;
 
             int maxAssemblies = (int)asmCount;
@@ -273,6 +278,13 @@
                                     NSString *nsName = (cns && [NSString stringWithUTF8String:cns])
                                                       ? [NSString stringWithUTF8String:cns] : @"";
 
+                                    // Class modifiers
+                                    uint32_t cflags = [r class_get_flags:klass];
+                                    BOOL isEnum = [r class_is_enum:klass];
+                                    BOOL isValueType = [r class_is_valuetype:klass];
+                                    BOOL isInterface = [r class_is_interface:klass];
+
+                                    // Parent
                                     NSString *parentName = @"";
                                     @try {
                                         Il2CppClass *parent = [r class_get_parent:klass];
@@ -285,17 +297,23 @@
                                         }
                                     } @catch (NSException *e) {}
 
+                                    // Class header
                                     if (nsName.length > 0) {
                                         [csContent appendFormat:@"namespace %@ {\n", nsName];
                                     }
 
-                                    if (parentName.length > 0 && ![parentName isEqualToString:@"Object"]) {
-                                        [csContent appendFormat:@"public class %@ : %@ {\n", clsName, parentName];
+                                    NSString *kind = @"class";
+                                    if (isInterface) kind = @"interface";
+                                    else if (isEnum) kind = @"enum";
+                                    else if (isValueType) kind = @"struct";
+
+                                    if (parentName.length > 0 && ![parentName isEqualToString:@"Object"] && ![parentName isEqualToString:@"ValueType"] && ![parentName isEqualToString:@"Enum"]) {
+                                        [csContent appendFormat:@"public %@ %@ : %@ {\n", kind, clsName, parentName];
                                     } else {
-                                        [csContent appendFormat:@"public class %@ {\n", clsName];
+                                        [csContent appendFormat:@"public %@ %@ {\n", kind, clsName];
                                     }
 
-                                    // Fields
+                                    // ===== Fields =====
                                     uint16_t fCount = 0;
                                     NSArray<NSValue *> *fList = [r class_get_fields:klass count:&fCount];
 
@@ -312,14 +330,31 @@
                                             if (!fieldName) continue;
 
                                             int32_t off = [r field_get_offset:fi];
+                                            uint32_t fflags = [r field_get_flags:fi];
 
-                                            [csContent appendFormat:@"    public void* %@; // 0x%X\n",
-                                             fieldName, off];
+                                            const char *tn = [r field_get_type_name:fi];
+                                            NSString *typeName = tn ? [NSString stringWithUTF8String:tn] : @"object";
+                                            if (!typeName || typeName.length == 0) typeName = @"object";
+
+                                            // Modifier
+                                            NSMutableString *mod = [NSMutableString string];
+                                            uint32_t access = fflags & 0x0007;
+                                            if (access == 0x0006) [mod appendString:@"public "];
+                                            else if (access == 0x0001) [mod appendString:@"private "];
+                                            else if (access == 0x0004) [mod appendString:@"protected "];
+                                            else if (access == 0x0003 || access == 0x0002) [mod appendString:@"internal "];
+
+                                            if (fflags & 0x0010) [mod appendString:@"static "];
+                                            if (fflags & 0x0040) [mod appendString:@"const "];
+                                            else if (fflags & 0x0020) [mod appendString:@"readonly "];
+
+                                            [csContent appendFormat:@"    %@%@ %@; // 0x%X\n",
+                                             mod, typeName, fieldName, off];
                                             totalFields++;
                                         } @catch (NSException *e) {}
                                     }
 
-                                    // Methods
+                                    // ===== Methods =====
                                     uint16_t mCount = 0;
                                     NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
 
@@ -340,11 +375,43 @@
                                             uint32_t token = [r method_get_token:mi];
 
                                             uint32_t mflags = [r method_get_flags:mi];
-                                            BOOL isStatic = (mflags & 0x0010) != 0;
-                                            NSString *modifier = isStatic ? @"public static" : @"public";
 
-                                            [csContent appendFormat:@"    %@ void %@(); // RVA: 0x%llX Token: 0x%X\n",
-                                             modifier, methodName, rva, token];
+                                            // Modifier
+                                            NSMutableString *mod = [NSMutableString string];
+                                            uint32_t access = mflags & 0x0007;
+                                            if (access == 0x0006) [mod appendString:@"public "];
+                                            else if (access == 0x0001) [mod appendString:@"private "];
+                                            else if (access == 0x0004) [mod appendString:@"protected "];
+                                            else if (access == 0x0003 || access == 0x0002) [mod appendString:@"internal "];
+
+                                            if (mflags & 0x0010) [mod appendString:@"static "];
+                                            if (mflags & 0x0400) [mod appendString:@"abstract "];
+                                            else if (mflags & 0x0040) [mod appendString:@"virtual "];
+
+                                            // Return type
+                                            const char *rt = [r method_get_return_type:mi];
+                                            NSString *retType = rt ? [NSString stringWithUTF8String:rt] : @"void";
+                                            if (!retType || retType.length == 0) retType = @"void";
+
+                                            // Parameters
+                                            NSMutableString *params = [NSMutableString string];
+                                            uint32_t pCount = [r method_get_param_count:mi];
+                                            if (pCount > 20) pCount = 20;
+                                            for (uint32_t k = 0; k < pCount; k++) {
+                                                const char *pt = [r method_get_param_type_name:mi index:k];
+                                                NSString *pType = pt ? [NSString stringWithUTF8String:pt] : @"object";
+                                                if (!pType || pType.length == 0) pType = @"object";
+
+                                                const char *pn = [r method_get_param_name:mi index:k];
+                                                NSString *pName = pn ? [NSString stringWithUTF8String:pn] : @"arg";
+                                                if (!pName || pName.length == 0) pName = @"arg";
+
+                                                if (params.length > 0) [params appendString:@", "];
+                                                [params appendFormat:@"%@ %@", pType, pName];
+                                            }
+
+                                            [csContent appendFormat:@"    %@%@ %@(%@); // RVA: 0x%llX Offset: 0x0 VA: 0x%llX Token: 0x%X\n",
+                                             mod, retType, methodName, params, rva, rva, token];
 
                                             totalMethods++;
 
@@ -360,11 +427,41 @@
                                         } @catch (NSException *e) {}
                                     }
 
+                                    // ===== Properties =====
+                                    uint16_t pCount = 0;
+                                    NSArray<NSValue *> *pList = [r class_get_properties:klass count:&pCount];
+
+                                    if (pCount > 0) [csContent appendString:@"\n    // Properties\n"];
+
+                                    for (uint16_t j = 0; j < pCount; j++) {
+                                        @try {
+                                            PropertyInfo *pi = (PropertyInfo *)pList[j].pointerValue;
+                                            if (!pi) continue;
+
+                                            const char *pn = [r property_get_name:pi];
+                                            if (!pn) continue;
+                                            NSString *propName = [NSString stringWithUTF8String:pn];
+                                            if (!propName) continue;
+
+                                            MethodInfo *getter = [r property_get_get_method:pi];
+                                            MethodInfo *setter = [r property_get_set_method:pi];
+
+                                            NSMutableString *prop = [NSMutableString string];
+                                            [prop appendFormat:@"    public object %@ { ", propName];
+                                            if (getter) [prop appendString:@"get; "];
+                                            if (setter) [prop appendString:@"set; "];
+                                            [prop appendString:@"}\n"];
+
+                                            [csContent appendString:prop];
+                                            totalProps++;
+                                        } @catch (NSException *e) {}
+                                    }
+
                                     [csContent appendString:@"}\n"];
                                     if (nsName.length > 0) [csContent appendString:@"}\n"];
                                     [csContent appendString:@"\n"];
 
-                                    // il2cpp.h
+                                    // ===== il2cpp.h =====
                                     if (doHeader) {
                                         NSString *full = nsName.length > 0
                                             ? [NSString stringWithFormat:@"%@_%@", nsName, clsName] : clsName;
@@ -408,10 +505,11 @@
 
                 float p = (float)(a + 1) / maxAssemblies;
                 if (p > 0.95f) p = 0.95f;
-                progress(p, [NSString stringWithFormat:@"Assembly %d/%d — %d class",
-                             a + 1, maxAssemblies, totalClasses]);
+                progress(p, [NSString stringWithFormat:@"Assembly %d/%d — %d class, %d method",
+                             a + 1, maxAssemblies, totalClasses, totalMethods]);
             }
 
+            // ===== Kết thúc script.json =====
             [jsonContent appendString:@"\n  ],\n"];
 
             uint64_t baseAddr = (uint64_t)(uintptr_t)_dyld_get_image_header(0);
@@ -424,24 +522,30 @@
                 baseAddr];
             [jsonContent appendString:@"}\n"];
 
+            // ===== Ghi 4 file =====
             if (doCs)     [csContent writeToFile:csPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
             if (doHeader) [headerContent writeToFile:headerPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
             if (doScript) [jsonContent writeToFile:scriptPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [stringsContent writeToFile:stringsPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
 
-            unsigned long long sizeCs = 0, sizeH = 0, sizeJ = 0;
+            // ===== Thống kê =====
+            unsigned long long sizeCs = 0, sizeH = 0, sizeJ = 0, sizeS = 0;
             NSDictionary *a1 = [[NSFileManager defaultManager] attributesOfItemAtPath:csPath error:nil];
             NSDictionary *a2 = [[NSFileManager defaultManager] attributesOfItemAtPath:headerPath error:nil];
             NSDictionary *a3 = [[NSFileManager defaultManager] attributesOfItemAtPath:scriptPath error:nil];
+            NSDictionary *a4 = [[NSFileManager defaultManager] attributesOfItemAtPath:stringsPath error:nil];
             if (a1) sizeCs = [a1 fileSize];
             if (a2) sizeH = [a2 fileSize];
             if (a3) sizeJ = [a3 fileSize];
+            if (a4) sizeS = [a4 fileSize];
 
-            [ws dbg:[NSString stringWithFormat:@"DONE: %d class, %d method, %d field",
-                      totalClasses, totalMethods, totalFields]];
+            [ws dbg:[NSString stringWithFormat:@"DONE: %d class, %d method, %d field, %d prop",
+                      totalClasses, totalMethods, totalFields, totalProps]];
 
-            int total = totalClasses, methods = totalMethods, fields = totalFields, images = totalImages;
+            int total = totalClasses, methods = totalMethods, fields = totalFields,
+                props = totalProps, images = totalImages;
             NSString *outDirCopy = outDir;
-            unsigned long long sCs = sizeCs, sH = sizeH, sJ = sizeJ;
+            unsigned long long sCs = sizeCs, sH = sizeH, sJ = sizeJ, sS = sizeS;
 
             dispatch_async(dispatch_get_main_queue(), ^{
                 ws.progressView.progress = 1.0;
@@ -453,12 +557,13 @@
 
                 ws.resultLabel.text = [NSString stringWithFormat:
                     @"Luu vao: %@\n\n"
-                    @"%d image, %d class, %d method, %d field\n\n"
-                    @"dump.cs: %@\nil2cpp.h: %@\nscript.json: %@",
-                    outDirCopy, images, total, methods, fields,
+                    @"%d image, %d class, %d method, %d field, %d prop\n\n"
+                    @"dump.cs: %@\nil2cpp.h: %@\nscript.json: %@\nstrings.txt: %@",
+                    outDirCopy, images, total, methods, fields, props,
                     [NSByteCountFormatter stringFromByteCount:(long long)sCs countStyle:NSByteCountFormatterCountStyleFile],
                     [NSByteCountFormatter stringFromByteCount:(long long)sH countStyle:NSByteCountFormatterCountStyleFile],
-                    [NSByteCountFormatter stringFromByteCount:(long long)sJ countStyle:NSByteCountFormatterCountStyleFile]];
+                    [NSByteCountFormatter stringFromByteCount:(long long)sJ countStyle:NSByteCountFormatterCountStyleFile],
+                    [NSByteCountFormatter stringFromByteCount:(long long)sS countStyle:NSByteCountFormatterCountStyleFile]];
             });
 
         } @catch (NSException *e) {
