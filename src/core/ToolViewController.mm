@@ -88,13 +88,14 @@
     titleLine.backgroundColor = [ToolTheme shared].divider;
     [self.titleBar addSubview:titleLine];
 
-    self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(12, 0, 80, 36)];
-    self.titleLabel.text = @"ToolKit";
+    // ĐÃ ĐỔI TÊN THÀNH "Mod By Eri Nguyễn" VÀ NỚI RỘNG KHUNG ĐỂ HIỂN THỊ ĐỦ CHỮ
+    self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(12, 0, 160, 36)];
+    self.titleLabel.text = @"Mod By Eri Nguyễn";
     self.titleLabel.textColor = [ToolTheme shared].textPrimary;
-    self.titleLabel.font = [[ToolTheme shared] monoBoldFont:13];
+    self.titleLabel.font = [[ToolTheme shared] monoBoldFont:12];
     [self.titleBar addSubview:self.titleLabel];
 
-    self.subtitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(100, 0, panelW - 160, 36)];
+    self.subtitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(175, 0, panelW - 235, 36)];
     self.subtitleLabel.textColor = [ToolTheme shared].textMuted;
     self.subtitleLabel.font = [[ToolTheme shared] monoFont:10];
     [self.titleBar addSubview:self.subtitleLabel];
@@ -225,7 +226,7 @@
         self.dragStartPoint = self.panel.frame.origin;
     }
     if (g.state == UIGestureRecognizerStateChanged) {
-        CGFloat newW = MAX(250, self.dragStartSize.width + p.x);
+        CGFloat newW = MAX(280, self.dragStartSize.width + p.x);
         CGFloat newH = MAX(200, self.dragStartSize.height + p.y);
         self.panel.frame = CGRectMake(self.dragStartPoint.x, self.dragStartPoint.y, newW, newH);
         [self updateLayoutForPanelSize:CGSizeMake(newW, newH)];
@@ -242,12 +243,13 @@
 
     self.titleBar.frame = CGRectMake(0, 0, panelW, 36);
     self.closeButton.frame = CGRectMake(panelW - 36, 4, 28, 28);
-    self.subtitleLabel.frame = CGRectMake(100, 0, MAX(0, panelW - 160), 36);
+    
+    // Cập nhật lại khung chữ phụ và tiêu đề khi panel thay đổi kích thước
+    self.titleLabel.frame = CGRectMake(12, 0, 160, 36);
+    self.subtitleLabel.frame = CGRectMake(175, 0, MAX(0, panelW - 235), 36);
 
     CGFloat railH = panelH - 36;
     self.railView.frame = CGRectMake(0, 36, railW, railH);
-    
-    // Tự động co giãn stack các nút tag menu theo chiều cao kéo thả
     self.railStack.frame = CGRectMake(0, 8, railW, railH - 16);
 
     self.contentView.frame = CGRectMake(railW, 36, panelW - railW, railH);
