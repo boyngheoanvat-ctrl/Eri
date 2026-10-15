@@ -199,11 +199,24 @@ static const NSTimeInterval kRequestTimeout = 180;
                 AITool *tool = [AITool toolNamed:toolName];
                 id result;
                 if (tool && tool.handler) {
-                    @try {
-                        result = tool.handler(args);
-                    } @catch (NSException *e) {
-                        NSLog(@"[AIProvider] Tool '%@' crash: %@", toolName, e);
-                        result = @{@"error": e.reason ?: @"Tool exception"};
+                    if ([NSThread isMainThread]) {
+                        @try {
+                            result = tool.handler(args);
+                        } @catch (NSException *e) {
+                            NSLog(@"[AIProvider] Tool '%@' crash: %@", toolName, e);
+                            result = @{@"error": e.reason ?: @"Tool exception"};
+                        }
+                    } else {
+                        __block id blockResult = nil;
+                        dispatch_sync(dispatch_get_main_queue(), ^{
+                            @try {
+                                blockResult = tool.handler(args);
+                            } @catch (NSException *e) {
+                                NSLog(@"[AIProvider] Tool '%@' crash: %@", toolName, e);
+                                blockResult = @{@"error": e.reason ?: @"Tool exception"};
+                            }
+                        });
+                        result = blockResult;
                     }
                 } else {
                     result = @{@"error": [NSString stringWithFormat:@"Tool '%@' khong ton tai",
