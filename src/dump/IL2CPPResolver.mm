@@ -1,8 +1,6 @@
 #import "IL2CPPResolver.h"
 #import <dlfcn.h>
 #import <mach-o/dyld.h>
-#import <mach-o/loader.h>
-#import <mach-o/nlist.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -30,9 +28,10 @@ static void *find_sym(void *handle, const char *baseName) {
     return NULL;
 }
 
-#pragma mark - Cached function pointers
+#pragma mark - Cache
 
 static void *g_domain_get = NULL;
+static void *g_domain_get_assemblies = NULL;
 static void *g_assembly_get_image = NULL;
 static void *g_image_get_name = NULL;
 static void *g_image_get_class_count = NULL;
@@ -109,8 +108,9 @@ static void *g_thread_attach = NULL;
 
     if (!self.handle) return NO;
 
-    // ===== CACHE SYMBOLS 1 LẦN — không dlsym mỗi lần gọi =====
+    // ===== CACHE SYMBOLS =====
     g_domain_get                    = find_sym(self.handle, "il2cpp_domain_get");
+    g_domain_get_assemblies         = find_sym(self.handle, "il2cpp_domain_get_assemblies");
     g_assembly_get_image            = find_sym(self.handle, "il2cpp_assembly_get_image");
     g_image_get_name                = find_sym(self.handle, "il2cpp_image_get_name");
     g_image_get_class_count         = find_sym(self.handle, "il2cpp_image_get_class_count");
@@ -137,6 +137,11 @@ static void *g_thread_attach = NULL;
     g_thread_attach                 = find_sym(self.handle, "il2cpp_thread_attach");
 
     NSLog(@"[IL2CPPResolver] Symbols cached");
+    NSLog(@"[IL2CPPResolver]   domain_get=%p assemblies=%p",
+          g_domain_get, g_domain_get_assemblies);
+    NSLog(@"[IL2CPPResolver]   image_get_name=%p class_get_name=%p",
+          g_image_get_name, g_class_get_name);
+
     return YES;
 }
 
@@ -162,6 +167,17 @@ static void *g_thread_attach = NULL;
     if (!g_domain_get) return NULL;
     typedef Il2CppDomain *(*fn_t)(void);
     return ((fn_t)g_domain_get)();
+}
+
+- (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(size_t *)count {
+    if (!domain) { if (count) *count = 0; return NULL; }
+    if (!g_domain_get_assemblies) { if (count) *count = 0; return NULL; }
+
+    typedef const Il2CppAssembly **(*fn_t)(const Il2CppDomain *, size_t *);
+    size_t sz = 0;
+    const Il2CppAssembly **asm_ = ((fn_t)g_domain_get_assemblies)(domain, &sz);
+    if (count) *count = sz;
+    return asm_;
 }
 
 #pragma mark - Image
@@ -298,8 +314,7 @@ static void *g_thread_attach = NULL;
         typedef void *(*fn_t)(const MethodInfo *);
         return ((fn_t)g_method_get_pointer)(m);
     }
-    // Fallback — MethodInfo field đầu là methodPointer
-    return *(void **)m;
+    return NULL;
 }
 
 - (const char *)method_get_return_type:(MethodInfo *)method {
