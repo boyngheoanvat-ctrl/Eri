@@ -1,16 +1,26 @@
 #import <Foundation/Foundation.h>
 #include <stdint.h>
 
+// ============================================================
+// IL2CPP types
+// MethodInfo: chỉ có 1 field duy nhất methodPointer — được khai báo ĐẦY ĐỦ
+// Các type khác: opaque
+// ============================================================
+
 typedef struct Il2CppDomain    Il2CppDomain;
 typedef struct Il2CppAssembly  Il2CppAssembly;
 typedef struct Il2CppImage     Il2CppImage;
 typedef struct Il2CppClass     Il2CppClass;
 typedef struct Il2CppType      Il2CppType;
-typedef struct MethodInfo      MethodInfo;
 typedef struct FieldInfo       FieldInfo;
 typedef struct PropertyInfo    PropertyInfo;
 
-// Il2CppDomain — định nghĩa đầy đủ (nhiều file khác dùng)
+// MethodInfo — ĐẦY ĐỦ (IL2CPP thật chỉ có 1 field methodPointer)
+typedef struct MethodInfo {
+    void *methodPointer;
+} MethodInfo;
+
+// Il2CppDomain — ĐẦY ĐỦ (nhiều file khác dùng domain->assemblies)
 struct Il2CppDomain {
     int32_t         domain_id;
     int32_t         _pad;
@@ -27,6 +37,9 @@ struct Il2CppDomain {
 - (BOOL)isResolved;
 
 - (void)attachCurrentThread;
+
+// Base address của UnityFramework (để tính RVA)
+- (uint64_t)il2cppBase;
 
 // Domain
 - (Il2CppDomain *)domain_get;
