@@ -87,6 +87,7 @@ static BOOL gScanned = NO;
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
     if (!r) { gDetectedGame = @"Unknown"; gScanned = NO; return; }
+    [r attachCurrentThread];
     if (![r resolve]) { gDetectedGame = @"Unknown"; gScanned = NO; return; }
 
     Il2CppDomain *domain = [r domain_get];
@@ -98,7 +99,6 @@ static BOOL gScanned = NO;
     }
 
     @try {
-        // CHỈ duyệt 2 assembly đầu, tối đa 300 class mỗi assembly
         BOOL hasCanSight    = [self hasAnyMethodNamed:@[@"CanSight"]        maxAsm:2 maxClass:300];
         BOOL hasCalcVisible = [self hasAnyMethodNamed:@[@"CalcVisible", @"RefreshVisible"] maxAsm:2 maxClass:300];
         BOOL hasSetVisible  = [self hasAnyMethodNamed:@[@"SetVisible"]      maxAsm:2 maxClass:300];
@@ -144,6 +144,7 @@ static BOOL gScanned = NO;
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
     if (!r) return NO;
+    [r attachCurrentThread];
     if (![r resolve]) return NO;
 
     Il2CppDomain *domain = [r domain_get];
@@ -183,6 +184,7 @@ static BOOL gScanned = NO;
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
     if (!r) return NO;
+    [r attachCurrentThread];
     if (![r resolve]) return NO;
 
     Il2CppDomain *domain = [r domain_get];
@@ -223,6 +225,7 @@ static BOOL gScanned = NO;
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
     if (!r) return @[];
+    [r attachCurrentThread];
     if (![r resolve]) return @[];
 
     Il2CppDomain *domain = [r domain_get];
