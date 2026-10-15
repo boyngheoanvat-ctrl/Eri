@@ -2,7 +2,9 @@
 #include <stdint.h>
 
 // ============================================================
-// IL2CPP struct layouts (Unity 2019-2021 / IL2CPP 24.x-27.x)
+// IL2CPP struct — OPAQUE
+// KHÔNG định nghĩa field vì layout thay đổi theo Unity version.
+// Chỉ forward-declare, mọi truy cập phải qua API function.
 // ============================================================
 
 typedef struct Il2CppDomain    Il2CppDomain;
@@ -14,86 +16,14 @@ typedef struct MethodInfo      MethodInfo;
 typedef struct FieldInfo       FieldInfo;
 typedef struct PropertyInfo    PropertyInfo;
 
-struct Il2CppImage {
-    const char     *name;
-    const char     *nameNoExt;
-    Il2CppAssembly *assembly;
-};
-
+// Il2CppDomain — giữ định nghĩa tối thiểu vì DumperVC dùng
+// domain->assembly_count và domain->assemblies
 struct Il2CppDomain {
     int32_t         domain_id;
     int32_t         _pad;
     void           *method_table;
     Il2CppAssembly **assemblies;
     size_t          assembly_count;
-};
-
-struct Il2CppType {
-    void        *data;
-    unsigned int attrs    : 16;
-    unsigned int type     : 8;
-    unsigned int num_mods : 6;
-    unsigned int byref    : 1;
-    unsigned int pinned   : 1;
-};
-
-struct FieldInfo {
-    const char  *name;
-    Il2CppType  *type;
-    Il2CppClass *parent;
-    int32_t      offset;
-    uint32_t     token;
-};
-
-struct PropertyInfo {
-    const char  *name;
-    Il2CppClass *parent;
-    MethodInfo  *get;
-    MethodInfo  *set;
-};
-
-struct MethodInfo {
-    void        *methodPointer;
-    void        *virtualMethodPointer;
-    void        *invoker_method;
-    const char  *name;
-    Il2CppClass *klass;
-    Il2CppType  *return_type;
-    const void  *parameters;
-    void        *methodMetadataHandle;
-    void        *genericContainerHandle;
-    uint32_t     token;
-    uint16_t     flags;
-    uint16_t     iflags;
-    uint16_t     slot;
-    uint8_t      parameter_count;
-};
-
-struct Il2CppClass {
-    const void    *image;
-    void          *gc_desc;
-    const char    *name;
-    const char    *namespaze;
-    Il2CppType    *byval_arg;
-    Il2CppType    *this_arg;
-    Il2CppClass   *element_class;
-    Il2CppClass   *castClass;
-    Il2CppClass   *declaringType;
-    Il2CppClass   *parent;
-    Il2CppClass   *generic_class;
-    void          *typeMetadataHandle;
-    void          *interopData;
-    Il2CppClass   *klass;
-    FieldInfo     *fields;
-    void          *events;
-    PropertyInfo  *properties;
-    MethodInfo   **methods;
-    Il2CppClass   *nestedTypes;
-    uint16_t       method_count;
-    uint16_t       property_count;
-    uint16_t       field_count;
-    uint16_t       event_count;
-    uint16_t       nested_type_count;
 };
 
 @interface IL2CPPResolver : NSObject
@@ -105,8 +35,10 @@ struct Il2CppClass {
 
 - (void)attachCurrentThread;
 
-// Core
+// Domain
 - (Il2CppDomain *)domain_get;
+
+// Image
 - (Il2CppImage  *)assembly_get_image:(Il2CppAssembly *)assembly;
 - (const char   *)image_get_name:(Il2CppImage *)image;
 - (size_t        )image_get_class_count:(Il2CppImage *)image;
@@ -128,6 +60,7 @@ struct Il2CppClass {
 - (uint32_t   )method_get_token:(MethodInfo *)m;
 - (void      *)method_get_pointer:(MethodInfo *)m;
 - (const char *)method_get_return_type:(MethodInfo *)method;
+- (uint32_t   )method_get_flags:(MethodInfo *)method;
 
 // Field info
 - (const char *)field_get_name:(FieldInfo *)f;
