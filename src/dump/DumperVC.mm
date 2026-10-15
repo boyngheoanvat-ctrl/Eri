@@ -1,6 +1,7 @@
 #import "DumperVC.h"
 #import "IL2CPPResolver.h"
 #import "ToolTheme.h"
+#import <mach-o/dyld.h>
 
 @interface DumperVC ()
 @property (nonatomic, strong) UIButton *dumpButton;
@@ -129,8 +130,8 @@
     NSLog(@"[Dumper] %@", msg);
     dispatch_async(dispatch_get_main_queue(), ^{
         NSString *cur = self.debugLabel.text ?: @"";
-        NSString *new = [cur stringByAppendingFormat:@"\n%@", msg ?: @""];
-        NSArray *lines = [new componentsSeparatedByString:@"\n"];
+        NSString *newText = [cur stringByAppendingFormat:@"\n%@", msg ?: @""];
+        NSArray *lines = [newText componentsSeparatedByString:@"\n"];
         if (lines.count > 8) lines = [lines subarrayWithRange:NSMakeRange(lines.count - 8, 8)];
         self.debugLabel.text = [lines componentsJoinedByString:@"\n"];
     });
@@ -190,12 +191,18 @@
 
             size_t asmCount = 0;
             const Il2CppAssembly **assemblies = [r domain_get_assemblies:domain count:&asmCount];
-            [ws dbg:[NSString stringWithFormat:@"STEP 4: asm=%zu ptr=%p", asmCount, assemblies]];
 
             if (!assemblies || asmCount == 0) {
-                fail(@"Loi: Khong co assembly");
-                return;
+                if (domain->assembly_count > 0 && domain->assemblies) {
+                    assemblies = (const Il2CppAssembly **)domain->assemblies;
+                    asmCount = domain->assembly_count;
+                } else {
+                    fail(@"Loi: Khong co assembly");
+                    return;
+                }
             }
+
+            [ws dbg:[NSString stringWithFormat:@"STEP 4: asm=%zu", asmCount]];
 
             NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
             NSString *outDir = [docs stringByAppendingPathComponent:@"IL2CPP_Dump"];
