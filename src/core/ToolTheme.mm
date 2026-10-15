@@ -63,7 +63,7 @@
 
 - (UIColor *)divider {
     return [UIColor colorWithRed:0.20 green:0.20 blue:0.24 alpha:1.0];
-}
+} 
 
 - (UIColor *)border {
     return [UIColor colorWithRed:0.25 green:0.25 blue:0.30 alpha:1.0];
