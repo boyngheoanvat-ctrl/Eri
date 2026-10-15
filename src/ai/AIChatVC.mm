@@ -1,6 +1,7 @@
 #import "AIChatVC.h"
 #import "AIProvider.h"
 #import "AITool.h"
+#import "ToolTheme.h"
 
 @interface AIChatVC () <AIStreamDelegate, UITextViewDelegate>
 
@@ -17,22 +18,20 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.14 alpha:1.0];
+    self.view.backgroundColor = [ToolTheme shared].background;
     
     CGRect bounds = self.view.bounds;
     CGFloat width = bounds.size.width;
     CGFloat height = bounds.size.height;
     
-    // 1. Khung chứa input và nút gửi ở đáy (chiều cao 50px, tự động co giãn theo chiều ngang khi kéo cửa sổ)
     CGFloat bottomBarHeight = 50;
     CGFloat inputHeight = 36;
     
     self.bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, height - bottomBarHeight, width, bottomBarHeight)];
     self.bottomBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
-    self.bottomBar.backgroundColor = [UIColor colorWithRed:0.18 green:0.18 blue:0.20 alpha:1.0];
+    self.bottomBar.backgroundColor = [ToolTheme shared].surface;
     [self.view addSubview:self.bottomBar];
     
-    // 2. Nút Send nằm sát góc phải
     CGFloat sendBtnWidth = 60;
     CGFloat padding = 10;
     
@@ -41,25 +40,23 @@
     self.sendButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
     [self.sendButton setTitle:@"Send" forState:UIControlStateNormal];
     [self.sendButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.sendButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0];
+    self.sendButton.backgroundColor = [ToolTheme shared].accent;
     self.sendButton.layer.cornerRadius = 6;
     self.sendButton.layer.masksToBounds = YES;
     [self.sendButton addTarget:self action:@selector(didTapSend) forControlEvents:UIControlEventTouchUpInside];
     [self.bottomBar addSubview:self.sendButton];
     
-    // 3. Ô nhập liệu (inputTextView) co giãn linh hoạt theo chiều rộng cửa sổ
     CGFloat inputWidth = width - sendBtnWidth - (padding * 3);
     self.inputTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, (bottomBarHeight - inputHeight) / 2, inputWidth, inputHeight)];
     self.inputTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleRightMargin;
-    self.inputTextView.backgroundColor = [UIColor colorWithRed:0.25 green:0.25 blue:0.28 alpha:1.0];
-    self.inputTextView.textColor = [UIColor whiteColor];
+    self.inputTextView.backgroundColor = [ToolTheme shared].background;
+    self.inputTextView.textColor = [ToolTheme shared].textPrimary;
     self.inputTextView.font = [UIFont systemFontOfSize:14];
     self.inputTextView.layer.cornerRadius = 6;
     self.inputTextView.layer.masksToBounds = YES;
     self.inputTextView.delegate = self;
     [self.bottomBar addSubview:self.inputTextView];
     
-    // 4. UIScrollView hiển thị nội dung chat phía trên
     CGFloat scrollHeight = height - bottomBarHeight;
     self.chatScrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, width, scrollHeight)];
     self.chatScrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -69,13 +66,12 @@
     self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.chatScrollView addSubview:self.contentView];
     
-    // 5. TextView chứa lịch sử chat
     self.chatLogTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 10, width - 20, scrollHeight - 20)];
     self.chatLogTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.chatLogTextView.editable = NO;
     self.chatLogTextView.scrollEnabled = NO;
     self.chatLogTextView.backgroundColor = [UIColor clearColor];
-    self.chatLogTextView.textColor = [UIColor whiteColor];
+    self.chatLogTextView.textColor = [ToolTheme shared].textPrimary;
     self.chatLogTextView.font = [UIFont systemFontOfSize:13];
     self.chatLogTextView.text = @"[ai] AI Agent ready.\nHoi: hack map, hack speed, tim class...\n";
     [self.contentView addSubview:self.chatLogTextView];
@@ -85,7 +81,6 @@
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    // Đồng bộ lại kích thước nội dung khi giao diện bị kéo thay đổi kích thước (resize/drag)
     [self updateLayoutContent];
 }
 
@@ -102,12 +97,10 @@
     
     self.inputTextView.text = @"";
     
-    // Hiển thị câu hỏi của user lên khung chat
     NSString *current = self.chatLogTextView.text ?: @"";
     self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n> %@", current, text];
     [self updateLayoutContent];
     
-    // Đảm bảo tất cả các tool đã được đăng ký và an toàn tuyệt đối chống crash nil object
     [AITool registerAll];
     
     NSMutableArray *tools = [NSMutableArray array];
