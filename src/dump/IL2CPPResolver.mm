@@ -6,38 +6,28 @@
 #include <string.h>
 #include <stdio.h>
 
-#pragma mark - Auto symbol finder (không hard-code)
+#pragma mark - Auto symbol finder
 
-// Tìm symbol bằng nhiều cách:
-// 1. Tên C trực tiếp
-// 2. Tên C có gạch dưới
-// 3. C++ mangled void() dạng __Z<len><name>v
-// 4. RTLD_DEFAULT
-// 5. Duyệt toàn bộ symbol table UnityFramework, tìm substring
 static void *find_sym(void *handle, const char *baseName) {
     if (!handle || !baseName) return NULL;
 
-    // 1. Tên C trực tiếp
     void *p = dlsym(handle, baseName);
     if (p) return p;
 
-    // 2. Có gạch dưới đầu
     char buf[512];
     snprintf(buf, sizeof(buf), "_%s", baseName);
     p = dlsym(handle, buf);
     if (p) return p;
 
-    // 3. C++ mangled void() dạng __Z<len><name>v
     size_t n = strlen(baseName);
     snprintf(buf, sizeof(buf), "__Z%zu%sv", n, baseName);
     p = dlsym(handle, buf);
     if (p) return p;
 
-    // 4. RTLD_DEFAULT
     p = dlsym(RTLD_DEFAULT, baseName);
     if (p) return p;
 
-    // 5. Duyệt toàn bộ symbol table của UnityFramework image — tìm substring
+    // Duyệt symbol table UnityFramework
     uint32_t count = _dyld_image_count();
     for (uint32_t i = 0; i < count; i++) {
         const char *imgName = _dyld_get_image_name(i);
@@ -69,7 +59,6 @@ static void *find_sym(void *handle, const char *baseName) {
                     if (nl[k].n_un.n_strx == 0) continue;
                     const char *nm = strtab + nl[k].n_un.n_strx;
 
-                    // Tìm substring "il2cpp_xxx" trong mangled name
                     if (strstr(nm, baseName)) {
                         uint64_t va = nl[k].n_value + slide;
                         void *fnPtr = (void *)(uintptr_t)va;
@@ -90,6 +79,7 @@ static void *find_sym(void *handle, const char *baseName) {
 
 @interface IL2CPPResolver ()
 @property (nonatomic, assign) void *handle;
+@property (nonatomic, assign) BOOL threadAttached;
 @end
 
 @implementation IL2CPPResolver
@@ -139,6 +129,26 @@ static void *find_sym(void *handle, const char *baseName) {
 }
 
 - (BOOL)isResolved { return self.handle != NULL; }
+
+#pragma mark - Thread attach
+
+- (void)attachCurrentThread {
+    if (!self.handle) return;
+    if ([NSThread isMainThread]) return;
+
+    typedef Il2CppDomain *(*domain_get_t)(void);
+    domain_get_t dg = (domain_get_t)find_sym(self.handle, "il2cpp_domain_get");
+    if (!dg) return;
+    Il2CppDomain *domain = dg();
+    if (!domain) return;
+
+    typedef void *(*thread_attach_t)(Il2CppDomain *);
+    thread_attach_t ta = (thread_attach_t)find_sym(self.handle, "il2cpp_thread_attach");
+    if (ta) {
+        ta(domain);
+        NSLog(@"[IL2CPPResolver] Attached thread %@", [NSThread currentThread]);
+    }
+}
 
 #pragma mark - Core
 
