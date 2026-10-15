@@ -14,7 +14,6 @@
     
     CGFloat w = CGRectGetWidth(self.view.bounds);
     
-    // Ô nhập giá trị co giãn theo chiều rộng khung
     self.searchField = [[UITextField alloc] initWithFrame:CGRectMake(16, 16, w - 105, 36)];
     self.searchField.placeholder = @"Nhập giá trị cần tìm (ví dụ: 100, 0x123)...";
     self.searchField.backgroundColor = [ToolTheme shared].surface;
@@ -26,7 +25,6 @@
     self.searchField.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.view addSubview:self.searchField];
     
-    // Nút Tìm tự động neo góc phải, di chuyển mượt mà theo thanh kéo kích thước
     self.searchButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.searchButton.frame = CGRectMake(w - 81, 16, 65, 36);
     self.searchButton.backgroundColor = [ToolTheme shared].accent;
@@ -39,7 +37,6 @@
 }
 
 - (void)reload {
-    // Reload UI nếu cần
 }
 
 @end
