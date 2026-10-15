@@ -86,6 +86,11 @@ static BOOL gScanned = NO;
     gScanned = YES;
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
+    if (!r) {
+        gDetectedGame = @"Unknown";
+        gScanned = NO;
+        return;
+    }
     if (![r resolve]) {
         gDetectedGame = @"Unknown";
         gScanned = NO;
@@ -94,7 +99,7 @@ static BOOL gScanned = NO;
 
     Il2CppDomain *domain = [r domain_get];
     if (!domain || !domain->assemblies || domain->assembly_count == 0) {
-        NSLog(@"[GameFingerprint] IL2CPP not ready");
+        NSLog(@"[GameFingerprint] IL2CPP not ready yet");
         gDetectedGame = @"Unknown";
         gScanned = NO;
         return;
@@ -148,11 +153,19 @@ static BOOL gScanned = NO;
 }
 
 - (BOOL)hasAnyMethodNamed:(NSArray<NSString *> *)names {
+    if (names.count == 0) return NO;
+
     IL2CPPResolver *r = [IL2CPPResolver shared];
+    if (!r) return NO;
+    if (![r resolve]) return NO;
+
     Il2CppDomain *domain = [r domain_get];
-    if (!domain || !domain->assemblies) return NO;
+    if (!domain) return NO;
+    if (!domain->assemblies) return NO;
 
     int maxAsm = MIN((int)domain->assembly_count, 5);
+    if (maxAsm <= 0) return NO;
+
     for (int a = 0; a < maxAsm; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
         if (!asm_) continue;
@@ -181,11 +194,19 @@ static BOOL gScanned = NO;
 }
 
 - (BOOL)hasAnyClassNamed:(NSArray<NSString *> *)names {
+    if (names.count == 0) return NO;
+
     IL2CPPResolver *r = [IL2CPPResolver shared];
+    if (!r) return NO;
+    if (![r resolve]) return NO;
+
     Il2CppDomain *domain = [r domain_get];
-    if (!domain || !domain->assemblies) return NO;
+    if (!domain) return NO;
+    if (!domain->assemblies) return NO;
 
     int maxAsm = MIN((int)domain->assembly_count, 5);
+    if (maxAsm <= 0) return NO;
+
     for (int a = 0; a < maxAsm; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
         if (!asm_) continue;
@@ -218,9 +239,12 @@ static BOOL gScanned = NO;
     if (!synonyms || synonyms.count == 0) return @[];
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
+    if (!r) return @[];
     if (![r resolve]) return @[];
+
     Il2CppDomain *domain = [r domain_get];
-    if (!domain || !domain->assemblies) return @[];
+    if (!domain) return @[];
+    if (!domain->assemblies) return @[];
 
     NSMutableArray *found = [NSMutableArray array];
 
