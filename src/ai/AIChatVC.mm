@@ -12,7 +12,7 @@
 @property (nonatomic, strong) UIView *bottomBar;
 @property (nonatomic, strong) UITextView *inputTextView;
 @property (nonatomic, strong) UIButton *sendButton;
-@property (nonatomic, strong) NSMutableArray<NSString *> *chatHistory; // Bộ nhớ lưu lịch sử câu hỏi
+@property (nonatomic, strong) NSMutableArray<NSString *> *chatHistory;
 
 @end
 
@@ -76,7 +76,7 @@
     self.chatLogTextView.backgroundColor = [UIColor clearColor];
     self.chatLogTextView.textColor = [ToolTheme shared].textPrimary;
     self.chatLogTextView.font = [UIFont systemFontOfSize:13];
-    self.chatLogTextView.text = @"[AI Agent] Sẵn sàng phân tích ngữ cảnh...\nHỏi: hack map, sau đó gõ camera xa hoặc speed...\n";
+    self.chatLogTextView.text = @"[AI Agent] Sẵn sàng phân tích ngữ cảnh đa game...\nHỏi: hack map, camera xa, speed...\n";
     [self.contentView addSubview:self.chatLogTextView];
     
     [self updateLayoutContent];
@@ -87,19 +87,16 @@
     if (text.length == 0) return;
     
     self.inputTextView.text = @"";
-    
-    // Lưu lịch sử câu hỏi vào bộ nhớ ngữ cảnh
     [self.chatHistory addObject:text];
     
     NSString *current = self.chatLogTextView.text ?: @"";
     self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n> %@", current, text];
     [self updateLayoutContent];
     
-    // AI phân tích dựa trên câu hỏi mới nhất hoặc kết hợp lịch sử trò chuyện
     NSArray<NSDictionary *> *foundMethods = [[GameFingerprint shared] findMethodsForConcept:text maxResults:5];
     
     if (foundMethods.count > 0) {
-        NSMutableString *resultLog = [NSMutableString stringWithString:@"\n[AI Context Analysis] Kết quả cho ý định hiện tại:\n"];
+        NSMutableString *resultLog = [NSMutableString stringWithString:@"\n[AI Analysis] Tìm thấy phương thức khớp:\n"];
         for (NSDictionary *m in foundMethods) {
             [resultLog appendFormat:@"- %@.%@ (RVA %@)\n", m[@"class"], m[@"method"], m[@"rva"]];
         }
@@ -132,28 +129,47 @@
     NSString *chatText = self.chatLogTextView.text;
     if (chatText.length == 0) return;
     
+    // Tách lấy ý định và khối phản hồi mới nhất tại câu hỏi hiện tại
+    NSArray *components = [chatText componentsSeparatedByString:@"> "];
+    NSString *latestQuery = [components.lastObject lowercaseString] ?: @"";
+    NSString *latestResponse = components.lastObject ?: chatText;
+    
     NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"-\\s*([a-zA-Z0-9_.]+)\\.([a-zA-Z0-9_]+)\\s*\\(RVA\\s+(0x[a-fA-F0-9]+)\\)" options:0 error:nil];
-    NSArray<NSTextCheckingResult *> *matches = [regex matchesInString:chatText options:0 range:NSMakeRange(0, chatText.length)];
+    NSArray<NSTextCheckingResult *> *matches = [regex matchesInString:latestResponse options:0 range:NSMakeRange(0, latestResponse.length)];
     
     if (matches.count > 0) {
-        // Luôn ưu tiên bắt kết quả mới nhất xuất hiện ở cuối đoạn chat (ý định mới của người dùng)
-        NSTextCheckingResult *selectedMatch = matches.lastObject;
+        NSTextCheckingResult *selectedMatch = matches.firstObject;
         
-        NSString *cls = [chatText substringWithRange:[selectedMatch rangeAtIndex:1]];
-        NSString *meth = [chatText substringWithRange:[selectedMatch rangeAtIndex:2]];
-        NSString *rva = [chatText substringWithRange:[selectedMatch rangeAtIndex:3]];
+        // Khớp thông minh RVA dựa đúng vào từ khóa của câu lệnh hiện tại (Hỗ trợ chuyển game linh hoạt)
+        for (NSTextCheckingResult *m in matches) {
+            NSString *fullMatchStr = [latestResponse substringWithRange:m.range];
+            if ([latestQuery containsString:@"camera"] && ([fullMatchStr containsString:@"FOV"] || [fullMatchStr containsString:@"Camera"])) {
+                selectedMatch = m;
+                break;
+            } else if ([latestQuery containsString:@"map"] && ([fullMatchStr containsString:@"CanSight"] || [fullMatchStr containsString:@"IsVisible"])) {
+                selectedMatch = m;
+                break;
+            } else if ([latestQuery containsString:@"speed"] && [fullMatchStr containsString:@"Speed"]) {
+                selectedMatch = m;
+                break;
+            }
+        }
+        
+        NSString *cls = [latestResponse substringWithRange:[selectedMatch rangeAtIndex:1]];
+        NSString *meth = [latestResponse substringWithRange:[selectedMatch rangeAtIndex:2]];
+        NSString *rva = [latestResponse substringWithRange:[selectedMatch rangeAtIndex:3]];
         
         NSString *autoScript = [NSString stringWithFormat:
             @"-- ==========================================\n"
-             @"-- AI Context-Aware Mod Script\n"
+             @"-- AI Dynamic Multi-Game Mod Script\n"
              @"-- Target: %@.%@\n"
              @"-- RVA: %@\n"
              @"-- ==========================================\n\n"
-             @"print('[AI Context] Cập nhật RVA mới: %@.%@ -> %@')\n"
+             @"print('[AI Dynamic] Nạp đúng RVA theo ngữ cảnh: %@.%@ -> %@')\n"
              @"local targetRVA = \"%@\"\n\n"
              @"if il2cpp.patch_memory then\n"
              @"    il2cpp.patch_memory(targetRVA, \"20008052C0035FD6\")\n"
-             @"    print('[LuaEngine] Patch RAM thành công cho ý định mới!')\n"
+             @"    print('[LuaEngine] Patch RAM thành công cho game hiện tại!')\n"
              @"else\n"
              @"    print('[LuaEngine] Target RVA: ' .. targetRVA)\n"
              @"end\n",
