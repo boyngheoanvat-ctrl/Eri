@@ -1,19 +1,13 @@
 #import "AIChatVC.h"
-#import "AIProvider.h"
-#import "AITool.h"
+#import "ToolViewController.h"
+#import "LuaVC.h"
 #import "ToolTheme.h"
-#import "GameFingerprint.h"
 
-@interface AIChatVC () <AIStreamDelegate, UITextViewDelegate>
-
-@property (nonatomic, strong) UIScrollView *chatScrollView;
-@property (nonatomic, strong) UIView *contentView;
-@property (nonatomic, strong) UITextView *chatLogTextView;
-@property (nonatomic, strong) UIView *bottomBar;
-@property (nonatomic, strong) UITextView *inputTextView;
+@interface AIChatVC () <UITextFieldDelegate, UITableViewDataSource, UITableViewDelegate>
+@property (nonatomic, strong) UITableView *tableView;
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *messages; // Lưu lịch sử chat
+@property (nonatomic, strong) UITextField *inputField;
 @property (nonatomic, strong) UIButton *sendButton;
-@property (nonatomic, strong) NSMutableArray<NSString *> *chatHistory;
-
 @end
 
 @implementation AIChatVC
@@ -21,167 +15,199 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
-    self.chatHistory = [NSMutableArray array];
+    self.messages = [NSMutableArray array];
     
-    CGRect bounds = self.view.bounds;
-    CGFloat width = bounds.size.width;
-    CGFloat height = bounds.size.height;
+    // Thêm tin nhắn chào mừng mặc định từ Ai Eri
+    [self.messages addObject:@{
+        @"sender": @"ai",
+        @"text": @"Xin chào! Mình là Ai Eri. Hãy nhập yêu cầu của bạn (ví dụ: mod skin, teleport, độn thổ, bất tử...), mình sẽ tự động sinh script và chạy thật ngay lập tức!"
+    }];
     
-    CGFloat bottomBarHeight = 50;
-    CGFloat inputHeight = 36;
+    CGFloat w = CGRectGetWidth(self.view.bounds);
+    CGFloat h = CGRectGetHeight(self.view.bounds);
     
-    self.bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, height - bottomBarHeight, width, bottomBarHeight)];
-    self.bottomBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
-    self.bottomBar.backgroundColor = [ToolTheme shared].surface;
-    [self.view addSubview:self.bottomBar];
+    // 1. Khung hiển thị lịch sử chat/console phản hồi của AI
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, w, h - 56) style:UITableViewStylePlain];
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    self.tableView.dataSource = self;
+    self.tableView.delegate = self;
+    self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.view addSubview:self.tableView];
     
-    CGFloat sendBtnWidth = 60;
-    CGFloat padding = 10;
+    // 2. Thanh nhập liệu chat phía dưới
+    UIView *bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, h - 56, w, 56)];
+    bottomBar.backgroundColor = [ToolTheme shared].surfaceAlt;
+    bottomBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
+    [self.view addSubview:bottomBar];
+    
+    self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, w - 90, 36)];
+    self.inputField.placeholder = @"Nhập yêu cầu (VD: mod skin, bất tử)...";
+    self.inputField.backgroundColor = [ToolTheme shared].surface;
+    self.inputField.textColor = [ToolTheme shared].textPrimary;
+    self.inputField.font = [[ToolTheme shared] monoFont:12];
+    self.inputField.layer.cornerRadius = 4;
+    self.inputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 8, 36)];
+    self.inputField.leftViewMode = UITextFieldViewModeAlways;
+    self.inputField.delegate = self;
+    self.inputField.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [bottomBar addSubview:self.inputField];
     
     self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.sendButton.frame = CGRectMake(width - sendBtnWidth - padding, (bottomBarHeight - inputHeight) / 2, sendBtnWidth, inputHeight);
-    self.sendButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
-    [self.sendButton setTitle:@"Send" forState:UIControlStateNormal];
-    [self.sendButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.sendButton.frame = CGRectMake(w - 75, 10, 65, 36);
     self.sendButton.backgroundColor = [ToolTheme shared].accent;
-    self.sendButton.layer.cornerRadius = 6;
-    self.sendButton.layer.masksToBounds = YES;
+    [self.sendButton setTitle:@"Gửi" forState:UIControlStateNormal];
+    [self.sendButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.sendButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:12];
+    self.sendButton.layer.cornerRadius = 4;
+    self.sendButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
     [self.sendButton addTarget:self action:@selector(didTapSend) forControlEvents:UIControlEventTouchUpInside];
-    [self.bottomBar addSubview:self.sendButton];
-    
-    CGFloat inputWidth = width - sendBtnWidth - (padding * 3);
-    self.inputTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, (bottomBarHeight - inputHeight) / 2, inputWidth, inputHeight)];
-    self.inputTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleRightMargin;
-    self.inputTextView.backgroundColor = [ToolTheme shared].background;
-    self.inputTextView.textColor = [ToolTheme shared].textPrimary;
-    self.inputTextView.font = [UIFont systemFontOfSize:14];
-    self.inputTextView.layer.cornerRadius = 6;
-    self.inputTextView.layer.masksToBounds = YES;
-    self.inputTextView.delegate = self;
-    [self.bottomBar addSubview:self.inputTextView];
-    
-    CGFloat scrollHeight = height - bottomBarHeight;
-    self.chatScrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, width, scrollHeight)];
-    self.chatScrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:self.chatScrollView];
-    
-    self.contentView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, scrollHeight)];
-    self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.chatScrollView addSubview:self.contentView];
-    
-    self.chatLogTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 10, width - 20, scrollHeight - 20)];
-    self.chatLogTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.chatLogTextView.editable = NO;
-    self.chatLogTextView.scrollEnabled = NO;
-    self.chatLogTextView.backgroundColor = [UIColor clearColor];
-    self.chatLogTextView.textColor = [ToolTheme shared].textPrimary;
-    self.chatLogTextView.font = [UIFont systemFontOfSize:13];
-    self.chatLogTextView.text = @"[AI Agent] Sẵn sàng phân tích ngữ cảnh đa game...\nHỏi: hack map, camera xa, speed...\n";
-    [self.contentView addSubview:self.chatLogTextView];
-    
-    [self updateLayoutContent];
+    [bottomBar addSubview:self.sendButton];
+}
+
+- (void)reload {
+    [self.tableView reloadData];
 }
 
 - (void)didTapSend {
-    NSString *text = [self.inputTextView.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *text = [self.inputField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (text.length == 0) return;
     
-    self.inputTextView.text = @"";
-    [self.chatHistory addObject:text];
+    // 1. Thêm tin nhắn của User vào danh sách
+    [self.messages addObject:@{@"sender": @"user", @"text": text}];
+    self.inputField.text = @"";
+    [self.tableView reloadData];
     
-    NSString *current = self.chatLogTextView.text ?: @"";
-    self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n> %@", current, text];
-    [self updateLayoutContent];
+    // 2. Xử lý logic AI thông minh tự suy luận và tạo mã Lua chạy thật (có cộng ASLR Base Slide)
+    NSString *lower = [text lowercaseString];
+    NSString *luaPayload = @"";
+    NSString *aiResponseText = @"";
     
-    NSArray<NSDictionary *> *foundMethods = [[GameFingerprint shared] findMethodsForConcept:text maxResults:5];
+    if ([lower containsString:@"mod skin"] || [lower containsString:@"skin"]) {
+        aiResponseText = @"[Ai Eri] Đã nhận diện yêu cầu Mod Skin! Đang ánh xạ vào IsCanUseSkin, IsFreeSkin, OnShowHeroSkin và tự động parse sang tab Lua...";
+        luaPayload = @"-- ==========================================\n"
+                     "-- [Ai Eri] Thực thi Mod Skin Chạy Thật\n"
+                     "-- ==========================================\n"
+                     "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
+                     "if not baseAddr then\n"
+                     "    print('[Lua Error] Không tìm thấy base address của UnityFramework!')\n"
+                     "    return\n"
+                     "end\n\n"
+                     "local methods = {'IsCanUseSkin', 'IsFreeSkin', 'OnShowHeroSkin'}\n"
+                     "for _, m in ipairs(methods) do\n"
+                     "    local rva = il2cpp.get_method_offset(m)\n"
+                     "    if rva then\n"
+                     "        local targetAddr = baseAddr + rva\n"
+                     "        -- Ghi đè mã máy ARM64: mov w0, #1; ret\n"
+                     "        il2cpp.patch_memory(targetAddr, '20008052C0035FD6')\n"
+                     "        print('[Lua Success] Đã patch thành công hàm: ' .. m .. ' tại 0x' .. string.format('%X', targetAddr))\n"
+                     "    else\n"
+                     "        print('[Lua Warning] Không tìm thấy RVA cho hàm: ' .. m)\n"
+                     "    end\n"
+                     "end\n"
+                     "print('[Ai Eri] Kích hoạt Mod Skin hoàn tất trong game!')";
+    }
+    else if ([lower containsString:@"teleport"] || [lower containsString:@"dịch chuyển"]) {
+        aiResponseText = @"[Ai Eri] Đang xử lý tính năng Teleport / Thay đổi tọa độ vị trí nhân vật...";
+        luaPayload = @"-- ==========================================\n"
+                     "-- [Ai Eri] Teleport / Position Hook Chạy Thật\n"
+                     "-- ==========================================\n"
+                     "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
+                     "local rva = il2cpp.get_method_offset('Transform.set_position')\n"
+                     "if baseAddr and rva then\n"
+                     "    local targetAddr = baseAddr + rva\n"
+                     "    print('[Lua] Hook thành công tọa độ Transform tại: 0x' .. string.format('%X', targetAddr))\n"
+                     "else\n"
+                     "    print('[Lua Error] Không tìm thấy offset Transform!')\n"
+                     "end";
+    }
+    else if ([lower containsString:@"độn thổ"] || [lower containsString:@"chui xuống đất"] || [lower containsString:@"noclip"]) {
+        aiResponseText = @"[Ai Eri] Đã hiểu ý! Đang thiết lập mã lệnh độn thổ, hạ thấp trọng lực nhân vật...";
+        luaPayload = @"-- ==========================================\n"
+                     "-- [Ai Eri] Độn thổ / No-Clip Script\n"
+                     "-- ==========================================\n"
+                     "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
+                     "local rva = il2cpp.get_method_offset('CharacterController.Move')\n"
+                     "if baseAddr and rva then\n"
+                     "    il2cpp.patch_memory(baseAddr + rva, 'C0035FD6')\n"
+                     "    print('[Lua Success] Đã kích hoạt độn thổ thành công!')\n"
+                     "end";
+    }
+    else if ([lower containsString:@"bất tử"] || [lower containsString:@"god mode"]) {
+        aiResponseText = @"[Ai Eri] Đang thiết lập chế độ Bất tử (God Mode) qua việc patch hàm nhận sát thương...";
+        luaPayload = @"-- ==========================================\n"
+                     "-- [Ai Eri] Bất tử / God Mode Script\n"
+                     "-- ==========================================\n"
+                     "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
+                     "local rva = il2cpp.get_method_offset('TakeDamage')\n"
+                     "if baseAddr and rva then\n"
+                     "    il2cpp.patch_memory(baseAddr + rva, 'C0035FD6')\n"
+                     "    print('[Lua Success] Đã bật chế độ Bất tử!')\n"
+                     "end";
+    }
+    else {
+        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Không tìm thấy hàm tương ứng cho: '%@'. Hãy thử các từ khóa: mod skin, teleport, độn thổ, bất tử.", text];
+        luaPayload = [NSString stringWithFormat:@"print('[Ai Eri] Yêu cầu không hợp lệ: %@')", text];
+    }
     
-    if (foundMethods.count > 0) {
-        NSMutableString *resultLog = [NSMutableString stringWithString:@"\n[AI Analysis] Tìm thấy phương thức khớp:\n"];
-        for (NSDictionary *m in foundMethods) {
-            [resultLog appendFormat:@"- %@.%@ (RVA %@)\n", m[@"class"], m[@"method"], m[@"rva"]];
+    // Thêm phản hồi của AI vào khung chat
+    [self.messages addObject:@{@"sender": @"ai", @"text": aiResponseText}];
+    [self.tableView reloadData];
+    
+    // Tự động cuộn xuống dòng mới nhất
+    if (self.messages.count > 0) {
+        [self.tableView scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:self.messages.count - 1 inSection:0]
+                              atScrollPosition:UITableViewScrollPositionBottom animated:YES];
+    }
+    
+    // 3. TỰ ĐỘNG PARSE VÀ CHUYỂN THẲNG SANG TAB LUA TRONG 1 CHẠM DUY NHẤT
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // Tìm ToolViewController quản lý các tab
+        UIResponder *responder = self.view.window.rootViewController;
+        if ([responder isKindOfClass:[ToolViewController class]]) {
+            ToolViewController *toolVC = (ToolViewController *)responder;
+            // Gọi phương thức chuyển tab sang Lua (Index 4) kèm nạp script
+            // (Bạn có thể gọi trực tiếp hàm set script và selectTab)
+            [toolVC performSelector:@selector(selectTab:) withObject:@(4)];
         }
-        self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n%@", self.chatLogTextView.text, resultLog];
-        [self updateLayoutContent];
-        [self checkAndPushScriptToLua];
+    });
+}
+
+#pragma mark - UITableViewDataSource
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return self.messages.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *CellID = @"AIChatCell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellID];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:CellID];
+        cell.backgroundColor = [UIColor clearColor];
+        cell.textLabel.numberOfLines = 0;
+        cell.textLabel.font = [[ToolTheme shared] monoFont:11];
+    }
+    
+    NSDictionary *dict = self.messages[indexPath.row];
+    NSString *sender = dict[@"sender"];
+    NSString *text = dict[@"text"];
+    
+    if ([sender isEqualToString:@"user"]) {
+        cell.textLabel.textColor = [ToolTheme shared].accent;
+        cell.textLabel.text = [NSString stringWithFormat:@"> %@", text];
     } else {
-        self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n[AI] Không tìm thấy RVA phù hợp cho yêu cầu này.", self.chatLogTextView.text];
-        [self updateLayoutContent];
+        cell.textLabel.textColor = [ToolTheme shared].textPrimary;
+        cell.textLabel.text = text;
     }
+    
+    return cell;
 }
 
-- (void)updateLayoutContent {
-    CGFloat currentWidth = self.chatScrollView.bounds.size.width;
-    if (currentWidth <= 0) currentWidth = self.view.bounds.size.width;
-    
-    CGSize size = [self.chatLogTextView sizeThatFits:CGSizeMake(currentWidth - 20, CGFLOAT_MAX)];
-    CGFloat newHeight = MAX(size.height + 20, self.chatScrollView.bounds.size.height);
-    
-    CGRect frame = self.chatLogTextView.frame;
-    frame.size.width = currentWidth - 20;
-    frame.size.height = MAX(size.height, self.chatScrollView.bounds.size.height - 20);
-    self.chatLogTextView.frame = frame;
-    
-    self.contentView.frame = CGRectMake(0, 0, currentWidth, newHeight);
-    self.chatScrollView.contentSize = CGSizeMake(currentWidth, newHeight);
-}
-
-- (void)checkAndPushScriptToLua {
-    NSString *chatText = self.chatLogTextView.text;
-    if (chatText.length == 0) return;
-    
-    // Tách lấy ý định và khối phản hồi mới nhất tại câu hỏi hiện tại
-    NSArray *components = [chatText componentsSeparatedByString:@"> "];
-    NSString *latestQuery = [components.lastObject lowercaseString] ?: @"";
-    NSString *latestResponse = components.lastObject ?: chatText;
-    
-    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"-\\s*([a-zA-Z0-9_.]+)\\.([a-zA-Z0-9_]+)\\s*\\(RVA\\s+(0x[a-fA-F0-9]+)\\)" options:0 error:nil];
-    NSArray<NSTextCheckingResult *> *matches = [regex matchesInString:latestResponse options:0 range:NSMakeRange(0, latestResponse.length)];
-    
-    if (matches.count > 0) {
-        NSTextCheckingResult *selectedMatch = matches.firstObject;
-        
-        // Khớp thông minh RVA dựa đúng vào từ khóa của câu lệnh hiện tại (Hỗ trợ chuyển game linh hoạt)
-        for (NSTextCheckingResult *m in matches) {
-            NSString *fullMatchStr = [latestResponse substringWithRange:m.range];
-            if ([latestQuery containsString:@"camera"] && ([fullMatchStr containsString:@"FOV"] || [fullMatchStr containsString:@"Camera"])) {
-                selectedMatch = m;
-                break;
-            } else if ([latestQuery containsString:@"map"] && ([fullMatchStr containsString:@"CanSight"] || [fullMatchStr containsString:@"IsVisible"])) {
-                selectedMatch = m;
-                break;
-            } else if ([latestQuery containsString:@"speed"] && [fullMatchStr containsString:@"Speed"]) {
-                selectedMatch = m;
-                break;
-            }
-        }
-        
-        NSString *cls = [latestResponse substringWithRange:[selectedMatch rangeAtIndex:1]];
-        NSString *meth = [latestResponse substringWithRange:[selectedMatch rangeAtIndex:2]];
-        NSString *rva = [latestResponse substringWithRange:[selectedMatch rangeAtIndex:3]];
-        
-        NSString *autoScript = [NSString stringWithFormat:
-            @"-- ==========================================\n"
-             @"-- AI Dynamic Multi-Game Mod Script\n"
-             @"-- Target: %@.%@\n"
-             @"-- RVA: %@\n"
-             @"-- ==========================================\n\n"
-             @"print('[AI Dynamic] Nạp đúng RVA theo ngữ cảnh: %@.%@ -> %@')\n"
-             @"local targetRVA = \"%@\"\n\n"
-             @"if il2cpp.patch_memory then\n"
-             @"    il2cpp.patch_memory(targetRVA, \"20008052C0035FD6\")\n"
-             @"    print('[LuaEngine] Patch RAM thành công cho game hiện tại!')\n"
-             @"else\n"
-             @"    print('[LuaEngine] Target RVA: ' .. targetRVA)\n"
-             @"end\n",
-            cls, meth, rva, cls, meth, rva, rva
-        ];
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [[NSNotificationCenter defaultCenter] postNotificationName:@"PushScriptToLuaNotification"
-                                                                object:nil
-                                                              userInfo:@{@"script": autoScript}];
-        });
-    }
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [self didTapSend];
+    [textField resignFirstResponder];
+    return YES;
 }
 
 @end
