@@ -8,7 +8,7 @@
 @property (nonatomic, strong) UILabel *statusLabel;
 @property (nonatomic, strong) UITextView *resultTextView;
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
-@atomic, assign) BOOL isDumping;
+@property (nonatomic, assign) BOOL isDumping;
 @end
 
 @implementation DumperVC
@@ -41,7 +41,7 @@
     [self.view addSubview:self.dumpButton];
 
     self.progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
-    self.progressView.frame = CGRectMake(16, 112, w - 32, 4];
+    self.progressView.frame = CGRectMake(16, 112, w - 32, 4);
     self.progressView.progressTintColor = [ToolTheme shared].accent;
     self.progressView.hidden = YES;
     self.progressView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
@@ -83,7 +83,6 @@
     [self.spinner startAnimating];
     
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        // Mô phỏng tiến trình dump an toàn tránh crash
         sleep(1);
         dispatch_async(dispatch_get_main_queue(), ^{
             self.progressView.progress = 1.0;
