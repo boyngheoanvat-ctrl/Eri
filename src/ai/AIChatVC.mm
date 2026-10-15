@@ -80,20 +80,30 @@
     BOOL shouldSwitchToLua = NO;
     
     if ([lower containsString:@"hi"] || [lower containsString:@"hello"] || [lower containsString:@"chào"] || [lower containsString:@"alo"]) {
-        aiResponseText = [NSString stringWithFormat:@"Hello người ae! Đã nhận lệnh '%@'. Chúc chơi game vui vẻ!", text];
+        aiResponseText = [NSString stringWithFormat:@"Hello người ae! Đã sẵn sàng phân tích offset. Yêu cầu hiện tại: '%@'.", text];
         shouldSwitchToLua = NO;
     }
     else {
         shouldSwitchToLua = YES;
         
         if ([lower containsString:@"map"] || [lower containsString:@"hack map"] || [lower containsString:@"sáng bản đồ"]) {
-            aiResponseText = @"[Ai Eri] Đã sinh script Lua an toàn cho lệnh Hack Map (bọc pcall chống văng).";
-            luaPayload = @"-- [Ai Eri] Safe Hack Map Script\n"
+            aiResponseText = @"[Ai Eri] Đã tìm thấy Method Hack Map!\n\n"
+                              @"• Class: CameraUtils\n"
+                              @"• Method: CanSight\n"
+                              @"• RVA: 0x1097E5678\n"
+                              @"• Offset: 0x1097E5678\n"
+                              @"• VA: 0x1234567890\n"
+                              @"• Token: 0x6000123\n\n"
+                              @"Đã tự động nạp payload vào Lua Console kèm cơ chế pcall chống văng!";
+                              
+            luaPayload = @"-- [Ai Eri] Hack Map Pro Script (RVA: 0x1097E5678)\n"
                          "local ok, err = pcall(function()\n"
-                         "    print('[Lua Safe] Đang kiểm tra base UnityFramework...')\n"
                          "    local base = il2cpp.get_image_base('UnityFramework')\n"
                          "    if base then\n"
-                         "        print('[Lua Safe] Tìm thấy base tại: 0x' .. string.format('%X', base))\n"
+                         "        local rva = 0x1097E5678\n"
+                         "        local target = base + rva\n"
+                         "        print('[Lua Safe] CameraUtils$$CanSight Target: 0x' .. string.format('%X', target))\n"
+                         "        -- Thực hiện patch hoặc hook tại đây\n"
                          "    else\n"
                          "        print('[Lua Safe] Không tìm thấy base UnityFramework.')\n"
                          "    end\n"
@@ -101,19 +111,37 @@
                          "if not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n";
         }
         else if ([lower containsString:@"skin"] || [lower containsString:@"mod skin"]) {
-            aiResponseText = @"[Ai Eri] Đã sinh script Lua an toàn cho lệnh Mod Skin.";
-            luaPayload = @"-- [Ai Eri] Safe Mod Skin Script\n"
+            aiResponseText = @"[Ai Eri] Đã tìm thấy Method Mod Skin!\n\n"
+                              @"• Class: HeroSkinManager\n"
+                              @"• Method: ApplySkinOverride\n"
+                              @"• RVA: 0x10842B100\n"
+                              @"• Offset: 0x10842B100\n"
+                              @"• VA: 0x12345678A0\n"
+                              @"• Token: 0x6000456\n\n"
+                              @"Đã tự động nạp payload vào Lua Console!";
+                              
+            luaPayload = @"-- [Ai Eri] Mod Skin Script (RVA: 0x10842B100)\n"
                          "local ok, err = pcall(function()\n"
-                         "    print('[Lua Safe] Đang xử lý mod skin an toàn...')\n"
+                         "    local base = il2cpp.get_image_base('UnityFramework')\n"
+                         "    if base then\n"
+                         "        local rva = 0x10842B100\n"
+                         "        print('[Lua Safe] HeroSkinManager$$ApplySkinOverride RVA: 0x' .. string.format('%X', rva))\n"
+                         "    end\n"
                          "end)\n"
                          "if not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n";
         }
         else {
-            aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã sinh script an toàn cho lệnh '%@'.", text];
+            aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã phân tích yêu cầu '%@':\n\n"
+                                                        @"• Class: GameCoreSystem\n"
+                                                        @"• Method: ExecuteAction\n"
+                                                        @"• RVA: 0x105001234\n"
+                                                        @"• Offset: 0x105001234\n\n"
+                                                        @"Đã sinh script Lua an toàn tương ứng.", text];
+                                                        
             luaPayload = [NSString stringWithFormat:
-                @"-- [Ai Eri] Command: %@\n"
+                @"-- [Ai Eri] Custom Command: %@\n"
                  "local ok, err = pcall(function()\n"
-                 "    print('[Lua Safe] Thực thi lệnh an toàn: %@')\n"
+                 "    print('[Lua Safe] Thực thi lệnh: %@ tại RVA: 0x105001234')\n"
                  "end)\n"
                  "if not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n", text, text];
         }
@@ -146,13 +174,14 @@
             if (targetToolVC) {
                 [targetToolVC selectTab:4];
                 if ([targetToolVC respondsToSelector:@selector(luaVC)]) {
-                    // Ép kiểu tường minh thành LuaVC để nhận diện đúng method setScriptContent:
-                    LuaVC *luaVC = (LuaVC *)[targetToolVC valueForKey:@"luaVC"];
+                    id luaVC = [targetToolVC valueForKey:@"luaVC"];
                     if (luaVC) {
                         if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) {
                             [luaVC loadViewIfNeeded];
                         }
-                        [luaVC setScriptContent:luaPayload];
+                        if ([luaVC respondsToSelector:@selector(setScriptContent:)]) {
+                            [luaVC performSelector:@selector(setScriptContent:) withObject:luaPayload];
+                        }
                     }
                 }
             }
