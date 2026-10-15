@@ -8,7 +8,6 @@
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) NSMutableArray<MemoryResult *> *resultsList;
 @property (nonatomic, strong) UITextField *searchField;
-@property (nonatomic, strong) UITextField *editField;
 
 @end
 
@@ -45,7 +44,7 @@
     [searchBtn addTarget:self action:@selector(didTapSearch) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:searchBtn];
     
-    // Bảng kết quả RAM (Đã bỏ hoàn toàn popup Min/Max)
+    // Bảng kết quả RAM (Không còn popup Min/Max rườm rà)
     self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 56, w, CGRectGetHeight(self.view.bounds) - 56) style:UITableViewStylePlain];
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.tableView.dataSource = self;
