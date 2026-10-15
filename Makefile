@@ -26,8 +26,6 @@ libtool_FILES = \
     src/memory/MethodCallerVC.mm \
     src/dump/IL2CPPResolver.mm \
     src/dump/DumperVC.mm \
-    src/dump/RuntimeEnumerator.mm \
-    src/dump/MetadataParser.mm \
     src/lua/LuaEngine.mm \
     src/lua/LuaVC.mm \
     src/esp/ESPOverlay.mm \
