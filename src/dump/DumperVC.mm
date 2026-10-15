@@ -185,6 +185,9 @@
             if (!r || ![r resolve]) { fail(@"Loi: IL2CPP not resolved"); return; }
             [ws dbg:@"STEP 2: resolved"];
 
+            uint64_t il2cppBase = [r il2cppBase];
+            [ws dbg:[NSString stringWithFormat:@"base = 0x%llX", il2cppBase]];
+
             Il2CppDomain *domain = [r domain_get];
             if (!domain) { fail(@"Loi: No domain"); return; }
             [ws dbg:@"STEP 3: domain OK"];
@@ -219,7 +222,6 @@
             [[NSFileManager defaultManager] removeItemAtPath:scriptPath error:nil];
             [[NSFileManager defaultManager] removeItemAtPath:stringsPath error:nil];
 
-            // ===== Buffers =====
             NSMutableString *csContent      = [NSMutableString stringWithCapacity:16 * 1024 * 1024];
             NSMutableString *headerContent  = [NSMutableString stringWithCapacity:4 * 1024 * 1024];
             NSMutableString *jsonContent    = [NSMutableString stringWithCapacity:4 * 1024 * 1024];
@@ -278,13 +280,12 @@
                                     NSString *nsName = (cns && [NSString stringWithUTF8String:cns])
                                                       ? [NSString stringWithUTF8String:cns] : @"";
 
-                                    // Class modifiers
                                     uint32_t cflags = [r class_get_flags:klass];
                                     BOOL isEnum = [r class_is_enum:klass];
                                     BOOL isValueType = [r class_is_valuetype:klass];
                                     BOOL isInterface = [r class_is_interface:klass];
+                                    (void)cflags;
 
-                                    // Parent
                                     NSString *parentName = @"";
                                     @try {
                                         Il2CppClass *parent = [r class_get_parent:klass];
@@ -297,7 +298,6 @@
                                         }
                                     } @catch (NSException *e) {}
 
-                                    // Class header
                                     if (nsName.length > 0) {
                                         [csContent appendFormat:@"namespace %@ {\n", nsName];
                                     }
@@ -307,7 +307,10 @@
                                     else if (isEnum) kind = @"enum";
                                     else if (isValueType) kind = @"struct";
 
-                                    if (parentName.length > 0 && ![parentName isEqualToString:@"Object"] && ![parentName isEqualToString:@"ValueType"] && ![parentName isEqualToString:@"Enum"]) {
+                                    if (parentName.length > 0 &&
+                                        ![parentName isEqualToString:@"Object"] &&
+                                        ![parentName isEqualToString:@"ValueType"] &&
+                                        ![parentName isEqualToString:@"Enum"]) {
                                         [csContent appendFormat:@"public %@ %@ : %@ {\n", kind, clsName, parentName];
                                     } else {
                                         [csContent appendFormat:@"public %@ %@ {\n", kind, clsName];
@@ -336,7 +339,6 @@
                                             NSString *typeName = tn ? [NSString stringWithUTF8String:tn] : @"object";
                                             if (!typeName || typeName.length == 0) typeName = @"object";
 
-                                            // Modifier
                                             NSMutableString *mod = [NSMutableString string];
                                             uint32_t access = fflags & 0x0007;
                                             if (access == 0x0006) [mod appendString:@"public "];
@@ -371,12 +373,13 @@
                                             if (!methodName || methodName.length == 0) continue;
 
                                             void *ptr = [r method_get_pointer:mi];
-                                            uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
+                                            uint64_t va = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
+                                            uint64_t rva = (va > il2cppBase && il2cppBase > 0)
+                                                         ? (va - il2cppBase) : va;
                                             uint32_t token = [r method_get_token:mi];
 
                                             uint32_t mflags = [r method_get_flags:mi];
 
-                                            // Modifier
                                             NSMutableString *mod = [NSMutableString string];
                                             uint32_t access = mflags & 0x0007;
                                             if (access == 0x0006) [mod appendString:@"public "];
@@ -388,12 +391,10 @@
                                             if (mflags & 0x0400) [mod appendString:@"abstract "];
                                             else if (mflags & 0x0040) [mod appendString:@"virtual "];
 
-                                            // Return type
                                             const char *rt = [r method_get_return_type:mi];
                                             NSString *retType = rt ? [NSString stringWithUTF8String:rt] : @"void";
                                             if (!retType || retType.length == 0) retType = @"void";
 
-                                            // Parameters
                                             NSMutableString *params = [NSMutableString string];
                                             uint32_t pCount = [r method_get_param_count:mi];
                                             if (pCount > 20) pCount = 20;
@@ -411,7 +412,7 @@
                                             }
 
                                             [csContent appendFormat:@"    %@%@ %@(%@); // RVA: 0x%llX Offset: 0x0 VA: 0x%llX Token: 0x%X\n",
-                                             mod, retType, methodName, params, rva, rva, token];
+                                             mod, retType, methodName, params, rva, va, token];
 
                                             totalMethods++;
 
@@ -509,10 +510,10 @@
                              a + 1, maxAssemblies, totalClasses, totalMethods]);
             }
 
-            // ===== Kết thúc script.json =====
             [jsonContent appendString:@"\n  ],\n"];
 
-            uint64_t baseAddr = (uint64_t)(uintptr_t)_dyld_get_image_header(0);
+            uint64_t baseAddr = il2cppBase > 0 ? il2cppBase
+                                               : (uint64_t)(uintptr_t)_dyld_get_image_header(0);
             [jsonContent appendFormat:
                 @"  \"ScriptMetadata\": {\n"
                 @"    \"ExecutableName\": \"UnityFramework\",\n"
@@ -522,13 +523,11 @@
                 baseAddr];
             [jsonContent appendString:@"}\n"];
 
-            // ===== Ghi 4 file =====
             if (doCs)     [csContent writeToFile:csPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
             if (doHeader) [headerContent writeToFile:headerPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
             if (doScript) [jsonContent writeToFile:scriptPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
             [stringsContent writeToFile:stringsPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
 
-            // ===== Thống kê =====
             unsigned long long sizeCs = 0, sizeH = 0, sizeJ = 0, sizeS = 0;
             NSDictionary *a1 = [[NSFileManager defaultManager] attributesOfItemAtPath:csPath error:nil];
             NSDictionary *a2 = [[NSFileManager defaultManager] attributesOfItemAtPath:headerPath error:nil];
