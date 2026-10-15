@@ -115,111 +115,6 @@
     return sw;
 }
 
-#pragma mark - Skip hệ thống
-
-- (BOOL)isSystemImage:(NSString *)name {
-    if (name.length == 0) return YES;
-
-    NSArray<NSString *> *skipExact = @[
-        @"mscorlib.dll",
-        @"System.dll",
-        @"System.Core.dll",
-        @"System.Xml.dll",
-        @"System.Xml.Linq.dll",
-        @"System.Runtime.dll",
-        @"System.Runtime.Serialization.dll",
-        @"System.Runtime.Serialization.Formatters.dll",
-        @"System.Runtime.CompilerServices.Unsafe.dll",
-        @"System.Drawing.dll",
-        @"System.IO.Compression.dll",
-        @"System.IO.Compression.FileSystem.dll",
-        @"System.Numerics.dll",
-        @"System.Data.dll",
-        @"System.Configuration.dll",
-        @"System.Security.dll",
-        @"System.Transactions.dll",
-        @"System.Net.Http.dll",
-        @"System.Net.Http.Rtc.dll",
-        @"Mono.Security.dll",
-        @"Mono.Posix.dll",
-        @"Mono.Data.Tds.dll",
-        @"Mono.Cecil.dll",
-        @"Newtonsoft.Json.dll",
-        @"I18N.dll",
-        @"I18N.CJK.dll",
-        @"I18N.MidEast.dll",
-        @"I18N.Other.dll",
-        @"I18N.Rare.dll",
-        @"I18N.West.dll",
-        @"nunit.framework.dll",
-        @"UnityEngine.dll",
-        @"UnityEngine.CoreModule.dll",
-        @"UnityEngine.UI.dll",
-        @"UnityEngine.UIModule.dll",
-        @"UnityEngine.IMGUIModule.dll",
-        @"UnityEngine.TextRenderingModule.dll",
-        @"UnityEngine.AnimationModule.dll",
-        @"UnityEngine.AudioModule.dll",
-        @"UnityEngine.PhysicsModule.dll",
-        @"UnityEngine.Physics2DModule.dll",
-        @"UnityEngine.InputLegacyModule.dll",
-        @"UnityEngine.InputModule.dll",
-        @"UnityEngine.AssetBundleModule.dll",
-        @"UnityEngine.ImageConversionModule.dll",
-        @"UnityEngine.JSONSerializeModule.dll",
-        @"UnityEngine.ParticleSystemModule.dll",
-        @"UnityEngine.UnityWebRequestModule.dll",
-        @"UnityEngine.UnityWebRequestAssetBundleModule.dll",
-        @"UnityEngine.UnityWebRequestAudioModule.dll",
-        @"UnityEngine.UnityWebRequestTextureModule.dll",
-        @"UnityEngine.UnityWebRequestWWWModule.dll",
-        @"UnityEngine.VRModule.dll",
-        @"UnityEngine.XRModule.dll",
-        @"UnityEngine.AndroidJNIModule.dll",
-        @"UnityEngine.ScreenCaptureModule.dll",
-        @"UnityEngine.SharedInternalsModule.dll",
-        @"UnityEngine.SpriteMaskModule.dll",
-        @"UnityEngine.SpriteShapeModule.dll",
-        @"UnityEngine.TerrainModule.dll",
-        @"UnityEngine.TilemapModule.dll",
-        @"UnityEngine.UIElementsModule.dll",
-        @"UnityEngine.UIModule.dll",
-        @"UnityEngine.UnityAnalyticsModule.dll",
-        @"UnityEngine.UnityConnectModule.dll",
-        @"UnityEngine.UnityCurlModule.dll",
-        @"UnityEngine.UnityTestProtocolModule.dll",
-        @"UnityEngine.UnityWebRequestModule.dll",
-        @"UnityEngine.VehiclesModule.dll",
-        @"UnityEngine.VideoModule.dll",
-        @"UnityEngine.WindModule.dll",
-        @"UnityEngine.GridModule.dll",
-        @"UnityEngine.DirectorModule.dll",
-        @"UnityEngine.GameCenterModule.dll",
-        @"UnityEngine.LocalizationModule.dll",
-        @"UnityEngine.SubsystemsModule.dll",
-        @"UnityEngine.TLSModule.dll",
-        @"UnityEngine.UIElementsModule.dll",
-        @"UnityEngine.ClothModule.dll",
-        @"UnityEngine.AIModule.dll",
-        @"UnityEngine.ARModule.dll",
-        @"UnityEngine.CrashReportModule.dll",
-    ];
-
-    for (NSString *s in skipExact) {
-        if ([name isEqualToString:s]) return YES;
-    }
-
-    // Skip mọi thứ bắt đầu bằng "UnityEngine." hoặc "System."
-    if ([name hasPrefix:@"UnityEngine."]) return YES;
-    if ([name hasPrefix:@"System."]) return YES;
-    if ([name hasPrefix:@"Microsoft."]) return YES;
-    if ([name hasPrefix:@"Mono."]) return YES;
-    if ([name hasPrefix:@"I18N."]) return YES;
-    if ([name hasPrefix:@"Newtonsoft."]) return YES;
-
-    return NO;
-}
-
 #pragma mark - Dump
 
 - (void)startDump {
@@ -284,7 +179,6 @@
             [[NSFileManager defaultManager] createDirectoryAtPath:dumpDir
                                       withIntermediateDirectories:YES attributes:nil error:nil];
 
-            // Xoá file cũ
             [[NSFileManager defaultManager] removeItemAtPath:dumpDir error:nil];
             [[NSFileManager defaultManager] createDirectoryAtPath:dumpDir
                                       withIntermediateDirectories:YES attributes:nil error:nil];
@@ -295,10 +189,8 @@
             [[NSFileManager defaultManager] removeItemAtPath:scriptPath error:nil];
             [[NSFileManager defaultManager] removeItemAtPath:headerPath error:nil];
 
-            // ===== script.json =====
             NSMutableArray *scriptMethods = [NSMutableArray array];
 
-            // ===== il2cpp.h =====
             NSMutableString *headerContent = [NSMutableString string];
             [headerContent appendString:@"// Auto-generated il2cpp.h\n#pragma once\n#include <stdint.h>\n\n"];
 
@@ -306,7 +198,6 @@
             int totalMethods = 0;
             int totalFields = 0;
             int dumpedImages = 0;
-            int skippedImages = 0;
 
             NSMutableArray<NSString *> *dumpedFiles = [NSMutableArray array];
 
@@ -328,20 +219,15 @@
                         NSString *imgName = [NSString stringWithUTF8String:imgNameC];
                         if (!imgName) continue;
 
-                        // Skip .dll hệ thống
-                        if ([self isSystemImage:imgName]) {
-                            skippedImages++;
-                            NSLog(@"[Dumper] SKIP %@", imgName);
-                            continue;
-                        }
-
                         size_t classCount = [r image_get_class_count:image];
                         if (classCount == 0) continue;
 
                         NSLog(@"[Dumper] DUMP %@ (%zu classes)", imgName, classCount);
+                        progress(0.05f + 0.9f * ((float)a / maxAssemblies),
+                                 [NSString stringWithFormat:@"DUMP %@ (%zu class)", imgName, classCount]);
+
                         dumpedImages++;
 
-                        // ===== Tạo file .cs riêng cho image này =====
                         NSString *safeName = [imgName stringByReplacingOccurrencesOfString:@"/" withString:@"_"];
                         safeName = [safeName stringByReplacingOccurrencesOfString:@":" withString:@"_"];
                         NSString *imageCsPath = [dumpDir stringByAppendingPathComponent:
@@ -362,7 +248,6 @@
                             [imageFH writeData:[header dataUsingEncoding:NSUTF8StringEncoding]];
                         }
 
-                        // Comment vào header chung
                         [headerContent appendFormat:@"\n// Image %d: %@\n", a, imgName];
 
                         for (size_t i = 0; i < classCount; i++) {
@@ -381,7 +266,6 @@
                                     NSString *nsName = (cns && [NSString stringWithUTF8String:cns])
                                                       ? [NSString stringWithUTF8String:cns] : @"";
 
-                                    // Class cha
                                     NSString *parentName = @"";
                                     @try {
                                         Il2CppClass *parent = [r class_get_parent:klass];
@@ -394,7 +278,7 @@
                                         }
                                     } @catch (NSException *e) { parentName = @""; }
 
-                                    // ============ dump.cs (riêng cho image) ============
+                                    // ============ dump.cs ============
                                     if (imageFH) {
                                         NSMutableString *cs = [NSMutableString string];
 
@@ -408,7 +292,6 @@
                                             [cs appendFormat:@"public class %@ {\n", clsName];
                                         }
 
-                                        // Fields
                                         uint16_t fCount = 0;
                                         NSArray<NSValue *> *fList = [r class_get_fields:klass count:&fCount];
 
@@ -430,15 +313,11 @@
                                                 int32_t off = [r field_get_offset:fi];
 
                                                 NSString *typeName = @"void*";
-                                                @try {
-                                                    if (fi->type && (uintptr_t)fi->type >= 0x1000) {
-                                                        const char *tn = [r type_get_name:fi->type];
-                                                        if (tn) {
-                                                            NSString *t = [NSString stringWithUTF8String:tn];
-                                                            if (t && t.length > 0) typeName = t;
-                                                        }
-                                                    }
-                                                } @catch (NSException *e) {}
+                                                const char *tn = [r field_get_type_name:fi];
+                                                if (tn) {
+                                                    NSString *t = [NSString stringWithUTF8String:tn];
+                                                    if (t && t.length > 0) typeName = t;
+                                                }
 
                                                 [cs appendFormat:@"    public %@ %@; // 0x%X\n",
                                                  typeName, fieldName, off];
@@ -446,7 +325,6 @@
                                             } @catch (NSException *e) {}
                                         }
 
-                                        // Methods
                                         uint16_t mCount = 0;
                                         NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
 
@@ -470,17 +348,14 @@
                                                 uint32_t token = [r method_get_token:mi];
 
                                                 NSString *retType = @"void";
-                                                @try {
-                                                    if (mi->return_type && (uintptr_t)mi->return_type >= 0x1000) {
-                                                        const char *rt = [r type_get_name:mi->return_type];
-                                                        if (rt) {
-                                                            NSString *t = [NSString stringWithUTF8String:rt];
-                                                            if (t && t.length > 0) retType = t;
-                                                        }
-                                                    }
-                                                } @catch (NSException *e) {}
+                                                const char *rt = [r method_get_return_type:mi];
+                                                if (rt) {
+                                                    NSString *t = [NSString stringWithUTF8String:rt];
+                                                    if (t && t.length > 0) retType = t;
+                                                }
 
-                                                BOOL isStatic = (mi->flags & 0x0010) != 0;
+                                                uint32_t mflags = [r method_get_flags:mi];
+                                                BOOL isStatic = (mflags & 0x0010) != 0;
                                                 NSString *modifier = isStatic ? @"public static" : @"public";
 
                                                 [cs appendFormat:@"    %@ %@ %@(); // RVA: 0x%llX Token: 0x%X\n",
@@ -507,21 +382,21 @@
                                         [imageFH writeData:[cs dataUsingEncoding:NSUTF8StringEncoding]];
                                     }
 
-                                    // ============ il2cpp.h (chung) ============
+                                    // ============ il2cpp.h ============
                                     if (doHeader) {
                                         NSString *full = nsName.length > 0
                                             ? [NSString stringWithFormat:@"%@_%@", nsName, clsName] : clsName;
-                                        full = [full stringByReplacingOccurrencesOfString:@"." withString:@"_"];
-                                        full = [full stringByReplacingOccurrencesOfString:@"`" withString:@"_"];
-                                        full = [full stringByReplacingOccurrencesOfString:@"<" withString:@"_"];
+                                        full = [full stringByReplacingOccurrencesOftableString:@"." withString:@"_"];
+                                        full =;\ [full stringByReplacingOccurnrencesOfString:@"`" with"];
+String:@"_"];
+                                        full = [full                                        stringByReplacingOccurrencesOfString:@"<" withString:@"_"];
                                         full = [full stringByReplacingOccurrencesOfString:@">" withString:@"_"];
                                         full = [full stringByReplacingOccurrencesOfString:@" " withString:@"_"];
                                         full = [full stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
 
                                         NSMutableString *hs = [NSMutableString string];
                                         [hs appendFormat:@"struct %@_t {\n", full];
-                                        [hs appendString:@"    void *vtable;\n"];
-                                        [hs appendString:@"    void *monitor;\n"];
+                                        [hs appendString:@"    void *v [hs appendString:@"    void *monitor;\n"];
 
                                         uint16_t fCount2 = 0;
                                         NSArray<NSValue *> *fList2 = [r class_get_fields:klass count:&fCount2];
@@ -570,12 +445,6 @@
                         NSLog(@"[Dumper] assembly %d exception: %@", a, e);
                     }
                 }
-
-                float p = 0.95f * ((float)(a + 1) / maxAssemblies);
-                NSString *status = [NSString stringWithFormat:
-                    @"Assembly %d/%d — %d class",
-                    a + 1, maxAssemblies, totalClasses];
-                progress(p, status);
             }
 
             // ===== Ghi script.json =====
@@ -615,10 +484,9 @@
                 [headerContent writeToFile:headerPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
             }
 
-            NSLog(@"[Dumper] DONE: %d class, %d method, %d field (%d images dumped, %d skipped)",
-                  totalClasses, totalMethods, totalFields, dumpedImages, skippedImages);
+            NSLog(@"[Dumper] DONE: %d class, %d method, %d field (%d images)",
+                  totalClasses, totalMethods, totalFields, dumpedImages);
 
-            // ===== Thống kê dung lượng =====
             unsigned long long totalSize = 0;
             for (NSString *path in dumpedFiles) {
                 NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil];
@@ -629,7 +497,6 @@
             int methods = totalMethods;
             int fields = totalFields;
             int images = dumpedImages;
-            int skipped = skippedImages;
             NSString *outDirCopy = outDir;
             NSString *dumpDirCopy = dumpDir;
             unsigned long long totalSizeCopy = totalSize;
@@ -644,12 +511,10 @@
 
                 NSString *result = [NSString stringWithFormat:
                     @"Luu vao: %@\n\n"
-                    @"%d image, %d class, %d method, %d field\n"
-                    @"(bo qua %d .dll he thong)\n\n"
+                    @"%d image, %d class, %d method, %d field\n\n"
                     @"Tong dung luong: %@",
                     dumpDirCopy,
                     images, total, methods, fields,
-                    skipped,
                     [NSByteCountFormatter stringFromByteCount:(long long)totalSizeCopy
                                                    countStyle:NSByteCountFormatterCountStyleFile]];
                 ws.resultLabel.text = result;
