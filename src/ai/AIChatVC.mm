@@ -68,7 +68,9 @@ static const CGFloat kInputBarHeight = 50;
     self.tableView.delaysContentTouches = NO;
     self.tableView.canCancelContentTouches = YES;
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.tableView.contentInset = UIEdgeInsetsMake(8, 0, 8, 0);
+    // Padding trên/dưới — đảm bảo tin cuối không bị che
+    self.tableView.contentInset = UIEdgeInsetsMake(12, 0, 40, 0);
+    self.tableView.scrollIndicatorInsets = self.tableView.contentInset;
     [self.view addSubview:self.tableView];
 
     self.inputArea = [[UIView alloc] initWithFrame:CGRectMake(0, h - kInputBarHeight, w, kInputBarHeight)];
@@ -212,21 +214,19 @@ static const CGFloat kInputBarHeight = 50;
             @"\n"
             @"=== TOOL ===\n"
             @"1. find_concept(concept) — DUNG DAU TIEN\n"
-            @"   concept: map, speed, damage, health, mana, money, cooldown, ammo, level\n"
-            @"2. find_method_global(keyword) — tim method toan bo\n"
-            @"3. dump_class_runtime(class_name) — xem chi tiet class\n"
-            @"4. search_classes(keyword) — tim class\n"
-            @"5. find_classes_by_method(method_name)\n"
-            @"6. find_method_in_class(class_name, keyword)\n"
-            @"7. find_field_in_class(class_name, keyword)\n"
+            @"   concept: map, speed, damage, health, mana, money, cooldown\n"
+            @"2. search_classes(keyword)\n"
+            @"3. dump_class_runtime(class_name)\n"
+            @"4. find_method_in_class(class_name, keyword)\n"
+            @"5. find_method_global(keyword)\n"
+            @"6. find_field_in_class(class_name, keyword)\n"
+            @"7. find_classes_by_method(method_name)\n"
             @"8. read_file(filename, keyword)\n"
             @"\n"
             @"=== QUY TAC ===\n"
             @"1. Cau hoi 'hack X' → find_concept('X')\n"
             @"2. Neu 0 ket qua → find_method_global voi tu khoa tuong tu\n"
-            @"3. Cau hoi ve class cu the → dump_class_runtime\n"
-            @"4. Tra loi RO: game + class + method + RVA\n"
-            @"5. Khong bia RVA. Khong lap tool qua 3 lan.", game];
+            @"3. Khong bia RVA. Khong lap tool qua 3 lan.", game];
 
         NSMutableArray *messages = [NSMutableArray array];
         [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
@@ -252,13 +252,15 @@ static const CGFloat kInputBarHeight = 50;
 #pragma mark - Scroll
 
 - (void)scrollToBottomAnimated:(BOOL)animated {
-    if (self.items.count == 0) return;
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSInteger last = (NSInteger)self.items.count - 1;
-        NSIndexPath *ip = [NSIndexPath indexPathForRow:last inSection:0];
-        [self.tableView scrollToRowAtIndexPath:ip
-                              atScrollPosition:UITableViewScrollPositionBottom
-                                      animated:animated];
+        CGFloat contentH = self.tableView.contentSize.height;
+        CGFloat frameH = self.tableView.bounds.size.height;
+        CGFloat insetBottom = self.tableView.contentInset.bottom;
+
+        if (contentH + insetBottom > frameH) {
+            CGPoint offset = CGPointMake(0, contentH - frameH + insetBottom);
+            [self.tableView setContentOffset:offset animated:animated];
+        }
     });
 }
 
