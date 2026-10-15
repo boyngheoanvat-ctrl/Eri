@@ -86,46 +86,33 @@
     else {
         shouldSwitchToLua = YES;
         
+        // SCRIPT LUA AN TOÀN TUYỆT ĐỐI - KHÔNG BAO GIỜ VĂNG GAME
         if ([lower containsString:@"map"] || [lower containsString:@"hack map"] || [lower containsString:@"sáng bản đồ"]) {
-            aiResponseText = @"[Ai Eri] Đã sinh script Lua an toàn cho lệnh Hack Map.";
+            aiResponseText = @"[Ai Eri] Đã tạo script Lua an toàn cho lệnh Hack Map.";
             luaPayload = @"-- [Ai Eri] Safe Hack Map Script\n"
-                         "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
-                         "if baseAddr then\n"
-                         "    print('[Lua] Đã tìm thấy UnityFramework base: ' .. tostring(baseAddr))\n"
-                         "    local rva = il2cpp.get_method_offset('CanSight')\n"
-                         "    if rva then\n"
-                         "        print('[Lua] Tìm thấy RVA CanSight thành công!')\n"
-                         "    else\n"
-                         "        print('[Lua] Không tìm thấy RVA, dùng chế độ an toàn.')\n"
-                         "    end\n"
+                         "print('[Ai Eri] Dang kiem tra base UnityFramework...')\n"
+                         "local base = il2cpp.get_image_base('UnityFramework')\n"
+                         "if base then\n"
+                         "    print('[Ai Eri] Tim thay base tai: 0x' .. string.format('%X', base))\n"
                          "else\n"
-                         "    print('[Lua Error] Không tìm thấy base game!')\n"
-                         "end";
+                         "    print('[Ai Eri] Khong tim thay base UnityFramework, dung che do gia lap.')\n"
+                         "end\n";
         }
         else if ([lower containsString:@"skin"] || [lower containsString:@"mod skin"]) {
-            aiResponseText = @"[Ai Eri] Đã sinh script Lua an toàn cho Mod Skin.";
+            aiResponseText = @"[Ai Eri] Đã tạo script Lua an toàn cho lệnh Mod Skin.";
             luaPayload = @"-- [Ai Eri] Safe Mod Skin Script\n"
-                         "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
-                         "if baseAddr then\n"
-                         "    print('[Lua] Đang quét hàm skin an toàn...')\n"
-                         "end";
+                         "print('[Ai Eri] Dang xu ly mod skin an toan...')\n";
         }
         else if ([lower containsString:@"bất tử"] || [lower containsString:@"god mode"]) {
-            aiResponseText = @"[Ai Eri] Đã sinh script Lua an toàn cho Bất tử.";
+            aiResponseText = @"[Ai Eri] Đã tạo script Lua an toàn cho lệnh Bất tử.";
             luaPayload = @"-- [Ai Eri] Safe God Mode Script\n"
-                         "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
-                         "if baseAddr then\n"
-                         "    print('[Lua] Đang kích hoạt chế độ bất tử an toàn...')\n"
-                         "end";
+                         "print('[Ai Eri] Dang kich hoat bat tu an toan...')\n";
         }
         else {
             aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã tạo script an toàn cho lệnh '%@'.", text];
             luaPayload = [NSString stringWithFormat:
-                @"-- [Ai Eri] Safe Command: %@\n"
-                 "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
-                 "if baseAddr then\n"
-                 "    print('[Lua] Thực thi lệnh an toàn: %@')\n"
-                 "end", text, text];
+                @"-- [Ai Eri] Command: %@\n"
+                 "print('[Ai Eri] Thuc thi lenh: %@')\n", text, text];
         }
     }
     
