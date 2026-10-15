@@ -22,8 +22,9 @@ static const NSTimeInterval kRequestTimeout = 180;
         NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
         cfg.timeoutIntervalForRequest = kRequestTimeout;
         cfg.timeoutIntervalForResource = kRequestTimeout + 30;
-        instance.session = [NSURLSession sessionWithConfiguration:cfg];
-
+        instance.session = [NSURLSession sessionWithConfiguration:cfg
+                                                         delegate:nil
+                                                    delegateQueue:nil];
         instance.baseURL = @"https://api.groq.com/openai/v1/chat/completions";
         instance.apiKey  = @"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";
         instance.model   = @"openai/gpt-oss-120b";
@@ -53,7 +54,7 @@ static const NSTimeInterval kRequestTimeout = 180;
     if (self.cancelled) return;
 
     if (self.toolLoopCount > kMaxToolLoop) {
-        NSLog(@"[AIProvider] Tool loop limit reached (%ld)", (long)self.toolLoopCount);
+        NSLog(@"[AIProvider] Tool loop limit reached");
         [self callDelegate:delegate error:
             [NSError errorWithDomain:@"AI" code:-10
                 userInfo:@{NSLocalizedDescriptionKey:
@@ -76,14 +77,12 @@ static const NSTimeInterval kRequestTimeout = 180;
     NSError *jsonErr = nil;
     NSData *bodyData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonErr];
     if (jsonErr || !bodyData) {
-        NSLog(@"[AIProvider] JSON serialize error: %@", jsonErr);
-        [self callDelegate:delegate error:jsonErr ?: [NSError errorWithDomain:@"AI"
-            code:-11 userInfo:@{NSLocalizedDescriptionKey: @"Request JSON invalid"}]];
+        [self callDelegate:delegate error:jsonErr];
         return;
     }
 
-    NSLog(@"[AIProvider] → POST %@ (loop=%ld, tools=%lu, msgs=%lu)",
-          self.model, (long)self.toolLoopCount,
+    NSLog(@"[AIProvider] → POST (loop=%ld, tools=%lu, msgs=%lu)",
+          (long)self.toolLoopCount,
           (unsigned long)tools.count, (unsigned long)messages.count);
 
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:
@@ -93,7 +92,6 @@ static const NSTimeInterval kRequestTimeout = 180;
     [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
     [req setValue:[NSString stringWithFormat:@"Bearer %@", self.apiKey]
         forHTTPHeaderField:@"Authorization"];
-    [req setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     req.HTTPBody = bodyData;
 
     __weak typeof(self) ws = self;
@@ -123,17 +121,14 @@ static const NSTimeInterval kRequestTimeout = 180;
         }
 
         NSError *parseErr = nil;
-        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data
-                                                             options:0
-                                                               error:&parseErr];
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&parseErr];
         if (!json || parseErr) {
             NSString *raw = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
             NSLog(@"[AIProvider] JSON parse error: %@\nRaw: %@", parseErr, raw);
             [ws callDelegate:delegate error:
                 [NSError errorWithDomain:@"AI" code:-21
                     userInfo:@{NSLocalizedDescriptionKey:
-                        [NSString stringWithFormat:@"Response khong phai JSON (HTTP %ld)",
-                            (long)status]}]];
+                        [NSString stringWithFormat:@"Response khong phai JSON (HTTP %ld)", (long)status]}]];
             return;
         }
 
@@ -145,7 +140,6 @@ static const NSTimeInterval kRequestTimeout = 180;
             } else if ([errObj isKindOfClass:[NSString class]]) {
                 errMsg = errObj;
             }
-            NSLog(@"[AIProvider] API error: %@", errMsg);
             [ws callDelegate:delegate error:
                 [NSError errorWithDomain:@"AI" code:-22
                     userInfo:@{NSLocalizedDescriptionKey: errMsg}]];
@@ -154,17 +148,14 @@ static const NSTimeInterval kRequestTimeout = 180;
 
         NSArray *choices = json[@"choices"];
         if (![choices isKindOfClass:[NSArray class]] || choices.count == 0) {
-            NSLog(@"[AIProvider] Response khong co choices");
             [ws callDelegate:delegate error:
                 [NSError errorWithDomain:@"AI" code:-23
                     userInfo:@{NSLocalizedDescriptionKey: @"AI khong tra ve ket qua"}]];
             return;
         }
 
-        NSDictionary *firstChoice = choices[0];
-        NSDictionary *message = firstChoice[@"message"];
+        NSDictionary *message = choices[0][@"message"];
         if (![message isKindOfClass:[NSDictionary class]]) {
-            NSLog(@"[AIProvider] Message khong hop le");
             [ws callDelegate:delegate error:
                 [NSError errorWithDomain:@"AI" code:-24
                     userInfo:@{NSLocalizedDescriptionKey: @"Response format sai"}]];
@@ -196,34 +187,21 @@ static const NSTimeInterval kRequestTimeout = 180;
                 }
                 if (![args isKindOfClass:[NSDictionary class]]) args = @{};
 
+                // ===== GỌI TOOL TRỰC TIẾP, KHÔNG DISPATCH MAIN =====
                 AITool *tool = [AITool toolNamed:toolName];
                 id result;
                 if (tool && tool.handler) {
-                    if ([NSThread isMainThread]) {
-                        @try {
-                            result = tool.handler(args);
-                        } @catch (NSException *e) {
-                            NSLog(@"[AIProvider] Tool '%@' crash: %@", toolName, e);
-                            result = @{@"error": e.reason ?: @"Tool exception"};
-                        }
-                    } else {
-                        __block id blockResult = nil;
-                        dispatch_sync(dispatch_get_main_queue(), ^{
-                            @try {
-                                blockResult = tool.handler(args);
-                            } @catch (NSException *e) {
-                                NSLog(@"[AIProvider] Tool '%@' crash: %@", toolName, e);
-                                blockResult = @{@"error": e.reason ?: @"Tool exception"};
-                            }
-                        });
-                        result = blockResult;
+                    @try {
+                        result = tool.handler(args);
+                    } @catch (NSException *e) {
+                        NSLog(@"[AIProvider] Tool '%@' exception: %@", toolName, e);
+                        result = @{@"error": e.reason ?: @"Tool exception"};
                     }
                 } else {
-                    result = @{@"error": [NSString stringWithFormat:@"Tool '%@' khong ton tai",
-                                          toolName]};
+                    result = @{@"error": [NSString stringWithFormat:@"Tool '%@' khong ton tai", toolName]};
                 }
 
-                NSLog(@"[AIProvider]   → %@(%@) = %@", toolName, args, result);
+                NSLog(@"[AIProvider]   → %@ done", toolName);
 
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if ([delegate respondsToSelector:@selector(aiDidCallTool:args:result:)]) {
@@ -249,7 +227,7 @@ static const NSTimeInterval kRequestTimeout = 180;
             content = @"[AI khong tra loi]";
         }
 
-        NSLog(@"[AIProvider] ← Final: %@", content);
+        NSLog(@"[AIProvider] ← Final");
 
         dispatch_async(dispatch_get_main_queue(), ^{
             if ([delegate respondsToSelector:@selector(aiStreamDidReceiveText:)]) {
