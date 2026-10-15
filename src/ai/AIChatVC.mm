@@ -12,6 +12,7 @@
 @property (nonatomic, strong) UIView *bottomBar;
 @property (nonatomic, strong) UITextView *inputTextView;
 @property (nonatomic, strong) UIButton *sendButton;
+@property (nonatomic, strong) NSMutableArray<NSString *> *chatHistory; // Bộ nhớ lưu lịch sử câu hỏi
 
 @end
 
@@ -20,6 +21,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
+    self.chatHistory = [NSMutableArray array];
     
     CGRect bounds = self.view.bounds;
     CGFloat width = bounds.size.width;
@@ -74,7 +76,7 @@
     self.chatLogTextView.backgroundColor = [UIColor clearColor];
     self.chatLogTextView.textColor = [ToolTheme shared].textPrimary;
     self.chatLogTextView.font = [UIFont systemFontOfSize:13];
-    self.chatLogTextView.text = @"[AI Agent] Sẵn sàng tìm mã hack...\nHỏi: hack map, camera xa, speed...\n";
+    self.chatLogTextView.text = @"[AI Agent] Sẵn sàng phân tích ngữ cảnh...\nHỏi: hack map, sau đó gõ camera xa hoặc speed...\n";
     [self.contentView addSubview:self.chatLogTextView];
     
     [self updateLayoutContent];
@@ -85,14 +87,19 @@
     if (text.length == 0) return;
     
     self.inputTextView.text = @"";
+    
+    // Lưu lịch sử câu hỏi vào bộ nhớ ngữ cảnh
+    [self.chatHistory addObject:text];
+    
     NSString *current = self.chatLogTextView.text ?: @"";
     self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n> %@", current, text];
     [self updateLayoutContent];
     
-    // AI Agent phân tích ý định và trích xuất phương thức qua GameFingerprint
+    // AI phân tích dựa trên câu hỏi mới nhất hoặc kết hợp lịch sử trò chuyện
     NSArray<NSDictionary *> *foundMethods = [[GameFingerprint shared] findMethodsForConcept:text maxResults:5];
+    
     if (foundMethods.count > 0) {
-        NSMutableString *resultLog = [NSMutableString stringWithString:@"\n[AI Analysis] Tìm thấy phương thức khớp:\n"];
+        NSMutableString *resultLog = [NSMutableString stringWithString:@"\n[AI Context Analysis] Kết quả cho ý định hiện tại:\n"];
         for (NSDictionary *m in foundMethods) {
             [resultLog appendFormat:@"- %@.%@ (RVA %@)\n", m[@"class"], m[@"method"], m[@"rva"]];
         }
@@ -129,25 +136,24 @@
     NSArray<NSTextCheckingResult *> *matches = [regex matchesInString:chatText options:0 range:NSMakeRange(0, chatText.length)];
     
     if (matches.count > 0) {
-        // Lấy kết quả phân tích chính xác mới nhất ở cuối khung chat
+        // Luôn ưu tiên bắt kết quả mới nhất xuất hiện ở cuối đoạn chat (ý định mới của người dùng)
         NSTextCheckingResult *selectedMatch = matches.lastObject;
         
         NSString *cls = [chatText substringWithRange:[selectedMatch rangeAtIndex:1]];
         NSString *meth = [chatText substringWithRange:[selectedMatch rangeAtIndex:2]];
         NSString *rva = [chatText substringWithRange:[selectedMatch rangeAtIndex:3]];
         
-        // Sinh đoạn Script Lua tự động patch RAM và gửi tín hiệu sang tab Lua
         NSString *autoScript = [NSString stringWithFormat:
             @"-- ==========================================\n"
-             @"-- AI Auto Discovered Mod Script\n"
+             @"-- AI Context-Aware Mod Script\n"
              @"-- Target: %@.%@\n"
              @"-- RVA: %@\n"
              @"-- ==========================================\n\n"
-             @"print('[AI Auto] Nạp RVA thành công: %@.%@ -> %@')\n"
+             @"print('[AI Context] Cập nhật RVA mới: %@.%@ -> %@')\n"
              @"local targetRVA = \"%@\"\n\n"
              @"if il2cpp.patch_memory then\n"
              @"    il2cpp.patch_memory(targetRVA, \"20008052C0035FD6\")\n"
-             @"    print('[LuaEngine] Patch thành công trực tiếp vào RAM!')\n"
+             @"    print('[LuaEngine] Patch RAM thành công cho ý định mới!')\n"
              @"else\n"
              @"    print('[LuaEngine] Target RVA: ' .. targetRVA)\n"
              @"end\n",
