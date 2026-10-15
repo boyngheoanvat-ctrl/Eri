@@ -40,7 +40,6 @@ static NSLock *gScanLock = nil;
         int asmCount = (int)domain->assembly_count;
         if (asmCount <= 0 || asmCount > 10000) return;
 
-        // ========== DÒ CLASS ENTITY ==========
         Il2CppClass *best = NULL;
         NSUInteger bestScore = 0;
         NSString *bestName = nil;
@@ -93,14 +92,13 @@ static NSLock *gScanLock = nil;
             }
         }
 
-        if (best && bestScore >= 30) {
+        if (best && bestScore >= 20) {
             gEntityClass = best;
             gEntityClassName = bestName;
             NSLog(@"[GameFingerprint] entity class = %@ (score=%lu)",
                   bestName, (unsigned long)bestScore);
         }
 
-        // ========== DÒ TÊN GAME ==========
         NSString *bid = [[NSBundle mainBundle] bundleIdentifier].lowercaseString ?: @"";
         if ([bid containsString:@"mobilelegends"] || [bid containsString:@"moonton"]) {
             gDetectedGame = @"MLBB";
@@ -156,11 +154,29 @@ static NSLock *gScanLock = nil;
         if (!mName) continue;
         NSString *ml = mName.lowercaseString;
 
-        if ([ml containsString:@"position"] || [ml isEqualToString:@"get_pos"]) hasPosition = YES;
-        if ([ml containsString:@"hp"] || [ml containsString:@"health"] || [ml containsString:@"life"]) hasHp = YES;
-        if ([ml isEqualToString:@"get_name"] || [ml containsString:@"rolename"] ||
-            [ml containsString:@"playername"] || [ml isEqualToString:@"get_nickname"]) hasName = YES;
+        // Position — nới rộng keyword
+        if ([ml containsString:@"position"] ||
+            [ml containsString:@"getpos"] ||
+            [ml containsString:@"get_pos"] ||
+            [ml containsString:@"worldpos"] ||
+            [ml containsString:@"vec3"] ||
+            [ml isEqualToString:@"get_transform"]) hasPosition = YES;
+
+        // Health
+        if ([ml containsString:@"hp"] ||
+            [ml containsString:@"health"] ||
+            [ml containsString:@"life"]) hasHp = YES;
+
+        // Name
+        if ([ml isEqualToString:@"get_name"] ||
+            [ml containsString:@"rolename"] ||
+            [ml containsString:@"playername"] ||
+            [ml isEqualToString:@"get_nickname"]) hasName = YES;
+
+        // Team
         if ([ml containsString:@"team"] || [ml containsString:@"camp"]) hasTeam = YES;
+
+        // Dead
         if ([ml containsString:@"death"] || [ml containsString:@"dead"] ||
             [ml containsString:@"alive"] || [ml containsString:@"die"]) hasDead = YES;
     }
@@ -199,8 +215,10 @@ static NSLock *gScanLock = nil;
     if (!gScanned) [self scan];
     if (max <= 0) max = 20;
 
+    // KHÔNG scan mọi class nữa — tránh match sai (VD: BigInteger.op_Division)
     if (!gEntityClass) {
-        return [self scanAllClassesForConcept:concept maxResults:max];
+        NSLog(@"[GameFingerprint] No entity class — skip scan");
+        return @[];
     }
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
@@ -241,6 +259,7 @@ static NSLock *gScanLock = nil;
         }];
     }
 
+    // Nếu có keywords → sort (match trước)
     NSArray *keywords = [self keywordsForConcept:concept];
     if (keywords.count > 0) {
         NSMutableArray *sorted = [NSMutableArray array];
@@ -275,102 +294,55 @@ static NSLock *gScanLock = nil;
 - (NSArray<NSString *> *)keywordsForConcept:(NSString *)concept {
     NSString *c = [concept lowercaseString];
 
+    // Map/Vision — keyword CHÍNH XÁC, không dùng "view"/"show"/"hide"/"see" ngắn
     if ([c containsString:@"map"] || [c containsString:@"vision"] ||
-        [c containsString:@"sight"] || [c containsString:@"visible"]) {
-        return @[@"sight", @"vision", @"visible", @"see", @"view", @"show", @"hide"];
+        [c containsString:@"sight"] || [c containsString:@"visible"] ||
+        [c containsString:@"nhin"] || [c containsString:@"xuyen"]) {
+        return @[
+            @"cansight", @"calcvisible", @"refreshvisible", @"setvisible",
+            @"cansse", @"isvisible", @"hasvision", @"isinsight",
+            @"setvision", @"checkvisible", @"updatevisible", @"onseeentity",
+            @"sightrange", @"visionrange", @"visible",
+        ];
     }
-    if ([c containsString:@"speed"] || [c containsString:@"move"]) {
-        return @[@"speed", @"move", @"velocity", @"run"];
+
+    if ([c containsString:@"speed"] || [c containsString:@"move"] ||
+        [c containsString:@"toc"]) {
+        return @[@"speed", @"movespeed", @"runspd", @"movespd", @"velocity", @"runspeed"];
     }
-    if ([c containsString:@"damage"] || [c containsString:@"attack"]) {
-        return @[@"damage", @"attack", @"hit", @"atk"];
+
+    if ([c containsString:@"damage"] || [c containsString:@"attack"] ||
+        [c containsString:@"satthuong"]) {
+        return @[@"damage", @"attack", @"atk", @"hitdamage"];
     }
-    if ([c containsString:@"health"] || [c containsString:@"hp"] || [c containsString:@"mau"]) {
-        return @[@"hp", @"health", @"life", @"heal"];
+
+    if ([c containsString:@"health"] || [c containsString:@"hp"] ||
+        [c containsString:@"mau"]) {
+        return @[@"hp", @"health", @"maxhp", @"hpmax", @"life", @"heal"];
     }
+
     if ([c containsString:@"mana"] || [c containsString:@"mp"]) {
-        return @[@"mp", @"mana", @"energy"];
+        return @[@"mana", @"mp", @"maxmp", @"energy"];
     }
-    if ([c containsString:@"money"] || [c containsString:@"gold"]) {
-        return @[@"gold", @"money", @"coin", @"cash"];
+
+    if ([c containsString:@"money"] || [c containsString:@"gold"] ||
+        [c containsString:@"tien"] || [c containsString:@"vang"]) {
+        return @[@"gold", @"money", @"coin", @"cash", @"diamond"];
     }
-    if ([c containsString:@"cooldown"] || [c containsString:@"cd"]) {
-        return @[@"cooldown", @"cd", @"skill"];
+
+    if ([c containsString:@"cooldown"] || [c containsString:@"cd"] ||
+        [c containsString:@"hoi"]) {
+        return @[@"cooldown", @"cd", @"skillcd", @"resetcd"];
     }
+
     return @[];
 }
 
+#pragma mark - Fallback (không dùng nữa)
+
 - (NSArray<NSDictionary *> *)scanAllClassesForConcept:(NSString *)concept
                                            maxResults:(NSInteger)max {
-    NSArray *keywords = [self keywordsForConcept:concept];
-    if (keywords.count == 0) return @[];
-
-    IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (!r) return @[];
-    if (![r resolve]) return @[];
-    [r attachCurrentThread];
-
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain || !domain->assemblies) return @[];
-
-    NSMutableArray *found = [NSMutableArray array];
-    int maxAsm = MIN((int)domain->assembly_count, 5);
-
-    for (int a = 0; a < maxAsm && found.count < (NSUInteger)max * 2; a++) {
-        Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
-        Il2CppImage *image = [r assembly_get_image:asm_];
-        if (!image) continue;
-
-        size_t count = [r image_get_class_count:image];
-        size_t limit = MIN(count, (size_t)1000);
-
-        for (size_t i = 0; i < limit && found.count < (NSUInteger)max * 2; i++) {
-            @autoreleasepool {
-                Il2CppClass *klass = [r image_get_class:image index:i];
-                if (!klass) continue;
-                const char *cn = [r class_get_name:klass];
-                if (!cn) continue;
-                NSString *className = [NSString stringWithUTF8String:cn];
-                if (!className) continue;
-                NSString *cl = className.lowercaseString;
-
-                if ([cl containsString:@"util"] ||
-                    [cl containsString:@"helper"] ||
-                    [cl containsString:@"config"]) continue;
-
-                uint16_t mCount = 0;
-                NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
-                for (uint16_t j = 0; j < mCount; j++) {
-                    MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
-                    if (!m) continue;
-                    const char *mn = [r method_get_name:m];
-                    if (!mn) continue;
-                    NSString *mName = [NSString stringWithUTF8String:mn];
-                    if (!mName) continue;
-                    NSString *ml = mName.lowercaseString;
-
-                    for (NSString *kw in keywords) {
-                        if ([ml containsString:kw]) {
-                            void *ptr = [r method_get_pointer:m];
-                            uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
-                            [found addObject:@{
-                                @"class": className,
-                                @"method": mName,
-                                @"rva": [NSString stringWithFormat:@"0x%llX", rva],
-                            }];
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (found.count > (NSUInteger)max) {
-        [found removeObjectsInRange:NSMakeRange(max, found.count - max)];
-    }
-    return found;
+    return @[];
 }
 
 @end
