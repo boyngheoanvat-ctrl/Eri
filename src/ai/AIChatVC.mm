@@ -86,7 +86,6 @@
     else {
         shouldSwitchToLua = YES;
         
-        // BỌC pcall AN TOÀN TUYỆT ĐỐI - KHÔNG BAO GIỜ VĂNG GAME KHI HACK MAP
         if ([lower containsString:@"map"] || [lower containsString:@"hack map"] || [lower containsString:@"sáng bản đồ"]) {
             aiResponseText = @"[Ai Eri] Đã sinh script Lua an toàn cho lệnh Hack Map (bọc pcall chống văng).";
             luaPayload = @"-- [Ai Eri] Safe Hack Map Script\n"
@@ -147,14 +146,13 @@
             if (targetToolVC) {
                 [targetToolVC selectTab:4];
                 if ([targetToolVC respondsToSelector:@selector(luaVC)]) {
-                    id luaVC = [targetToolVC valueForKey:@"luaVC"];
+                    // Ép kiểu tường minh thành LuaVC để nhận diện đúng method setScriptContent:
+                    LuaVC *luaVC = (LuaVC *)[targetToolVC valueForKey:@"luaVC"];
                     if (luaVC) {
                         if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) {
                             [luaVC loadViewIfNeeded];
                         }
-                        if ([luaVC respondsToSelector:@selector(setScriptContent:)]) {
-                            [luaVC setScriptContent:luaPayload];
-                        }
+                        [luaVC setScriptContent:luaPayload];
                     }
                 }
             }
