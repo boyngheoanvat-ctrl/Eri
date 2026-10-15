@@ -4,27 +4,29 @@
 #include <string.h>
 #include <stdio.h>
 
-#pragma mark - Symbol map (ĐIỀN TỪ nm -gU UnityFramework)
+#pragma mark - Symbol map
 
 static const struct { const char *base; const char *mangled; } kSymbolMap[] = {
-    // Ví dụ — THAY bằng output nm thật của bạn:
-    // {"il2cpp_domain_get",             "__Z16il2cpp_domain_getv"},
-    // {"il2cpp_image_get_class_count",  "__Z28il2cpp_image_get_class_countPK11Il2CppImage"},
-    // {"il2cpp_image_get_class",        "__Z29il2cpp_image_get_classPK11Il2CppImagem"},
-    // {"il2cpp_class_get_methods",      "__Z23il2cpp_class_get_methodsP11Il2CppClassPPv"},
-    // {"il2cpp_class_get_fields",       "__Z22il2cpp_class_get_fieldsP11Il2CppClassPPv"},
-    // {"il2cpp_class_get_properties",   "__Z26il2cpp_class_get_propertiesP11Il2CppClassPPv"},
-    // {"il2cpp_assembly_get_image",     "__Z23il2cpp_assembly_get_imagePK14Il2CppAssembly"},
-    // {"il2cpp_image_get_name",         "__Z19il2cpp_image_get_namePK11Il2CppImage"},
-    // {"il2cpp_class_get_name",         "__Z20il2cpp_class_get_nameP11Il2CppClass"},
-    // {"il2cpp_class_get_namespace",    "__Z25il2cpp_class_get_namespaceP11Il2CppClass"},
-    // {"il2cpp_class_get_static_field_data", "__Z32il2cpp_class_get_static_field_dataP11Il2CppClass"},
-    // {"il2cpp_method_get_name",        "__Z21il2cpp_method_get_namePK10MethodInfo"},
-    // {"il2cpp_method_get_pointer",     "__Z25il2cpp_method_get_pointerPK10MethodInfo"},
-    // {"il2cpp_method_get_token",       "__Z22il2cpp_method_get_tokenPK10MethodInfo"},
-    // {"il2cpp_field_get_name",         "__Z20il2cpp_field_get_nameP9FieldInfo"},
-    // {"il2cpp_field_get_offset",       "__Z22il2cpp_field_get_offsetP9FieldInfo"},
-    // {"il2cpp_type_get_name",          "__Z19il2cpp_type_get_namePK10Il2CppType"},
+    {"il2cpp_domain_get",             "__Z16il2cpp_domain_getv"},
+    {"il2cpp_image_get_class_count",  "__Z28il2cpp_image_get_class_countPK11Il2CppImage"},
+    {"il2cpp_image_get_class",        "__Z29il2cpp_image_get_classPK11Il2CppImagem"},
+    {"il2cpp_class_get_methods",      "__Z23il2cpp_class_get_methodsP11Il2CppClassPPv"},
+    {"il2cpp_class_get_fields",       "__Z22il2cpp_class_get_fieldsP11Il2CppClassPPv"},
+    {"il2cpp_class_get_properties",   "__Z26il2cpp_class_get_propertiesP11Il2CppClassPPv"},
+    {"il2cpp_assembly_get_image",     "__Z23il2cpp_assembly_get_imagePK14Il2CppAssembly"},
+    {"il2cpp_image_get_name",         "__Z19il2cpp_image_get_namePK11Il2CppImage"},
+    {"il2cpp_class_get_name",         "__Z20il2cpp_class_get_nameP11Il2CppClass"},
+    {"il2cpp_class_get_namespace",    "__Z25il2cpp_class_get_namespaceP11Il2CppClass"},
+    {"il2cpp_class_get_parent",       "__Z22il2cpp_class_get_parentP11Il2CppClass"},
+    {"il2cpp_class_get_static_field_data", "__Z32il2cpp_class_get_static_field_dataP11Il2CppClass"},
+    {"il2cpp_method_get_name",        "__Z21il2cpp_method_get_namePK10MethodInfo"},
+    {"il2cpp_method_get_pointer",     "__Z25il2cpp_method_get_pointerPK10MethodInfo"},
+    {"il2cpp_method_get_token",       "__Z22il2cpp_method_get_tokenPK10MethodInfo"},
+    {"il2cpp_field_get_name",         "__Z20il2cpp_field_get_nameP9FieldInfo"},
+    {"il2cpp_field_get_offset",       "__Z22il2cpp_field_get_offsetP9FieldInfo"},
+    {"il2cpp_field_get_token",        "__Z21il2cpp_field_get_tokenP9FieldInfo"},
+    {"il2cpp_type_get_name",          "__Z19il2cpp_type_get_namePK10Il2CppType"},
+    {"il2cpp_property_get_name",      "__Z24il2cpp_property_get_nameP13PropertyInfo"},
     {NULL, NULL}
 };
 
