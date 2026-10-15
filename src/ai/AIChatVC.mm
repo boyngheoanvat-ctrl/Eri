@@ -9,7 +9,7 @@
 @property (nonatomic, strong) UITextView *inputTextView;
 @property (nonatomic, strong) UIButton *sendButton;
 @property (nonatomic, strong) NSMutableArray *messages;
-@property (nonatomic, strong) UILabel *chatLogLabel; // Hoặc UIStackView / UITableView chứa nội dung chat
+@property (nonatomic, strong) UILabel *chatLogLabel;
 
 @end
 
@@ -17,7 +17,8 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithRed:0.12 green:0.12. magnitude:0.14 alpha:1.0]; // Điều chỉnh theo màu theme của bạn
+    // Đã sửa lỗi sai cú pháp 0.12. thành 0.12
+    self.view.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.14 alpha:1.0];
     
     self.messages = [NSMutableArray array];
     
@@ -36,24 +37,26 @@
     self.chatLogLabel.textColor = [UIColor whiteColor];
     self.chatLogLabel.font = [UIFont systemFontOfSize:13];
     [self.contentView addSubview:self.chatLogLabel];
-    
-    // Thêm các thành phần giao diện khác như inputTextView, sendButton... tại đây
+}
+
+#pragma mark - Required Protocol Methods
+
+- (void)reload {
+    // Thêm phương thức reload để khắc phục cảnh báo thiếu implementation [-Wincomplete-implementation]
+    [self.chatScrollView setNeedsLayout];
+    [self.contentView setNeedsLayout];
 }
 
 #pragma mark - Fix Thanh Trượt Xuống Đáy (Scroll to Bottom)
 
 - (void)scrollToBottomAnimated:(BOOL)animated {
-    // Đảm bảo layout đã được cập nhật xong trước khi tính toán chiều cao
     [self.view layoutIfNeeded];
     [self.contentView layoutIfNeeded];
     
     UIScrollView *scrollView = self.chatScrollView;
     if (!scrollView) return;
     
-    // Tính toán khoảng cách tối đa cần trượt dựa trên tổng chiều cao nội dung và phần đệm bên dưới
     CGFloat contentHeight = self.chatLogLabel.frame.origin.y + self.chatLogLabel.frame.size.height + 20;
-    
-    // Cập nhật lại contentSize của scrollView nếu dùng custom layout
     scrollView.contentSize = CGSizeMake(scrollView.bounds.size.width, MAX(contentHeight, scrollView.bounds.size.height));
     
     CGFloat bottomOffset = scrollView.contentSize.height - scrollView.bounds.size.height + scrollView.contentInset.bottom;
@@ -65,11 +68,9 @@
 #pragma mark - AIStreamDelegate (Nhận dữ liệu từ AI & Tool)
 
 - (void)aiStreamDidReceiveText:(NSString *)text {
-    // Cập nhật nội dung tin nhắn mới vào giao diện chat
     NSString *currentText = self.chatLogLabel.text ?: @"";
     self.chatLogLabel.text = [NSString stringWithFormat:@"%@\n%@", currentText, text];
     
-    // Tự động co giãn frame của label theo nội dung text
     CGSize size = [self.chatLogLabel sizeThatFits:CGSizeMake(self.chatScrollView.bounds.size.width - 24, CGFLOAT_MAX)];
     CGRect frame = self.chatLogLabel.frame;
     frame.size.height = size.height;
@@ -77,14 +78,12 @@
     
     self.contentView.frame = CGRectMake(0, 0, self.chatScrollView.bounds.size.width, MAX(size.height + 40, self.chatScrollView.bounds.size.height));
     
-    // Đưa thanh trượt xuống đáy sau một khoảng trễ ngắn để đảm bảo render hoàn tất
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self scrollToBottomAnimated:YES];
     });
 }
 
 - (void)aiStreamDidComplete {
-    // Hoàn tất quá trình phản hồi
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self scrollToBottomAnimated:YES];
     });
@@ -100,7 +99,6 @@
 }
 
 - (void)aiDidCallTool:(NSString *)toolName args:(NSDictionary *)args result:(id)result {
-    // Khi tool trả về kết quả, hiển thị và tự động trượt xuống đáy
     NSString *toolLog = [NSString stringWithFormat:@"\n[tool] %@ -> hoàn tất", toolName];
     self.chatLogLabel.text = [NSString stringWithFormat:@"%@\n%@", self.chatLogLabel.text ?: @"", toolLog];
     
