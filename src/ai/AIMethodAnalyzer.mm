@@ -24,12 +24,16 @@
     void *ptr = [r method_get_pointer:method];
     if (!ptr) return @{@"error": @"Method pointer null"};
 
+    // Dùng API thay vì deref struct
+    uint32_t flags = [r method_get_flags:method];
+    BOOL isStatic = (flags & 0x0010) != 0;
+
     return @{
         @"class": className,
         @"method": methodName,
         @"address": [NSString stringWithFormat:@"0x%llX", (uint64_t)(uintptr_t)ptr],
-        @"is_static": @((method->flags & 0x0010) != 0),
-        @"param_count": @(method->parameter_count)
+        @"is_static": @(isStatic),
+        @"param_count": @(0)
     };
 }
 
@@ -74,24 +78,31 @@
     if (!domain) return NULL;
 
     NSString *lower = className.lowercaseString;
-    for (int a = 0; a < domain->assembly_count; a++) {
+
+    if (!domain->assemblies) return NULL;
+    int asmCount = (int)domain->assembly_count;
+    if (asmCount <= 0) return NULL;
+
+    for (int a = 0; a < asmCount; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
         if (!asm_) continue;
+        if ((uintptr_t)asm_ < 0x1000) continue;
 
         Il2CppImage *image = [r assembly_get_image:asm_];
         if (!image) continue;
-
-        const char *imgNameC = [r image_get_name:image];
-        if (!imgNameC) continue;
+        if ((uintptr_t)image < 0x1000) continue;
 
         size_t count = [r image_get_class_count:image];
         for (size_t i = 0; i < count; i++) {
             Il2CppClass *klass = [r image_get_class:image index:i];
             if (!klass) continue;
+            if ((uintptr_t)klass < 0x1000) continue;
+
             const char *cname = [r class_get_name:klass];
             if (!cname) continue;
             NSString *n = [NSString stringWithUTF8String:cname];
             if (!n) continue;
+
             if ([n.lowercaseString isEqualToString:lower]) return klass;
         }
     }
@@ -108,6 +119,8 @@
     for (uint16_t j = 0; j < mCount; j++) {
         MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
         if (!m) continue;
+        if ((uintptr_t)m < 0x1000) continue;
+
         const char *mn = [r method_get_name:m];
         if (!mn) continue;
         NSString *n = [NSString stringWithUTF8String:mn];
