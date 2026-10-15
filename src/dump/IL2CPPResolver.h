@@ -2,9 +2,8 @@
 #include <stdint.h>
 
 // ============================================================
-// IL2CPP struct — OPAQUE
-// KHÔNG định nghĩa field vì layout thay đổi theo Unity version.
-// Chỉ forward-declare, mọi truy cập phải qua API function.
+// IL2CPP types — OPAQUE
+// Không định nghĩa field. Mọi truy cập phải qua API function.
 // ============================================================
 
 typedef struct Il2CppDomain    Il2CppDomain;
@@ -15,16 +14,6 @@ typedef struct Il2CppType      Il2CppType;
 typedef struct MethodInfo      MethodInfo;
 typedef struct FieldInfo       FieldInfo;
 typedef struct PropertyInfo    PropertyInfo;
-
-// Il2CppDomain — giữ định nghĩa tối thiểu vì DumperVC dùng
-// domain->assembly_count và domain->assemblies
-struct Il2CppDomain {
-    int32_t         domain_id;
-    int32_t         _pad;
-    void           *method_table;
-    Il2CppAssembly **assemblies;
-    size_t          assembly_count;
-};
 
 @interface IL2CPPResolver : NSObject
 
@@ -37,6 +26,7 @@ struct Il2CppDomain {
 
 // Domain
 - (Il2CppDomain *)domain_get;
+- (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(size_t *)count;
 
 // Image
 - (Il2CppImage  *)assembly_get_image:(Il2CppAssembly *)assembly;
