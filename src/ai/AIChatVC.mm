@@ -81,14 +81,14 @@ static const CGFloat kInputBarHeight = 50;
     [self.inputArea addSubview:topLine];
 
     self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, w - 80, 30)];
-    self.inputField.backgroundColor =    [ToolTheme self shared].background;
-    self.input.inputField.textColor = [ToolTheme shared].textPrimary;
-    self.inputField.fontField = [[ToolTheme shared] monoFont.left:11];
+    self.inputField.backgroundColor = [ToolTheme shared].background;
+    self.inputField.textColor = [ToolTheme shared].textPrimary;
+    self.inputField.font = [[ToolTheme shared] monoFont:11];
     self.inputField.layer.borderWidth = 1;
     self.inputField.layer.borderColor = [ToolTheme shared].border.CGColor;
     self.inputField.layer.cornerRadius = 4;
     self.inputField.returnKeyType = UIReturnKeySend;
-View = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
+    self.inputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
     self.inputField.leftViewMode = UITextFieldViewModeAlways;
     self.inputField.attributedPlaceholder = [[NSAttributedString alloc]
         initWithString:@"input here..."
@@ -176,7 +176,6 @@ View = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
     self.sendButton.alpha = 0.5;
     [self.spinner startAnimating];
 
-    // Chuẩn bị history + tools trên main thread (nhanh)
     NSMutableArray *history = [NSMutableArray array];
     NSInteger maxHistory = 6;
     NSInteger start = MAX(0, (NSInteger)self.items.count - maxHistory);
@@ -197,10 +196,8 @@ View = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
 
     __weak typeof(self) ws = self;
 
-    // QUAN TRỌNG: chạy hết trên background thread — không block UI
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
 
-        // 1. Detect game (có thể mất vài giây — chạy trên background)
         NSString *game = @"Unknown";
         @try {
             game = [[GameFingerprint shared] detectedGame];
@@ -209,7 +206,6 @@ View = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
             game = @"Unknown";
         }
 
-        // 2. Build messages với system prompt
         NSString *sysPrompt = [NSString stringWithFormat:
             @"Ban la AI agent hack game IL2CPP iOS. Tra loi tieng Viet ngan gon, chinh xac.\n"
             @"Game hien tai: %@\n"
@@ -236,11 +232,9 @@ View = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
         [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
         [messages addObjectsFromArray:history];
 
-        // 3. Gửi request (AIProvider có tool loop riêng)
         [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
     });
 
-    // Timeout dự phòng
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (ws.isWaiting) {
