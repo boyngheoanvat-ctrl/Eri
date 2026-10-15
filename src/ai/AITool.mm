@@ -28,6 +28,7 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
         parameters:@{@"type": @"object", @"properties": @{
             @"concept": @{@"type": @"string"}}, @"required": @[@"concept"]}
         handler:^id(NSDictionary *args) {
+            [[IL2CPPResolver shared] attachCurrentThread];
             return [AITool findConcept:args[@"concept"] ?: @""];
         }]];
 
@@ -36,6 +37,7 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
         parameters:@{@"type": @"object", @"properties": @{
             @"keyword": @{@"type": @"string"}}, @"required": @[@"keyword"]}
         handler:^id(NSDictionary *args) {
+            [[IL2CPPResolver shared] attachCurrentThread];
             return [AITool searchClasses:args[@"keyword"] ?: @""];
         }]];
 
@@ -44,6 +46,7 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
         parameters:@{@"type": @"object", @"properties": @{
             @"class_name": @{@"type": @"string"}}, @"required": @[@"class_name"]}
         handler:^id(NSDictionary *args) {
+            [[IL2CPPResolver shared] attachCurrentThread];
             return [AITool dumpClassRuntime:args[@"class_name"] ?: @""];
         }]];
 
@@ -54,6 +57,7 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
             @"keyword": @{@"type": @"string"}},
             @"required": @[@"class_name", @"keyword"]}
         handler:^id(NSDictionary *args) {
+            [[IL2CPPResolver shared] attachCurrentThread];
             return [AITool findMethodInClass:args[@"class_name"] ?: @""
                                      keyword:args[@"keyword"] ?: @""];
         }]];
@@ -65,6 +69,7 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
             @"max_results": @{@"type": @"integer"}},
             @"required": @[@"keyword"]}
         handler:^id(NSDictionary *args) {
+            [[IL2CPPResolver shared] attachCurrentThread];
             return [AITool findMethodGlobal:args[@"keyword"] ?: @""
                                  maxResults:[args[@"max_results"] integerValue] ?: 10];
         }]];
@@ -76,6 +81,7 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
             @"keyword": @{@"type": @"string"}},
             @"required": @[@"class_name", @"keyword"]}
         handler:^id(NSDictionary *args) {
+            [[IL2CPPResolver shared] attachCurrentThread];
             return [AITool findFieldInClass:args[@"class_name"] ?: @""
                                     keyword:args[@"keyword"] ?: @""];
         }]];
@@ -85,6 +91,7 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
         parameters:@{@"type": @"object", @"properties": @{
             @"method_name": @{@"type": @"string"}}, @"required": @[@"method_name"]}
         handler:^id(NSDictionary *args) {
+            [[IL2CPPResolver shared] attachCurrentThread];
             return [AITool findClassesByMethod:args[@"method_name"] ?: @""];
         }]];
 
@@ -157,7 +164,6 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
         @"concept": concept,
         @"count": @(results.count),
         @"results": results,
-        @"fingerprint": [fp fingerprintInfo],
     };
 }
 
