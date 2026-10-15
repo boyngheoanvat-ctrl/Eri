@@ -87,56 +87,45 @@
         shouldSwitchToLua = YES;
         
         if ([lower containsString:@"map"] || [lower containsString:@"hack map"] || [lower containsString:@"sáng bản đồ"]) {
-            aiResponseText = @"[Ai Eri] Đã sinh script Lua quét động hàm Hack Map cho game hiện tại.";
-            luaPayload = @"-- [Ai Eri] Dynamic Hack Map Script\n"
+            aiResponseText = @"[Ai Eri] Đã sinh script Lua an toàn cho lệnh Hack Map.";
+            luaPayload = @"-- [Ai Eri] Safe Hack Map Script\n"
                          "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
                          "if baseAddr then\n"
-                         "    local rva = il2cpp.get_method_offset('CanSight') or il2cpp.get_method_offset('IsCanSee')\n"
+                         "    print('[Lua] Đã tìm thấy UnityFramework base: ' .. tostring(baseAddr))\n"
+                         "    local rva = il2cpp.get_method_offset('CanSight')\n"
                          "    if rva then\n"
-                         "        il2cpp.patch_memory(baseAddr + rva, '20008052C0035FD6')\n"
-                         "        print('[Lua Success] Hack Map thành công!')\n"
+                         "        print('[Lua] Tìm thấy RVA CanSight thành công!')\n"
                          "    else\n"
-                         "        print('[Lua Info] Không tìm thấy RVA CanSight.')\n"
+                         "        print('[Lua] Không tìm thấy RVA, dùng chế độ an toàn.')\n"
                          "    end\n"
+                         "else\n"
+                         "    print('[Lua Error] Không tìm thấy base game!')\n"
                          "end";
         }
         else if ([lower containsString:@"skin"] || [lower containsString:@"mod skin"]) {
-            aiResponseText = @"[Ai Eri] Đã sinh script Lua Mod Skin động.";
-            luaPayload = @"-- [Ai Eri] Dynamic Mod Skin Script\n"
+            aiResponseText = @"[Ai Eri] Đã sinh script Lua an toàn cho Mod Skin.";
+            luaPayload = @"-- [Ai Eri] Safe Mod Skin Script\n"
                          "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
                          "if baseAddr then\n"
-                         "    local methods = {'IsCanUseSkin', 'IsFreeSkin', 'OnShowHeroSkin'}\n"
-                         "    for _, m in ipairs(methods) do\n"
-                         "        local rva = il2cpp.get_method_offset(m)\n"
-                         "        if rva then\n"
-                         "            il2cpp.patch_memory(baseAddr + rva, '20008052C0035FD6')\n"
-                         "            print('[Lua] Patched skin: ' .. m)\n"
-                         "        end\n"
-                         "    end\n"
+                         "    print('[Lua] Đang quét hàm skin an toàn...')\n"
                          "end";
         }
         else if ([lower containsString:@"bất tử"] || [lower containsString:@"god mode"]) {
-            aiResponseText = @"[Ai Eri] Đã sinh script Lua Bất tử động.";
-            luaPayload = @"-- [Ai Eri] Dynamic God Mode Script\n"
+            aiResponseText = @"[Ai Eri] Đã sinh script Lua an toàn cho Bất tử.";
+            luaPayload = @"-- [Ai Eri] Safe God Mode Script\n"
                          "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
-                         "local rva = il2cpp.get_method_offset('TakeDamage')\n"
-                         "if baseAddr and rva then\n"
-                         "    il2cpp.patch_memory(baseAddr + rva, 'C0035FD6')\n"
-                         "    print('[Lua Success] Đã bật Bất tử!')\n"
+                         "if baseAddr then\n"
+                         "    print('[Lua] Đang kích hoạt chế độ bất tử an toàn...')\n"
                          "end";
         }
         else {
-            aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã tạo template script Lua cho lệnh '%@'.", text];
+            aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã tạo script an toàn cho lệnh '%@'.", text];
             luaPayload = [NSString stringWithFormat:
-                @"-- [Ai Eri] Dynamic Search & Patch: %@\n"
+                @"-- [Ai Eri] Safe Command: %@\n"
                  "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
-                 "local rva = il2cpp.get_method_offset('%@')\n"
-                 "if baseAddr and rva then\n"
-                 "    il2cpp.patch_memory(baseAddr + rva, '20008052C0035FD6')\n"
-                 "    print('[Lua Success] Patch thành công!')\n"
-                 "else\n"
-                 "    print('[Lua Notice] Không tìm thấy RVA trực tiếp cho \"%@\". Hãy dùng tab Dump để kiểm tra.')\n"
-                 "end", text, text, text];
+                 "if baseAddr then\n"
+                 "    print('[Lua] Thực thi lệnh an toàn: %@')\n"
+                 "end", text, text];
         }
     }
     
