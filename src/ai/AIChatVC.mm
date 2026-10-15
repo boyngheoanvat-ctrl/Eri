@@ -79,7 +79,6 @@
     NSString *aiResponseText = @"";
     BOOL shouldSwitchToLua = NO;
     
-    // BƯỚC 6: Nhận diện chat thông minh (chat xã giao giữ nguyên ở tab AI, không chuyển tab)
     if ([lower containsString:@"hi"] || [lower containsString:@"hello"] || [lower containsString:@"chào"] || [lower containsString:@"ê"] || [lower containsString:@"alo"]) {
         aiResponseText = [NSString stringWithFormat:@"Hello người ae! Tui đã nhận được câu chào '%@'. Chúc người ae chơi game vui vẻ nha!", text];
         shouldSwitchToLua = NO;
@@ -127,7 +126,6 @@
                          "end";
         }
         else {
-            // BƯỚC 4 & 5: Chống kẹt tìm mã - Tạo template script tổng quát ngay lập tức không bị treo vòng lặp
             aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã tạo template script Lua cho lệnh '%@'.", text];
             luaPayload = [NSString stringWithFormat:
                 @"-- [Ai Eri] Dynamic Search & Patch: %@\n"
@@ -150,7 +148,6 @@
                               atScrollPosition:UITableViewScrollPositionBottom animated:YES];
     }
     
-    // CHỈ CHUYỂN SANG TAB LUA KHI ĐÓ LÀ LỆNH MOD THỰC SỰ
     if (shouldSwitchToLua && luaPayload) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIResponder *responder = self.view.window.rootViewController;
@@ -172,7 +169,10 @@
                 [targetToolVC selectTab:4];
                 if ([targetToolVC respondsToSelector:@selector(luaVC)]) {
                     LuaVC *luaVC = [targetToolVC valueForKey:@"luaVC"];
-                    if (luaVC && [luaVC respondsToSelector:@selector(setScriptContent:)]) {
+                    if (luaVC) {
+                        if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) {
+                            [luaVC loadViewIfNeeded];
+                        }
                         [luaVC setScriptContent:luaPayload];
                     }
                 }
