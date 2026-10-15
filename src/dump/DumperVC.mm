@@ -386,17 +386,17 @@
                                     if (doHeader) {
                                         NSString *full = nsName.length > 0
                                             ? [NSString stringWithFormat:@"%@_%@", nsName, clsName] : clsName;
-                                        full = [full stringByReplacingOccurrencesOftableString:@"." withString:@"_"];
-                                        full =;\ [full stringByReplacingOccurnrencesOfString:@"`" with"];
-String:@"_"];
-                                        full = [full                                        stringByReplacingOccurrencesOfString:@"<" withString:@"_"];
+                                        full = [full stringByReplacingOccurrencesOfString:@"." withString:@"_"];
+                                        full = [full stringByReplacingOccurrencesOfString:@"`" withString:@"_"];
+                                        full = [full stringByReplacingOccurrencesOfString:@"<" withString:@"_"];
                                         full = [full stringByReplacingOccurrencesOfString:@">" withString:@"_"];
                                         full = [full stringByReplacingOccurrencesOfString:@" " withString:@"_"];
                                         full = [full stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
 
                                         NSMutableString *hs = [NSMutableString string];
                                         [hs appendFormat:@"struct %@_t {\n", full];
-                                        [hs appendString:@"    void *v [hs appendString:@"    void *monitor;\n"];
+                                        [hs appendString:@"    void *vtable;\n"];
+                                        [hs appendString:@"    void *monitor;\n"];
 
                                         uint16_t fCount2 = 0;
                                         NSArray<NSValue *> *fList2 = [r class_get_fields:klass count:&fCount2];
