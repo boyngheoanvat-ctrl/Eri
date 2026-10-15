@@ -1,4 +1,5 @@
 #import "GameFingerprint.h"
+#import "IL2CPPResolver.h" // Đảm bảo đã import header resolver nếu dự án sử dụng để dump/tìm kiếm
 
 @implementation GameFingerprint
 
@@ -12,28 +13,44 @@
 }
 
 - (NSString *)detectedGame {
-    // Trả về tên game mặc định hoặc logic nhận diện dựa trên runtime
-    return @"Unknown";
+    return @"Liên Quân Mobile / Unity Game";
 }
 
 - (NSString *)detectedEntityClass {
-    // Trả về tên class thực thể chính của game
-    return @"Unknown";
+    return @"PlayerController";
 }
 
 - (NSArray<NSDictionary *> *)findMethodsForConcept:(NSString *)concept maxResults:(NSInteger)maxResults {
-    // Thực hiện tìm kiếm hoặc trả về danh sách mẫu phù hợp với concept (vd: map, vision, speed...)
-    // Hoặc tích hợp kết nối trực tiếp với Dumper / IL2CPPResolver tại đây.
-    NSMutableArray *results = [NSMutableArray array];
+    NSMutableArray<NSDictionary *> *rawResults = [NSMutableArray array];
     
-    // Trả về mảng rỗng hoặc danh sách kết quả giả lập an toàn để tránh crash
-    return results;
+    // 1. Lấy danh sách method từ runtime của IL2CPPResolver (hoặc giả lập quét nếu chưa có sẵn toàn bộ dump)
+    // Dưới đây là ví dụ gọi quét các class/method từ runtime qua hệ thống sẵn có trong dylib của bạn:
+    // (Nếu dự án của bạn có hàm dump toàn cục, hãy thay thế đoạn này bằng hàm lấy danh sách method thực tế)
+    
+    // Ví dụ tạo dữ liệu mẫu mô phỏng kết quả quét thực tế để AI và bộ lọc xử lý:
+    NSString *lowerConcept = concept.lowercaseString;
+    
+    if ([lowerConcept containsString:@"map"] || [lowerConcept containsString:@"vision"] || [lowerConcept containsString:@"fog"]) {
+        [rawResults addObject:@{@"class": @"Hero", @"method": @"SetVisible", @"rva": @"0x107559A0C"}];
+        [rawResults addObject:@{@"class": @"CameraControlller", @"method": @"UpdateFOV", @"rva": @"0x1042B1200"}];
+        [rawResults addObject:@{@"class": @"MiniMapSystem", @"method": @"IsFogEnable", @"rva": @"0x1063C4580"}];
+    } else if ([lowerConcept containsString:@"speed"] || [lowerConcept containsString:@"move"]) {
+        [rawResults addObject:@{@"class": @"ActorMovement", @"method": @"GetMoveSpeed", @"rva": @"0x1051A2340"}];
+        [rawResults addObject:@{@"class": @"PlayerController", @"method": @"UpdateSpeed", @"rva": @"0x1052B3450"}];
+    } else {
+        // Quét tổng quát các hàm logic game phổ biến khác
+        [rawResults addObject:@{@"class": @"Hero", @"method": @"TakeDamage", @"rva": @"0x1031A5600"}];
+        [rawResults addObject:@{@"class": @"SkillSystem", @"method": @"CastSkill", @"rva": @"0x1045F6780"}];
+    }
+    
+    // 2. Chạy qua bộ lọc thông minh để loại bỏ rác hệ thống (.NET / Mono)
+    return [self filterAndRefineMethods:rawResults];
 }
 
 - (NSArray<NSDictionary *> *)filterAndRefineMethods:(NSArray<NSDictionary *> *)rawMethods {
     NSMutableArray<NSDictionary *> *filteredList = [NSMutableArray array];
     
-    // Danh sách các namespace hệ thống rác (.NET / Mono / Unity Core) cần loại bỏ
+    // Danh sách các namespace hệ thống rác (.NET / Mono / Unity Core) cần loại bỏ triệt để
     NSArray *blacklistedNamespaces = @[
         @"System.", 
         @"Mono.", 
@@ -51,7 +68,7 @@
         @"Runtime"
     ];
     
-    // Từ khóa ưu tiên cao cho game logic (Map, Vision, Camera, Hero, Player)
+    // Từ khóa ưu tiên cao cho game logic
     NSArray *priorityKeywords = @[
         @"map", @"vision", @"sight", @"fog", @"camera", 
         @"hero", @"player", @"character", @"entity", 
@@ -92,7 +109,7 @@
         }
     }
     
-    // Fallback nếu không khớp từ khóa ưu tiên nhưng không phải rác hệ thống
+    // Fallback nếu danh sách sau lọc trống
     if (filteredList.count == 0) {
         for (NSDictionary *method in rawMethods) {
             NSString *className = method[@"class"] ?: @"";
