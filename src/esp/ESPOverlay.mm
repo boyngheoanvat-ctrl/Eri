@@ -21,16 +21,6 @@ typedef struct { float x, y; } Vector2_t;
     return self;
 }
 
-// Giả lập WorldToScreen đơn giản (Góc nhìn trung tâm màn hình)
-- (BOOL)worldToScreen:(Vector3_t)world pos:(Vector2_t *)screen rect:(CGRect)rect {
-    // Trong thực tế sẽ đọc Camera.main.WorldToScreenPoint hoặc Matrix
-    // Đảm bảo an toàn không crash nếu chưa hook Camera
-    if (world.x == 0 && world.y == 0 && world.z == 0) return NO;
-    screen->x = rect.size.width / 2.0f + world.x;
-    screen->y = rect.size.height / 2.0f - world.y;
-    return YES;
-}
-
 - (void)drawRect:(CGRect)rect {
     [super drawRect:rect];
     if (!self.overlayController.enabled) return;
@@ -40,10 +30,8 @@ typedef struct { float x, y; } Vector2_t;
     
     CGContextSetLineWidth(context, 2.0);
     
-    // Nếu chưa quét hoặc danh sách trống, vẽ mô phỏng khung nhận diện động
     NSArray<ESPTargetClass *> *targets = self.overlayController.detectedTargets;
     if (!targets || targets.count == 0) {
-        // Khung chờ quét động
         CGContextSetStrokeColorWithColor(context, [ToolTheme shared].accent.CGColor);
         CGFloat boxW = 100, boxH = 160;
         CGFloat boxX = (rect.size.width - boxW) / 2.0;
@@ -61,7 +49,6 @@ typedef struct { float x, y; } Vector2_t;
         return;
     }
 
-    // Vẽ danh sách Target tìm thấy tự động
     for (ESPTargetClass *target in targets) {
         CGContextSetStrokeColorWithColor(context, [ToolTheme shared].success.CGColor);
         
@@ -151,7 +138,6 @@ typedef struct { float x, y; } Vector2_t;
 - (void)show {
     self.enabled = YES;
     
-    // Tự động kích hoạt quét bộ nhớ tìm Class/Method khi bật ESP
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSArray<ESPTargetClass *> *found = [[ESPClassFinder shared] scanForPotentialTargets];
         dispatch_async(dispatch_get_main_queue(), ^{
