@@ -49,6 +49,7 @@
     self.view.frame = [UIScreen mainScreen].bounds;
     self.view.backgroundColor = [UIColor clearColor];
     [self buildUI];
+    [self initAllTabs]; // Khởi tạo sẵn tất cả các tab để chạy ngầm
     [self selectTab:0];
 }
 
@@ -88,7 +89,6 @@
     titleLine.backgroundColor = [ToolTheme shared].divider;
     [self.titleBar addSubview:titleLine];
 
-    // Tiêu đề: Mod By Eri Nguyễn
     self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(12, 0, 160, 36)];
     self.titleLabel.text = @"Mod By Eri Nguyễn";
     self.titleLabel.textColor = [ToolTheme shared].textPrimary;
@@ -162,6 +162,26 @@
     [self.resizeHandle addGestureRecognizer:resizePan];
 }
 
+// Khởi tạo sẵn tất cả các tab và load view ngầm để giữ nguyên trạng thái hoạt động
+- (void)initAllTabs {
+    self.aiVC = [[AIChatVC alloc] init];
+    self.dumpVC = [[DumperVC alloc] init];
+    self.memoryVC = [[MemoryVC alloc] init];
+    self.methodVC = [[MethodCallerVC alloc] init];
+    self.luaVC = [[LuaVC alloc] init];
+    self.espVC = [[ESPVC alloc] init];
+
+    NSArray *vcs = @[self.aiVC, self.dumpVC, self.memoryVC, self.methodVC, self.luaVC, self.espVC];
+    for (UIViewController *vc in vcs) {
+        [self addChildViewController:vc];
+        vc.view.frame = self.contentView.bounds;
+        vc.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        vc.view.hidden = YES; // Ẩn view lúc đầu nhưng vẫn giữ trong bộ nhớ chạy ngầm
+        [self.contentView addSubview:vc.view];
+        [vc didMoveToParentViewController:self];
+    }
+}
+
 - (ToolRailButton *)makeRailButton:(NSString *)title symbol:(NSString *)symbol tag:(NSInteger)tag {
     ToolRailButton *btn = [[ToolRailButton alloc] initWithTitle:title symbol:symbol];
     btn.tag = tag;
@@ -174,30 +194,27 @@
 }
 
 - (void)selectTab:(NSInteger)index {
-    if (self.currentVC) {
-        [self.currentVC.view removeFromSuperview];
-        [self.currentVC removeFromParentViewController];
-        self.currentVC = nil;
+    // Ẩn tất cả các tab thay vì xóa hẳn để giữ lại toàn bộ giá trị đang chạy ngầm
+    if (self.aiVC) self.aiVC.view.hidden = YES;
+    if (self.dumpVC) self.dumpVC.view.hidden = YES;
+    if (self.memoryVC) self.memoryVC.view.hidden = YES;
+    if (self.methodVC) self.methodVC.view.hidden = YES;
+    if (self.luaVC) self.luaVC.view.hidden = YES;
+    if (self.espVC) self.espVC.view.hidden = YES;
+
+    UIViewController *selectedVC = nil;
+    if (index == 0) { selectedVC = self.aiVC; self.subtitleLabel.text = @"Ai Eri"; }
+    else if (index == 1) { selectedVC = self.dumpVC; self.subtitleLabel.text = @"IL2CPP Dumper"; }
+    else if (index == 2) { selectedVC = self.memoryVC; self.subtitleLabel.text = @"Memory Editor"; }
+    else if (index == 3) { selectedVC = self.methodVC; self.subtitleLabel.text = @"Method Caller"; }
+    else if (index == 4) { selectedVC = self.luaVC; self.subtitleLabel.text = @"Lua Console"; }
+    else if (index == 5) { selectedVC = self.espVC; self.subtitleLabel.text = @"ESP Overlay"; }
+
+    if (selectedVC) {
+        selectedVC.view.hidden = NO; // Chỉ bật hiển thị tab được chọn
+        self.currentVC = selectedVC;
+        self.currentTab = index;
     }
-
-    UIViewController *newVC = nil;
-    if (index == 0) { if (!self.aiVC) self.aiVC = [[AIChatVC alloc] init]; newVC = self.aiVC; self.subtitleLabel.text = @"Ai Eri"; }
-    else if (index == 1) { if (!self.dumpVC) self.dumpVC = [[DumperVC alloc] init]; newVC = self.dumpVC; self.subtitleLabel.text = @"IL2CPP Dumper"; }
-    else if (index == 2) { if (!self.memoryVC) self.memoryVC = [[MemoryVC alloc] init]; newVC = self.memoryVC; self.subtitleLabel.text = @"Memory Editor"; }
-    else if (index == 3) { if (!self.methodVC) self.methodVC = [[MethodCallerVC alloc] init]; newVC = self.methodVC; self.subtitleLabel.text = @"Method Caller"; }
-    else if (index == 4) { if (!self.luaVC) self.luaVC = [[LuaVC alloc] init]; newVC = self.luaVC; self.subtitleLabel.text = @"Lua Console"; }
-    else if (index == 5) { if (!self.espVC) self.espVC = [[ESPVC alloc] init]; newVC = self.espVC; self.subtitleLabel.text = @"ESP Overlay"; }
-
-    if (!newVC) return;
-
-    [self addChildViewController:newVC];
-    newVC.view.frame = self.contentView.bounds;
-    newVC.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.contentView addSubview:newVC.view];
-    [newVC didMoveToParentViewController:self];
-
-    self.currentVC = newVC;
-    self.currentTab = index;
 
     self.aiButton.active = (index == 0);
     self.dumpButton.active = (index == 1);
@@ -255,8 +272,11 @@
     CGFloat handleSize = 28;
     self.resizeHandle.frame = CGRectMake(panelW - handleSize, panelH - handleSize, handleSize, handleSize);
 
-    if (self.currentVC) {
-        self.currentVC.view.frame = self.contentView.bounds;
+    NSArray *vcs = @[self.aiVC, self.dumpVC, self.memoryVC, self.methodVC, self.luaVC, self.espVC];
+    for (UIViewController *vc in vcs) {
+        if (vc && vc.view) {
+            vc.view.frame = self.contentView.bounds;
+        }
     }
 }
 
