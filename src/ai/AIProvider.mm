@@ -51,24 +51,14 @@ static const NSTimeInterval kRequestTimeout = 180;
                        tools:(NSArray<NSDictionary *> *)tools
                     delegate:(id<AIStreamDelegate>)delegate {
 
-    NSLog(@"[AIProvider] === sendMessagesInternal START (loop=%ld, msgs=%lu)",
-          (long)self.toolLoopCount, (unsigned long)messages.count);
-
-    if (self.cancelled) {
-        NSLog(@"[AIProvider] cancelled — abort");
-        return;
-    }
-    if (!delegate) {
-        NSLog(@"[AIProvider] delegate nil — abort");
-        return;
-    }
+    if (self.cancelled) return;
+    if (!delegate) return;
 
     if (self.toolLoopCount > kMaxToolLoop) {
-        NSLog(@"[AIProvider] Tool loop limit reached");
         [self callDelegate:delegate error:
             [NSError errorWithDomain:@"AI" code:-10
                 userInfo:@{NSLocalizedDescriptionKey:
-                    @"AI goi tool qua nhieu lan. Vui long hoi cu the hon."}]];
+                    @"AI goi tool qua nhieu lan."}]];
         return;
     }
 
@@ -87,15 +77,9 @@ static const NSTimeInterval kRequestTimeout = 180;
     NSError *jsonErr = nil;
     NSData *bodyData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonErr];
     if (jsonErr || !bodyData) {
-        NSLog(@"[AIProvider] JSON serialize error: %@", jsonErr);
-        [self callDelegate:delegate error:jsonErr ?: [NSError errorWithDomain:@"AI"
-            code:-11 userInfo:@{NSLocalizedDescriptionKey: @"Request JSON invalid"}]];
+        [self callDelegate:delegate error:jsonErr];
         return;
     }
-
-    NSLog(@"[AIProvider] → POST (loop=%ld, tools=%lu, msgs=%lu)",
-          (long)self.toolLoopCount,
-          (unsigned long)tools.count, (unsigned long)messages.count);
 
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:
         [NSURL URLWithString:self.baseURL]];
@@ -104,7 +88,6 @@ static const NSTimeInterval kRequestTimeout = 180;
     [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
     [req setValue:[NSString stringWithFormat:@"Bearer %@", self.apiKey]
         forHTTPHeaderField:@"Authorization"];
-    [req setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     req.HTTPBody = bodyData;
 
     __weak typeof(self) ws = self;
@@ -112,16 +95,9 @@ static const NSTimeInterval kRequestTimeout = 180;
     NSURLSessionDataTask *task = [self.session dataTaskWithRequest:req
         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
 
-        NSLog(@"[AIProvider] callback: error=%@ dataLen=%lu",
-              error, (unsigned long)data.length);
-
-        if (ws.cancelled) {
-            NSLog(@"[AIProvider] cancelled in callback");
-            return;
-        }
+        if (ws.cancelled) return;
 
         if (error) {
-            NSLog(@"[AIProvider] Network error: %@", error);
             [ws callDelegate:delegate error:error];
             return;
         }
@@ -130,7 +106,6 @@ static const NSTimeInterval kRequestTimeout = 180;
         if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
             status = ((NSHTTPURLResponse *)response).statusCode;
         }
-        NSLog(@"[AIProvider] HTTP status = %ld", (long)status);
 
         if (!data || data.length == 0) {
             [ws callDelegate:delegate error:
@@ -142,45 +117,28 @@ static const NSTimeInterval kRequestTimeout = 180;
 
         NSError *parseErr = nil;
         id parsed = [NSJSONSerialization JSONObjectWithData:data options:0 error:&parseErr];
-        if (!parsed || parseErr) {
-            NSString *raw = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-            NSLog(@"[AIProvider] JSON parse error: %@\nRaw: %@", parseErr, raw);
+        if (!parsed || parseErr || ![parsed isKindOfClass:[NSDictionary class]]) {
             [ws callDelegate:delegate error:
                 [NSError errorWithDomain:@"AI" code:-21
                     userInfo:@{NSLocalizedDescriptionKey:
-                        [NSString stringWithFormat:@"Response khong phai JSON (HTTP %ld)",
-                            (long)status]}]];
-            return;
-        }
-
-        if (![parsed isKindOfClass:[NSDictionary class]]) {
-            NSLog(@"[AIProvider] Response khong phai dict — type = %@",
-                  [parsed class]);
-            [ws callDelegate:delegate error:
-                [NSError errorWithDomain:@"AI" code:-25
-                    userInfo:@{NSLocalizedDescriptionKey: @"Response format khong hop le"}]];
+                        [NSString stringWithFormat:@"Response khong hop le (HTTP %ld)", (long)status]}]];
             return;
         }
 
         NSDictionary *json = (NSDictionary *)parsed;
 
-        // ===== GUARD ERROR =====
         if (json[@"error"]) {
             id errObj = json[@"error"];
             NSString *errMsg = @"Unknown error";
             if ([errObj isKindOfClass:[NSDictionary class]]) {
                 id m = errObj[@"message"];
-                if ([m isKindOfClass:[NSString class]]) {
-                    errMsg = m;
-                } else if (m) {
-                    errMsg = [m description];
-                }
+                if ([m isKindOfClass:[NSString class]]) errMsg = m;
+                else if (m) errMsg = [m description];
             } else if ([errObj isKindOfClass:[NSString class]]) {
                 errMsg = errObj;
             } else if (errObj) {
                 errMsg = [errObj description];
             }
-            NSLog(@"[AIProvider] API error: %@", errMsg);
             [ws callDelegate:delegate error:
                 [NSError errorWithDomain:@"AI" code:-22
                     userInfo:@{NSLocalizedDescriptionKey: errMsg}]];
@@ -189,7 +147,6 @@ static const NSTimeInterval kRequestTimeout = 180;
 
         NSArray *choices = json[@"choices"];
         if (![choices isKindOfClass:[NSArray class]] || choices.count == 0) {
-            NSLog(@"[AIProvider] Response khong co choices");
             [ws callDelegate:delegate error:
                 [NSError errorWithDomain:@"AI" code:-23
                     userInfo:@{NSLocalizedDescriptionKey: @"AI khong tra ve ket qua"}]];
@@ -206,7 +163,6 @@ static const NSTimeInterval kRequestTimeout = 180;
 
         id messageObj = ((NSDictionary *)firstChoice)[@"message"];
         if (![messageObj isKindOfClass:[NSDictionary class]]) {
-            NSLog(@"[AIProvider] Message khong hop le");
             [ws callDelegate:delegate error:
                 [NSError errorWithDomain:@"AI" code:-24
                     userInfo:@{NSLocalizedDescriptionKey: @"Response format sai"}]];
@@ -217,19 +173,9 @@ static const NSTimeInterval kRequestTimeout = 180;
         NSArray *toolCalls = message[@"tool_calls"];
         BOOL hasToolCalls = [toolCalls isKindOfClass:[NSArray class]] && toolCalls.count > 0;
 
+        // ============ CÓ TOOL CALLS ============
         if (hasToolCalls) {
-            NSLog(@"[AIProvider] ← %lu tool calls", (unsigned long)toolCalls.count);
-
-            NSMutableArray *newMessages = [messages mutableCopy];
-
-            // ===== NORMALIZE ASSISTANT MESSAGE =====
-            // Groq yêu cầu: content phải là string, KHÔNG được null
-            NSMutableDictionary *normMsg = [message mutableCopy];
-            id contentObj = normMsg[@"content"];
-            if (!contentObj || [contentObj isKindOfClass:[NSNull class]]) {
-                normMsg[@"content"] = @"";
-            }
-            [newMessages addObject:normMsg];
+            NSMutableArray *toolResults = [NSMutableArray array];
 
             for (NSDictionary *tc in toolCalls) {
                 if (![tc isKindOfClass:[NSDictionary class]]) continue;
@@ -237,12 +183,10 @@ static const NSTimeInterval kRequestTimeout = 180;
                 id fnObj = tc[@"function"];
                 if (![fnObj isKindOfClass:[NSDictionary class]]) continue;
 
-                NSString *toolName   = ((NSDictionary *)fnObj)[@"name"];
-                NSString *argsJson   = ((NSDictionary *)fnObj)[@"arguments"];
-                NSString *toolCallId = tc[@"id"];
+                NSString *toolName = ((NSDictionary *)fnObj)[@"name"];
+                NSString *argsJson = ((NSDictionary *)fnObj)[@"arguments"];
 
                 if (![toolName isKindOfClass:[NSString class]] || toolName.length == 0) continue;
-                if (![toolCallId isKindOfClass:[NSString class]]) toolCallId = @"";
 
                 NSDictionary *args = nil;
                 if ([argsJson isKindOfClass:[NSString class]] && argsJson.length > 0) {
@@ -251,22 +195,17 @@ static const NSTimeInterval kRequestTimeout = 180;
                 }
                 if (![args isKindOfClass:[NSDictionary class]]) args = @{};
 
-                NSLog(@"[AIProvider] → executing tool '%@' with args %@", toolName, args);
-
                 AITool *tool = [AITool toolNamed:toolName];
                 id result;
                 if (tool && tool.handler) {
                     @try {
                         result = tool.handler(args);
                     } @catch (NSException *e) {
-                        NSLog(@"[AIProvider] Tool '%@' exception: %@", toolName, e);
                         result = @{@"error": e.reason ?: @"Tool exception"};
                     }
                 } else {
                     result = @{@"error": [NSString stringWithFormat:@"Tool '%@' khong ton tai", toolName]};
                 }
-
-                NSLog(@"[AIProvider]   → tool '%@' done", toolName);
 
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if ([delegate respondsToSelector:@selector(aiDidCallTool:args:result:)]) {
@@ -274,28 +213,167 @@ static const NSTimeInterval kRequestTimeout = 180;
                     }
                 });
 
-                NSString *resultStr = [ws jsonString:result];
-                [newMessages addObject:@{
-                    @"role": @"tool",
-                    @"tool_call_id": toolCallId,
-                    @"content": resultStr ?: @"{}"
-                }];
+                [toolResults addObject:@{@"tool": toolName, @"result": result}];
             }
 
-            NSLog(@"[AIProvider] loop %ld done, sending loop %ld",
-                  (long)ws.toolLoopCount, (long)(ws.toolLoopCount + 1));
+            // ===== KHÔNG GỬI LẦN 2 — FORMAT KẾT QUẢ THÀNH TEXT =====
+            NSMutableString *answer = [NSMutableString string];
 
-            ws.toolLoopCount++;
-            [ws sendMessagesInternal:newMessages tools:tools delegate:delegate];
+            for (NSDictionary *tr in toolResults) {
+                NSString *tool = tr[@"tool"];
+                id res = tr[@"result"];
+
+                if (![res isKindOfClass:[NSDictionary class]]) continue;
+
+                NSDictionary *d = (NSDictionary *)res;
+
+                if (d[@"error"]) {
+                    [answer appendFormat:@"Tool %@ loi: %@\n", tool, d[@"error"]];
+                    continue;
+                }
+
+                if ([tool isEqualToString:@"find_concept"]) {
+                    NSArray *results = d[@"results"];
+                    NSString *game = d[@"game"] ?: @"Unknown";
+                    NSString *entityClass = d[@"entity_class"] ?: @"Unknown";
+                    NSString *concept = d[@"concept"] ?: @"";
+
+                    [answer appendFormat:@"Game: %@\n", game];
+                    [answer appendFormat:@"Entity class: %@\n", entityClass];
+
+                    if ([results isKindOfClass:[NSArray class]] && results.count > 0) {
+                        [answer appendFormat:@"Tim thay %lu method cho '%@':\n",
+                            (unsigned long)results.count, concept];
+
+                        NSInteger idx = 0;
+                        for (NSDictionary *r in results) {
+                            if (idx >= 10) break;
+                            [answer appendFormat:@"- %@.%@ (RVA %@)\n",
+                                r[@"class"] ?: @"?",
+                                r[@"method"] ?: @"?",
+                                r[@"rva"] ?: @"?"];
+                            idx++;
+                        }
+                    } else {
+                        [answer appendFormat:@"Khong tim thay method cho '%@'.\n", concept];
+                    }
+                }
+                else if ([tool isEqualToString:@"search_classes"]) {
+                    NSArray *classes = d[@"classes"];
+                    if ([classes isKindOfClass:[NSArray class]] && classes.count > 0) {
+                        [answer appendFormat:@"Tim thay %lu class:\n", (unsigned long)classes.count];
+                        NSInteger idx = 0;
+                        for (NSDictionary *c in classes) {
+                            if (idx >= 10) break;
+                            [answer appendFormat:@"- %@.%@\n",
+                                c[@"namespace"] ?: @"", c[@"name"] ?: @""];
+                            idx++;
+                        }
+                    } else {
+                        [answer appendString:@"Khong tim thay class.\n"];
+                    }
+                }
+                else if ([tool isEqualToString:@"dump_class_runtime"]) {
+                    [answer appendFormat:@"Class: %@\n", d[@"class"] ?: @""];
+                    [answer appendFormat:@"- %@ field, %@ method\n",
+                        d[@"field_count"] ?: @0, d[@"method_count"] ?: @0];
+
+                    NSArray *methods = d[@"methods"];
+                    if ([methods isKindOfClass:[NSArray class]]) {
+                        NSInteger idx = 0;
+                        for (NSDictionary *m in methods) {
+                            if (idx >= 10) break;
+                            [answer appendFormat:@"  method: %@ (RVA %@)\n",
+                                m[@"name"] ?: @"?", m[@"rva"] ?: @"?"];
+                            idx++;
+                        }
+                    }
+                }
+                else if ([tool isEqualToString:@"find_method_global"]) {
+                    NSArray *methods = d[@"methods"];
+                    if ([methods isKindOfClass:[NSArray class]] && methods.count > 0) {
+                        [answer appendFormat:@"Tim thay %lu method:\n", (unsigned long)methods.count];
+                        NSInteger idx = 0;
+                        for (NSDictionary *m in methods) {
+                            if (idx >= 10) break;
+                            [answer appendFormat:@"- %@.%@ (RVA %@)\n",
+                                m[@"class"] ?: @"?",
+                                m[@"method"] ?: @"?",
+                                m[@"rva"] ?: @"?"];
+                            idx++;
+                        }
+                    } else {
+                        [answer appendString:@"Khong tim thay method.\n"];
+                    }
+                }
+                else if ([tool isEqualToString:@"find_method_in_class"]) {
+                    NSArray *methods = d[@"methods"];
+                    [answer appendFormat:@"Class: %@\n", d[@"class"] ?: @""];
+                    if ([methods isKindOfClass:[NSArray class]] && methods.count > 0) {
+                        for (NSDictionary *m in methods) {
+                            [answer appendFormat:@"- %@ (RVA %@)\n",
+                                m[@"name"] ?: @"?", m[@"rva"] ?: @"?"];
+                        }
+                    } else {
+                        [answer appendString:@"Khong tim thay method.\n"];
+                    }
+                }
+                else if ([tool isEqualToString:@"find_field_in_class"]) {
+                    NSArray *fields = d[@"fields"];
+                    [answer appendFormat:@"Class: %@\n", d[@"class"] ?: @""];
+                    if ([fields isKindOfClass:[NSArray class]] && fields.count > 0) {
+                        for (NSDictionary *f in fields) {
+                            [answer appendFormat:@"- %@ offset %@\n",
+                                f[@"name"] ?: @"?", f[@"offset"] ?: @"?"];
+                        }
+                    } else {
+                        [answer appendString:@"Khong tim thay field.\n"];
+                    }
+                }
+                else if ([tool isEqualToString:@"find_classes_by_method"]) {
+                    NSArray *classes = d[@"classes"];
+                    [answer appendFormat:@"Method '%@' co trong %lu class:\n",
+                        d[@"method"] ?: @"", (unsigned long)classes.count];
+                    NSInteger idx = 0;
+                    for (NSDictionary *c in classes) {
+                        if (idx >= 10) break;
+                        [answer appendFormat:@"- %@ (RVA %@)\n",
+                            c[@"class"] ?: @"?", c[@"rva"] ?: @"?"];
+                        idx++;
+                    }
+                }
+                else {
+                    NSError *e;
+                    NSData *jd = [NSJSONSerialization dataWithJSONObject:d options:0 error:&e];
+                    if (jd) {
+                        NSString *js = [[NSString alloc] initWithData:jd encoding:NSUTF8StringEncoding];
+                        [answer appendFormat:@"%@: %@\n", tool, js];
+                    }
+                }
+            }
+
+            if (answer.length == 0) {
+                [answer appendString:@"Da chay tool nhung khong co ket qua."];
+            }
+
+            NSString *finalAnswer = [answer copy];
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([delegate respondsToSelector:@selector(aiStreamDidReceiveText:)]) {
+                    [delegate aiStreamDidReceiveText:finalAnswer];
+                }
+                if ([delegate respondsToSelector:@selector(aiStreamDidComplete)]) {
+                    [delegate aiStreamDidComplete];
+                }
+            });
             return;
         }
 
+        // ============ KHÔNG CÓ TOOL CALLS ============
         NSString *content = message[@"content"];
         if (![content isKindOfClass:[NSString class]] || content.length == 0) {
             content = @"[AI khong tra loi]";
         }
-
-        NSLog(@"[AIProvider] ← Final answer");
 
         dispatch_async(dispatch_get_main_queue(), ^{
             if ([delegate respondsToSelector:@selector(aiStreamDidReceiveText:)]) {
