@@ -23,6 +23,26 @@
     } else {
         [self log:@"[Lua] liblua NOT available"];
     }
+    
+    // Đăng ký nhận script tự động đẩy sang từ AI Agent
+    [[NSNotificationCenter defaultCenter] addObserver:self 
+                                             selector:@selector(handleAutoPushScript:) 
+                                                 name:@"PushScriptToLuaNotification" 
+                                               object:nil];
+}
+
+- (void)handleAutoPushScript:(NSNotification *)notification {
+    NSDictionary *userInfo = notification.userInfo;
+    NSString *script = userInfo[@"script"];
+    if (script.length > 0) {
+        self.editorView.text = script;
+        [self log:@"[Lua] Đã tự động nhận script từ AI Agent! Đang thực thi..."];
+        [self runTapped]; // Tự động chạy luôn
+    }
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)buildUI {
@@ -72,9 +92,7 @@
     self.editorView.layer.borderWidth = 1;
     self.editorView.layer.borderColor = [ToolTheme shared].border.CGColor;
     self.editorView.text = @"-- Lua Script\n"
-                           @"print(\"Hello from Lua!\")\n"
-                           @"local x = 10 + 20\n"
-                           @"print(\"x =\", x)\n";
+                           @"print(\"Hello from Lua!\")\n";
     self.editorView.autocorrectionType = UITextAutocorrectionTypeNo;
     self.editorView.autocapitalizationType = UITextAutocapitalizationTypeNone;
     [self.view addSubview:self.editorView];
@@ -114,11 +132,11 @@
     self.stopButton.frame = CGRectMake(pad * 2 + btnW, y, btnW, btnH);
     self.pasteButton.frame = CGRectMake(pad * 3 + btnW * 2, y, btnW, btnH);
     self.clearButton.frame = CGRectMake(pad * 4 + btnW * 3, y, btnW, btnH);
-    y += btnH + 28; // Bao gồm cả nhãn Editor
+    y += btnH + 28;
 
     CGFloat editorH = 180;
     self.editorView.frame = CGRectMake(pad, y, w - pad * 2, editorH);
-    y += editorH + 28; // Bao gồm cả nhãn Console
+    y += editorH + 28;
 
     CGFloat consoleH = h - y - pad;
     if (consoleH < 80) consoleH = 80;
