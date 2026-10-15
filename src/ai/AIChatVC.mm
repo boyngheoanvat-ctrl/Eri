@@ -6,7 +6,7 @@
 
 @property (nonatomic, strong) UIScrollView *chatScrollView;
 @property (nonatomic, strong) UIView *contentView;
-@property (nonatomic, strong) UITextView *chatLogTextView; // Dùng TextView hiển thị nội dung chat để copy dễ hơn
+@property (nonatomic, strong) UITextView *chatLogTextView;
 @property (nonatomic, strong) UITextView *inputTextView;
 @property (nonatomic, strong) UIButton *sendButton;
 
@@ -22,26 +22,22 @@
     CGFloat width = bounds.size.width;
     CGFloat height = bounds.size.height;
     
-    // 1. Ô nhập liệu và nút Gửi ở phía dưới cùng
+    // 1. Khung chứa input và nút gửi ở đáy (chiều cao 50px)
     CGFloat bottomBarHeight = 50;
     CGFloat inputHeight = 36;
     
-    UIView *bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, height - bottomBarHeight - 30, width, bottomBarHeight)];
+    UIView *bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, height - bottomBarHeight, width, bottomBarHeight)];
     bottomBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
     bottomBar.backgroundColor = [UIColor colorWithRed:0.18 green:0.18 blue:0.20 alpha:1.0];
     [self.view addSubview:bottomBar];
     
-    self.inputTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, (bottomBarHeight - inputHeight) / 2, width - 80, inputHeight)];
-    self.inputTextView.backgroundColor = [UIColor colorWithRed:0.25 green:0.25 blue:0.28 alpha:1.0];
-    self.inputTextView.textColor = [UIColor whiteColor];
-    self.inputTextView.font = [UIFont systemFontOfSize:14];
-    self.inputTextView.layer.cornerRadius = 6;
-    self.inputTextView.layer.masksToBounds = YES;
-    self.inputTextView.delegate = self;
-    [bottomBar addSubview:self.inputTextView];
+    // 2. Nút Send đặt ở góc phải của bottomBar (chiều rộng 60px, cách lề phải 10px)
+    CGFloat sendBtnWidth = 60;
+    CGFloat padding = 10;
     
     self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.sendButton.frame = CGRectMake(width - 65, (bottomBarHeight - inputHeight) / 2, 55, inputHeight);
+    self.sendButton.frame = CGRectMake(width - sendBtnWidth - padding, (bottomBarHeight - inputHeight) / 2, sendBtnWidth, inputHeight);
+    self.sendButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
     [self.sendButton setTitle:@"Send" forState:UIControlStateNormal];
     [self.sendButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.sendButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0];
@@ -50,8 +46,20 @@
     [self.sendButton addTarget:self action:@selector(didTapSend) forControlEvents:UIControlEventTouchUpInside];
     [bottomBar addSubview:self.sendButton];
     
-    // 2. UIScrollView chứa nội dung chat ở phía trên
-    CGFloat scrollHeight = height - bottomBarHeight - 30;
+    // 3. Ô nhập liệu (inputTextView) nằm bên trái nút Send, cách lề trái 10px
+    CGFloat inputWidth = width - sendBtnWidth - (padding * 3);
+    self.inputTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, (bottomBarHeight - inputHeight) / 2, inputWidth, inputHeight)];
+    self.inputTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleRightMargin;
+    self.inputTextView.backgroundColor = [UIColor colorWithRed:0.25 green:0.25 blue:0.28 alpha:1.0];
+    self.inputTextView.textColor = [UIColor whiteColor];
+    self.inputTextView.font = [UIFont systemFontOfSize:14];
+    self.inputTextView.layer.cornerRadius = 6;
+    self.inputTextView.layer.masksToBounds = YES;
+    self.inputTextView.delegate = self;
+    [bottomBar addSubview:self.inputTextView];
+    
+    // 4. UIScrollView hiển thị nội dung chat phía trên bottomBar
+    CGFloat scrollHeight = height - bottomBarHeight;
     self.chatScrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, width, scrollHeight)];
     self.chatScrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.chatScrollView];
@@ -59,8 +67,9 @@
     self.contentView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, scrollHeight)];
     [self.chatScrollView addSubview:self.contentView];
     
-    // 3. TextView hiển thị lịch sử chat
+    // 5. TextView chứa lịch sử chat
     self.chatLogTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 10, width - 20, scrollHeight - 20)];
+    self.chatLogTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.chatLogTextView.editable = NO;
     self.chatLogTextView.scrollEnabled = NO;
     self.chatLogTextView.backgroundColor = [UIColor clearColor];
@@ -85,7 +94,7 @@
     
     self.inputTextView.text = @"";
     
-    // Hiển thị câu hỏi của user
+    // Hiển thị câu hỏi của user lên khung chat
     NSString *current = self.chatLogTextView.text ?: @"";
     self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n> %@", current, text];
     [self updateLayoutContent];
