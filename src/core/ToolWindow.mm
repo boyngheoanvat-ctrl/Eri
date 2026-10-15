@@ -23,8 +23,6 @@
                         break;
                     }
                 }
-
-                // Fallback: lấy bất kỳ UIWindowScene nào
                 if (!scene) {
                     for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
                         if ([s isKindOfClass:[UIWindowScene class]]) {
@@ -33,7 +31,6 @@
                         }
                     }
                 }
-
                 if (scene) {
                     instance = [[ToolWindow alloc] initWithWindowScene:scene];
                 } else {
@@ -43,11 +40,9 @@
                 instance = [[ToolWindow alloc] initWithFrame:screen];
             }
         } @catch (NSException *e) {
-            NSLog(@"[ToolWindow] init scene crash: %@", e);
             instance = nil;
         }
 
-        // Fallback tuyệt đối
         if (!instance) {
             instance = [[ToolWindow alloc] initWithFrame:screen];
         }
@@ -56,22 +51,16 @@
         instance.windowLevel = UIWindowLevelAlert + 100;
         instance.backgroundColor = [UIColor clearColor];
         instance.hidden = YES;
-        // KHÔNG tạo ToolViewController ở đây — lazy create trong show
-
-        NSLog(@"[ToolWindow] Created (no VC)");
     });
     return instance;
 }
 
 - (void)show {
-    // Lazy create VC lần đầu show — lúc này game đã init xong
     if (!self.toolVC) {
         @try {
             self.toolVC = [[ToolViewController alloc] init];
             self.rootViewController = self.toolVC;
-            NSLog(@"[ToolWindow] VC created lazily");
         } @catch (NSException *e) {
-            NSLog(@"[ToolWindow] VC create crash: %@", e);
             return;
         }
     }
@@ -81,16 +70,11 @@
 
     @try {
         [self.toolVC reload];
-    } @catch (NSException *e) {
-        NSLog(@"[ToolWindow] reload crash: %@", e);
-    }
-
-    NSLog(@"[ToolWindow] SHOWN");
+    } @catch (NSException *e) {}
 }
 
 - (void)hide {
     self.hidden = YES;
-    NSLog(@"[ToolWindow] HIDDEN");
 }
 
 - (void)toggle {
@@ -98,7 +82,6 @@
     else [self hide];
 }
 
-// Cho phép touch xuyên qua khi panel ẩn
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     if (self.hidden) return nil;
     return [super hitTest:point withEvent:event];
