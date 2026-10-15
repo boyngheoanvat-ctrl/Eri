@@ -63,7 +63,7 @@
         } @catch (NSException *e) {
             return;
         }
-    }
+    } 
 
     self.hidden = NO;
     [self makeKeyAndVisible];
