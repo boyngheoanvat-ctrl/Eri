@@ -41,7 +41,6 @@ static int lua_il2cpp_get_method_pointer(lua_State *L) {
     const char *clsName = lua_tostring(L, 1);
     const char *mName = lua_tostring(L, 2);
     uint64_t ptr = 0; 
-    // Thêm logic gọi IL2CPPResolver tại đây nếu cần
     lua_pushinteger(L, (lua_Integer)ptr);
     return 1;
 }
