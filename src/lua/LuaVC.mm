@@ -2,7 +2,8 @@
 #import "LuaEngine.h"
 #import "ToolTheme.h"
 
-@interface LuaVC ()
+@interface LuaVC () <UITextViewDelegate>
+@property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UITextView *editorView;
 @property (nonatomic, strong) UITextView *consoleView;
 @property (nonatomic, strong) UIButton *runButton;
@@ -28,9 +29,16 @@
 - (void)buildUI {
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
-    CGFloat y = 8;
-    CGFloat pad = 8;
+    
+    // Tích hợp thanh trượt (UIScrollView) tổng thể để hỗ trợ cuộn và co giãn
+    self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
+    self.scrollView.backgroundColor = [UIColor clearColor];
+    self.scrollView.contentSize = CGSizeMake(w, h + 50);
+    self.scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.view addSubview:self.scrollView];
 
+    CGFloat pad = 8;
+    CGFloat y = 8;
     CGFloat btnW = (w - pad * 5) / 4;
     CGFloat btnH = 36;
 
@@ -60,7 +68,8 @@
     editorLabel.text = @"EDITOR";
     editorLabel.textColor = [ToolTheme shared].textMuted;
     editorLabel.font = [[ToolTheme shared] monoFont:10];
-    [self.view addSubview:editorLabel];
+    editorLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.scrollView addSubview:editorLabel];
     y += 20;
 
     CGFloat editorH = 180;
@@ -80,17 +89,19 @@
                            @"end";
     self.editorView.autocorrectionType = UITextAutocorrectionTypeNo;
     self.editorView.autocapitalizationType = UITextAutocapitalizationTypeNone;
-    [self.view addSubview:self.editorView];
+    self.editorView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.scrollView addSubview:self.editorView];
     y += editorH + 8;
 
     UILabel *consoleLabel = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, 16)];
     consoleLabel.text = @"CONSOLE OUTPUT";
     consoleLabel.textColor = [ToolTheme shared].textMuted;
     consoleLabel.font = [[ToolTheme shared] monoFont:10];
-    [self.view addSubview:consoleLabel];
+    consoleLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.scrollView addSubview:consoleLabel];
     y += 20;
 
-    CGFloat consoleH = h - y - pad - 20;
+    CGFloat consoleH = MAX(120, h - y - pad - 40);
     self.consoleView = [[UITextView alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, consoleH)];
     self.consoleView.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.05 alpha:1.0];
     self.consoleView.textColor = [ToolTheme shared].success;
@@ -100,8 +111,8 @@
     self.consoleView.layer.borderWidth = 1;
     self.consoleView.layer.borderColor = [ToolTheme shared].border.CGColor;
     self.consoleView.text = @"-- Lua Console --\n";
-    self.consoleView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
-    [self.view addSubview:self.consoleView];
+    self.consoleView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.scrollView addSubview:self.consoleView];
 }
 
 - (UIButton *)makeButton:(NSString *)title x:(CGFloat)x y:(CGFloat)y w:(CGFloat)w h:(CGFloat)h color:(UIColor *)color {
@@ -112,7 +123,8 @@
     [b setTitle:title forState:UIControlStateNormal];
     [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     b.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
-    [self.view addSubview:b];
+    b.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleRightMargin;
+    [self.scrollView addSubview:b];
     return b;
 }
 
@@ -149,6 +161,16 @@
 
 - (void)clearTapped {
     self.consoleView.text = @"-- Lua Console --\n";
+}
+
+// Tự động nhận script từ AI truyền sang
+- (void)setScriptContent:(NSString *)content {
+    if (content && content.length > 0) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.editorView.text = content;
+            [self log:@"[Lua AI] Đã nhận script mới từ AI Chat!"];
+        });
+    }
 }
 
 - (void)log:(NSString *)text {
