@@ -6,22 +6,22 @@
 #include <string.h>
 #include <stdio.h>
 
-#pragma mark - Auto symbol finder
+#pragma mark - Symbol finder (chỉ dùng dlsym, không duyệt symbol table)
 
 static void *find_sym(void *handle, const char *baseName) {
     if (!handle || !baseName) return NULL;
 
-    // 1. Tên C trực tiếp
+    // 1. dlsym trực tiếp
     void *p = dlsym(handle, baseName);
     if (p) return p;
 
-    // 2. Có gạch dưới đầu
+    // 2. Mach-O C: thêm gạch dưới
     char buf[512];
     snprintf(buf, sizeof(buf), "_%s", baseName);
     p = dlsym(handle, buf);
     if (p) return p;
 
-    // 3. C++ mangled void() dạng __Z<len><name>v
+    // 3. Itanium C++ mangled void()
     size_t n = strlen(baseName);
     snprintf(buf, sizeof(buf), "__Z%zu%sv", n, baseName);
     p = dlsym(handle, buf);
@@ -30,63 +30,6 @@ static void *find_sym(void *handle, const char *baseName) {
     // 4. RTLD_DEFAULT
     p = dlsym(RTLD_DEFAULT, baseName);
     if (p) return p;
-
-    // 5. Duyệt symbol table UnityFramework
-    uint32_t count = _dyld_image_count();
-    for (uint32_t i = 0; i < count; i++) {
-        const char *imgName = _dyld_get_image_name(i);
-        if (!imgName) continue;
-        if (!strstr(imgName, "UnityFramework") &&
-            !strstr(imgName, "il2cpp") &&
-            !strstr(imgName, "GameAssembly")) continue;
-
-        const struct mach_header_64 *hdr =
-            (const struct mach_header_64 *)_dyld_get_image_header(i);
-        if (!hdr) continue;
-
-        intptr_t slide = _dyld_get_image_vmaddr_slide(i);
-        const uint8_t *base = (const uint8_t *)hdr;
-        const uint8_t *cmds = base + sizeof(struct mach_header_64);
-        uint32_t off = 0;
-
-        for (uint32_t j = 0; j < hdr->ncmds; j++) {
-            const struct load_command *lc =
-                (const struct load_command *)(cmds + off);
-            if (lc->cmd == LC_SYMTAB) {
-                const struct symtab_command *sym =
-                    (const struct symtab_command *)lc;
-                const struct nlist_64 *nl =
-                    (const struct nlist_64 *)(base + sym->symoff);
-                const char *strtab = (const char *)(base + sym->stroff);
-
-                for (uint32_t k = 0; k < sym->nsyms; k++) {
-                    if (nl[k].n_un.n_strx == 0) continue;
-                    const char *nm = strtab + nl[k].n_un.n_strx;
-
-                    const char *found = strstr(nm, baseName);
-                    if (!found) continue;
-
-                    // Kiểm tra ký tự ngay sau baseName — phải KHÔNG phải chữ/số
-                    // để tránh match nhầm (VD 'il2cpp_thread_attachX')
-                    char nextChar = found[strlen(baseName)];
-                    if (nextChar != '\0' &&
-                        ((nextChar >= 'a' && nextChar <= 'z') ||
-                         (nextChar >= 'A' && nextChar <= 'Z') ||
-                         (nextChar >= '0' && nextChar <= '9') ||
-                         nextChar == '_')) {
-                        continue;
-                    }
-
-                    uint64_t va = nl[k].n_value + slide;
-                    void *fnPtr = (void *)(uintptr_t)va;
-                    NSLog(@"[IL2CPPResolver] Found '%s' as '%s' @ %p",
-                          baseName, nm, fnPtr);
-                    return fnPtr;
-                }
-            }
-            off += lc->cmdsize;
-        }
-    }
 
     return NULL;
 }
@@ -151,21 +94,18 @@ static void *find_sym(void *handle, const char *baseName) {
     if (!self.handle) return;
     if ([NSThread isMainThread]) return;
 
-    typedef Il2CppDomain *(*domain_get_t)(void);
-    domain_get_t dg = (domain_get_t)find_sym(self.handle, "il2cpp_domain_get");
+    typedef Il2CppDomain *(*fn_t)(void);
+    fn_t dg = (fn_t)find_sym(self.handle, "il2cpp_domain_get");
     if (!dg) return;
     Il2CppDomain *domain = dg();
     if (!domain) return;
 
-    typedef void *(*thread_attach_t)(Il2CppDomain *);
-    thread_attach_t ta = (thread_attach_t)find_sym(self.handle, "il2cpp_thread_attach");
-    if (ta) {
-        ta(domain);
-        NSLog(@"[IL2CPPResolver] Attached thread %@", [NSThread currentThread]);
-    }
+    typedef void *(*ta_t)(Il2CppDomain *);
+    ta_t ta = (ta_t)find_sym(self.handle, "il2cpp_thread_attach");
+    if (ta) ta(domain);
 }
 
-#pragma mark - Core
+#pragma mark - Domain
 
 - (Il2CppDomain *)domain_get {
     if (!self.handle) return NULL;
@@ -174,20 +114,20 @@ static void *find_sym(void *handle, const char *baseName) {
     return fn ? fn() : NULL;
 }
 
+#pragma mark - Image
+
 - (Il2CppImage *)assembly_get_image:(Il2CppAssembly *)assembly {
     if (!assembly) return NULL;
     typedef Il2CppImage *(*fn_t)(const Il2CppAssembly *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_assembly_get_image");
-    if (fn) return fn(assembly);
-    return NULL;
+    return fn ? fn(assembly) : NULL;
 }
 
 - (const char *)image_get_name:(Il2CppImage *)image {
     if (!image) return NULL;
     typedef const char *(*fn_t)(const Il2CppImage *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_image_get_name");
-    if (fn) return fn(image);
-    return image->name;
+    return fn ? fn(image) : NULL;
 }
 
 - (size_t)image_get_class_count:(Il2CppImage *)image {
@@ -210,32 +150,28 @@ static void *find_sym(void *handle, const char *baseName) {
     if (!k) return NULL;
     typedef const char *(*fn_t)(const Il2CppClass *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_class_get_name");
-    if (fn) return fn(k);
-    return k->name;
+    return fn ? fn(k) : NULL;
 }
 
 - (const char *)class_get_namespace:(Il2CppClass *)k {
     if (!k) return NULL;
     typedef const char *(*fn_t)(const Il2CppClass *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_class_get_namespace");
-    if (fn) return fn(k);
-    return k->namespaze;
+    return fn ? fn(k) : NULL;
 }
 
 - (Il2CppClass *)class_get_parent:(Il2CppClass *)klass {
     if (!klass) return NULL;
     typedef Il2CppClass *(*fn_t)(const Il2CppClass *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_class_get_parent");
-    if (fn) return fn(klass);
-    return klass->parent;
+    return fn ? fn(klass) : NULL;
 }
 
 - (void *)class_get_static_field_data:(Il2CppClass *)klass {
     if (!klass) return NULL;
     typedef void *(*fn_t)(Il2CppClass *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_class_get_static_field_data");
-    if (fn) return fn(klass);
-    return NULL;
+    return fn ? fn(klass) : NULL;
 }
 
 #pragma mark - Methods / Fields / Properties
@@ -253,15 +189,7 @@ static void *find_sym(void *handle, const char *baseName) {
         while ((m = fn(klass, &iter)) != NULL) {
             if (!m) break;
             [arr addObject:[NSValue valueWithPointer:m]];
-            if (++safety > 65535) break;
-        }
-    } else {
-        uint16_t total = klass->method_count;
-        MethodInfo **list = klass->methods;
-        if (list && total > 0 && total < 65535) {
-            for (uint16_t i = 0; i < total; i++) {
-                if (list[i]) [arr addObject:[NSValue valueWithPointer:list[i]]];
-            }
+            if (++safety > 20000) break;
         }
     }
 
@@ -282,15 +210,7 @@ static void *find_sym(void *handle, const char *baseName) {
         while ((f = fn(klass, &iter)) != NULL) {
             if (!f) break;
             [arr addObject:[NSValue valueWithPointer:f]];
-            if (++safety > 65535) break;
-        }
-    } else {
-        uint16_t total = klass->field_count;
-        FieldInfo *list = klass->fields;
-        if (list && total > 0 && total < 65535) {
-            for (uint16_t i = 0; i < total; i++) {
-                [arr addObject:[NSValue valueWithPointer:&list[i]]];
-            }
+            if (++safety > 20000) break;
         }
     }
 
@@ -311,7 +231,7 @@ static void *find_sym(void *handle, const char *baseName) {
         while ((p = fn(klass, &iter)) != NULL) {
             if (!p) break;
             [arr addObject:[NSValue valueWithPointer:p]];
-            if (++safety > 65535) break;
+            if (++safety > 20000) break;
         }
     }
 
@@ -325,16 +245,14 @@ static void *find_sym(void *handle, const char *baseName) {
     if (!m) return NULL;
     typedef const char *(*fn_t)(const MethodInfo *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_method_get_name");
-    if (fn) return fn(m);
-    return m->name;
+    return fn ? fn(m) : NULL;
 }
 
 - (uint32_t)method_get_token:(MethodInfo *)m {
     if (!m) return 0;
     typedef uint32_t (*fn_t)(const MethodInfo *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_method_get_token");
-    if (fn) return fn(m);
-    return m->token;
+    return fn ? fn(m) : 0;
 }
 
 - (void *)method_get_pointer:(MethodInfo *)m {
@@ -342,16 +260,31 @@ static void *find_sym(void *handle, const char *baseName) {
     typedef void *(*fn_t)(const MethodInfo *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_method_get_pointer");
     if (fn) return fn(m);
-    return m->methodPointer;
+    // MethodInfo có field đầu tiên là methodPointer — an toàn để đọc
+    return *(void **)m;
 }
 
 - (const char *)method_get_return_type:(MethodInfo *)method {
     if (!method) return NULL;
-    typedef const char *(*fn_t)(const MethodInfo *);
-    fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_method_get_return_type");
-    if (fn) return fn(method);
-    if (method->return_type) return [self type_get_name:method->return_type];
-    return NULL;
+    typedef const Il2CppType *(*rt_t)(const MethodInfo *);
+    rt_t rtf = (rt_t)find_sym(self.handle, "il2cpp_method_get_return_type");
+    if (!rtf) return NULL;
+
+    const Il2CppType *type = rtf(method);
+    if (!type) return NULL;
+
+    return [self type_get_name:(Il2CppType *)type];
+}
+
+- (uint32_t)method_get_flags:(MethodInfo *)method {
+    if (!method) return 0;
+    typedef uint32_t (*fn_t)(const MethodInfo *, uint32_t *);
+    fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_method_get_flags");
+    if (fn) {
+        uint32_t iflags = 0;
+        return fn(method, &iflags);
+    }
+    return 0;
 }
 
 #pragma mark - FieldInfo
@@ -360,30 +293,33 @@ static void *find_sym(void *handle, const char *baseName) {
     if (!f) return NULL;
     typedef const char *(*fn_t)(const FieldInfo *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_field_get_name");
-    if (fn) return fn(f);
-    return f->name;
+    return fn ? fn(f) : NULL;
 }
 
 - (int32_t)field_get_offset:(FieldInfo *)f {
     if (!f) return 0;
-    typedef int32_t (*fn_t)(const FieldInfo *);
+    typedef size_t (*fn_t)(const FieldInfo *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_field_get_offset");
-    if (fn) return fn(f);
-    return f->offset;
+    return fn ? (int32_t)fn(f) : 0;
 }
 
 - (uint32_t)field_get_token:(FieldInfo *)f {
     if (!f) return 0;
     typedef uint32_t (*fn_t)(const FieldInfo *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_field_get_token");
-    if (fn) return fn(f);
-    return f->token;
+    return fn ? fn(f) : 0;
 }
 
 - (const char *)field_get_type_name:(FieldInfo *)field {
     if (!field) return NULL;
-    if (field->type) return [self type_get_name:field->type];
-    return NULL;
+    typedef const Il2CppType *(*ft_t)(const FieldInfo *);
+    ft_t ftf = (ft_t)find_sym(self.handle, "il2cpp_field_get_type");
+    if (!ftf) return NULL;
+
+    const Il2CppType *type = ftf(field);
+    if (!type) return NULL;
+
+    return [self type_get_name:(Il2CppType *)type];
 }
 
 #pragma mark - PropertyInfo
@@ -392,8 +328,7 @@ static void *find_sym(void *handle, const char *baseName) {
     if (!p) return NULL;
     typedef const char *(*fn_t)(const PropertyInfo *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_property_get_name");
-    if (fn) return fn(p);
-    return p->name;
+    return fn ? fn(p) : NULL;
 }
 
 #pragma mark - Type
@@ -402,8 +337,24 @@ static void *find_sym(void *handle, const char *baseName) {
     if (!type) return NULL;
     typedef const char *(*fn_t)(const Il2CppType *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_type_get_name");
-    if (fn) return fn(type);
-    return NULL;
+    if (!fn) return NULL;
+
+    const char *name = fn(type);
+    if (!name) return NULL;
+
+    // il2cpp_type_get_name trả về chuỗi được malloc — cần free
+    // Nhưng nếu return trực tiếp, caller sẽ dùng — không thể free ngay
+    // → Giải pháp: trả về static buffer copy
+    static char buf[512];
+    strncpy(buf, name, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    // Free chuỗi gốc
+    typedef void (*free_t)(void *);
+    free_t freeFn = (free_t)find_sym(self.handle, "il2cpp_free");
+    if (freeFn) freeFn((void *)name);
+
+    return buf;
 }
 
 @end
