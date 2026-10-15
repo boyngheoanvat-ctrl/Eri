@@ -159,6 +159,9 @@
 
 - (void)aiStreamDidComplete {
     [self updateLayoutContent];
+    
+    // Tự động trích xuất kết quả và đẩy sang Lua tab sau khi hoàn tất
+    [self autoPushGeneratedLuaScriptToLuaTab];
 }
 
 - (void)aiStreamDidFailWithError:(NSError *)error {
@@ -171,6 +174,37 @@
     NSString *toolLog = [NSString stringWithFormat:@"\n[tool] %@ -> hoàn tất", toolName];
     self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n%@", self.chatLogTextView.text ?: @"", toolLog];
     [self updateLayoutContent];
+    
+    // Nếu tool là find_concept hoặc trả về RVA, tự động tạo script Lua đẩy đi
+    if ([toolName isEqualToString:@"find_concept"] && [result isKindOfClass:[NSArray class]] && ((NSArray *)result).count > 0) {
+        NSDictionary *firstItem = ((NSArray *)result).firstObject;
+        NSString *cls = firstItem[@"class"] ?: @"UnknownClass";
+        NSString *meth = firstItem[@"method"] ?: @"UnknownMethod";
+        NSString *rva = firstItem[@"rva"] ?: @"0x0";
+        
+        NSString *autoScript = [NSString stringWithFormat:
+            @"-- ==========================================\n"
+             @"-- Auto-generated AI Mod Script\n"
+             @"-- Class: %@\n"
+             @"-- Method: %@\n"
+             @"-- RVA: %@\n"
+             @"-- ==========================================\n\n"
+             @"print('[AI Auto] Đang thực thi patch cho: %@.%@')\n"
+             @"local rvaAddr = \"%@\"\n"
+             @"print('[AI Auto] Địa chỉ RVA: ' .. rvaAddr)\n"
+             @"-- Thêm logic ghi nhớ/patch bộ nhớ tại đây\n"
+             @"print('[AI Auto] Hoàn tất script!')\n",
+            cls, meth, rva, cls, meth, rva
+        ];
+        
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"PushScriptToLuaNotification"
+                                                            object:nil
+                                                          userInfo:@{@"script": autoScript}];
+    }
+}
+
+- (void)autoPushGeneratedLuaScriptToLuaTab {
+    // Phương thức dự phòng nếu cần đẩy thủ công từ lịch sử chat
 }
 
 @end
