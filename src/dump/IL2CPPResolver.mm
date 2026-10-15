@@ -11,23 +11,27 @@
 static void *find_sym(void *handle, const char *baseName) {
     if (!handle || !baseName) return NULL;
 
+    // 1. Tên C trực tiếp
     void *p = dlsym(handle, baseName);
     if (p) return p;
 
+    // 2. Có gạch dưới đầu
     char buf[512];
     snprintf(buf, sizeof(buf), "_%s", baseName);
     p = dlsym(handle, buf);
     if (p) return p;
 
+    // 3. C++ mangled void() dạng __Z<len><name>v
     size_t n = strlen(baseName);
     snprintf(buf, sizeof(buf), "__Z%zu%sv", n, baseName);
     p = dlsym(handle, buf);
     if (p) return p;
 
+    // 4. RTLD_DEFAULT
     p = dlsym(RTLD_DEFAULT, baseName);
     if (p) return p;
 
-    // Duyệt symbol table UnityFramework
+    // 5. Duyệt symbol table UnityFramework
     uint32_t count = _dyld_image_count();
     for (uint32_t i = 0; i < count; i++) {
         const char *imgName = _dyld_get_image_name(i);
@@ -59,13 +63,25 @@ static void *find_sym(void *handle, const char *baseName) {
                     if (nl[k].n_un.n_strx == 0) continue;
                     const char *nm = strtab + nl[k].n_un.n_strx;
 
-                    if (strstr(nm, baseName)) {
-                        uint64_t va = nl[k].n_value + slide;
-                        void *fnPtr = (void *)(uintptr_t)va;
-                        NSLog(@"[IL2CPPResolver] Found '%s' as '%s' @ %p",
-                              baseName, nm, fnPtr);
-                        return fnPtr;
+                    const char *found = strstr(nm, baseName);
+                    if (!found) continue;
+
+                    // Kiểm tra ký tự ngay sau baseName — phải KHÔNG phải chữ/số
+                    // để tránh match nhầm (VD 'il2cpp_thread_attachX')
+                    char nextChar = found[strlen(baseName)];
+                    if (nextChar != '\0' &&
+                        ((nextChar >= 'a' && nextChar <= 'z') ||
+                         (nextChar >= 'A' && nextChar <= 'Z') ||
+                         (nextChar >= '0' && nextChar <= '9') ||
+                         nextChar == '_')) {
+                        continue;
                     }
+
+                    uint64_t va = nl[k].n_value + slide;
+                    void *fnPtr = (void *)(uintptr_t)va;
+                    NSLog(@"[IL2CPPResolver] Found '%s' as '%s' @ %p",
+                          baseName, nm, fnPtr);
+                    return fnPtr;
                 }
             }
             off += lc->cmdsize;
@@ -79,7 +95,6 @@ static void *find_sym(void *handle, const char *baseName) {
 
 @interface IL2CPPResolver ()
 @property (nonatomic, assign) void *handle;
-@property (nonatomic, assign) BOOL threadAttached;
 @end
 
 @implementation IL2CPPResolver
