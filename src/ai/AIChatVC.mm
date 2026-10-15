@@ -159,6 +159,47 @@
 
 - (void)aiStreamDidComplete {
     [self updateLayoutContent];
+    
+    // Tự động quét toàn bộ nội dung text chat hiện tại bằng Regex để tìm dòng chứa RVA
+    NSString *chatText = self.chatLogTextView.text;
+    if (chatText.length > 0) {
+        // Biểu thức chính quy quét khớp định dạng: - ClassName.MethodName (RVA 0x...)
+        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"-\\s+([a-zA-Z0-9_.]+)\\.([a-zA-Z0-9_]+)\\s*\\(RVA\\s+(0x[a-fA-F0-9]+)\\)" options:0 error:nil];
+        NSArray<NSTextCheckingResult *> *matches = [regex matchesInString:chatText options:0 range:NSMakeRange(0, chatText.length)];
+        
+        if (matches.count > 0) {
+            // Lấy kết quả cuối cùng hoặc phù hợp nhất
+            NSTextCheckingResult *match = matches.lastObject;
+            NSString *cls = [chatText substringWithRange:[match rangeAtIndex:1]];
+            NSString *meth = [chatText substringWithRange:[match rangeAtIndex:2]];
+            NSString *rva = [chatText substringWithRange:[match rangeAtIndex:3]];
+            
+            // Sinh mã Lua tự động từ RVA trích xuất được
+            NSString *autoScript = [NSString stringWithFormat:
+                @"-- ==========================================\n"
+                 @"-- Auto-generated AI Mod Script\n"
+                 @"-- Target: %@.%@\n"
+                 @"-- RVA: %@\n"
+                 @"-- ==========================================\n\n"
+                 @"print('[AI Auto] Đang nạp RVA cho hàm: %@.%@')\n"
+                 @"local targetRVA = \"%@\"\n"
+                 @"print('[AI Auto] Địa chỉ RVA: ' .. targetRVA)\n\n"
+                 @"-- Tiến hành patch bộ nhớ / hook\n"
+                 @"local ptr = il2cpp.get_method_pointer(\"%@\", \"%@\")\n"
+                 @"if ptr ~= 0 then\n"
+                 @"    print('[LuaEngine] Đã trỏ tới con trỏ phương thức thành công!')\n"
+                 @"else\n"
+                 @"    print('[LuaEngine] Sử dụng trực tiếp RVA: ' .. targetRVA)\n"
+                 @"end\n",
+                cls, meth, rva, cls, meth, rva, cls, meth
+            ];
+            
+            // Đẩy sang Lua tab thông qua Notification Center
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"PushScriptToLuaNotification"
+                                                                object:nil
+                                                              userInfo:@{@"script": autoScript}];
+        }
+    }
 }
 
 - (void)aiStreamDidFailWithError:(NSError *)error {
@@ -171,50 +212,6 @@
     NSString *toolLog = [NSString stringWithFormat:@"\n[tool] %@ -> hoàn tất", toolName];
     self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n%@", self.chatLogTextView.text ?: @"", toolLog];
     [self updateLayoutContent];
-    
-    // Tự động quét và đẩy script sang tab Lua khi tool trả về kết quả RVA / method
-    if ([toolName isEqualToString:@"find_concept"] || [toolName isEqualToString:@"find_method_global"] || [toolName isEqualToString:@"search_classes"]) {
-        NSString *cls = @"UnknownClass";
-        NSString *meth = @"UnknownMethod";
-        NSString *rva = @"0x0";
-        
-        if ([result isKindOfClass:[NSArray class]] && ((NSArray *)result).count > 0) {
-            NSDictionary *firstItem = ((NSArray *)result).firstObject;
-            cls = firstItem[@"class"] ?: cls;
-            meth = firstItem[@"method"] ?: meth;
-            rva = firstItem[@"rva"] ?: rva;
-        } else if ([result isKindOfClass:[NSDictionary class]]) {
-            cls = result[@"class"] ?: cls;
-            meth = result[@"method"] ?: meth;
-            rva = result[@"rva"] ?: rva;
-        }
-        
-        // Sinh đoạn mã Lua chuẩn bị sẵn sàng patch
-        NSString *autoScript = [NSString stringWithFormat:
-            @"-- ==========================================\n"
-             @"-- Auto-generated AI Mod Script\n"
-             @"-- Class: %@\n"
-             @"-- Method: %@\n"
-             @"-- RVA: %@\n"
-             @"-- ==========================================\n\n"
-             @"print('[AI Auto] Đang thực thi patch cho: %@.%@')\n"
-             @"local targetRVA = \"%@\"\n"
-             @"print('[AI Auto] Địa chỉ RVA mục tiêu: ' .. targetRVA)\n\n"
-             @"-- Gọi lệnh lấy con trỏ hoặc patch bộ nhớ\n"
-             @"local ptr = il2cpp.get_method_pointer(\"%@\", \"%@\")\n"
-             @"if ptr ~= 0 then\n"
-             @"    print('[LuaEngine] Đã trỏ tới con trỏ phương thức thành công!')\n"
-             @"else\n"
-             @"    print('[LuaEngine Warning] Sử dụng trực tiếp RVA: ' .. targetRVA)\n"
-             @"end\n",
-            cls, meth, rva, cls, meth, rva, cls, meth
-        ];
-        
-        // Gửi thông báo tự động đẩy sang LuaVC
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"PushScriptToLuaNotification"
-                                                            object:nil
-                                                          userInfo:@{@"script": autoScript}];
-    }
 }
 
 @end
