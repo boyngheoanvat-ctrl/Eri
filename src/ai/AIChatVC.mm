@@ -19,7 +19,7 @@
     
     [self.messages addObject:@{
         @"sender": @"ai",
-        @"text": @"Dạ chào chủ nhân ! Em là Ai Do Eri Nguyễn Tạo Ra. Chủ nhân cứ gõ yêu cầu (như hack map, mod skin, bất tử...), em sẽ tự động sinh script chạy thật và chuyển thẳng sang tab Lua trong 1 chạm ạ!"
+        @"text": @"Hello người ae! Tui là tool do Eri Nguyễn tạo ra."
     }];
     
     CGFloat w = CGRectGetWidth(self.view.bounds);
@@ -39,7 +39,7 @@
     [self.view addSubview:bottomBar];
     
     self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, w - 90, 36)];
-    self.inputField.placeholder = @"Nhập yêu cầu (hack map, mod skin)...";
+    self.inputField.placeholder = @"Nhập yêu cầu (hack map, mod skin, bất tử)...";
     self.inputField.backgroundColor = [ToolTheme shared].surface;
     self.inputField.textColor = [ToolTheme shared].textPrimary;
     self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -79,37 +79,39 @@
     NSString *aiResponseText = @"";
     
     if ([lower containsString:@"hi"] || [lower containsString:@"hello"] || [lower containsString:@"chào"] || [lower containsString:@"ê"]) {
-        aiResponseText = [NSString stringWithFormat:@"Dạ em chào chủ nhân! Em đang sẵn sàng nghe lệnh từ chủ nhân: '%@'. Chủ nhân muốn mod game gì cứ nói em nhé!", text];
-        luaPayload = [NSString stringWithFormat:@"print('[Ai Eri] Kết nối IL2CPP thành công với lệnh: %@')", text];
+        aiResponseText = [NSString stringWithFormat:@"Hello người ae! Tui đã sẵn sàng nhận lệnh '%@'.", text];
+        luaPayload = [NSString stringWithFormat:@"print('[Ai Eri] Kết nối lệnh: %@')", text];
     }
     else if ([lower containsString:@"map"] || [lower containsString:@"hack map"] || [lower containsString:@"sáng bản đồ"]) {
-        aiResponseText = @"[Ai Eri] Đã chủ động tìm thấy hàm tầm nhìn ShowEntity.CanSight. Đang thiết lập script Lua cộng dồn ASLR Base để chạy thật trong game...";
+        aiResponseText = @"[Ai Eri] Đang quét tìm hàm tầm nhìn (CanSight / Camera / Map) động theo tựa game hiện tại...";
         luaPayload = @"-- ==========================================\n"
-                     "-- [Ai Eri] Hack Map / Sáng Bản Đồ IL2CPP\n"
+                     "-- [Ai Eri] Dynamic Hack Map Script\n"
                      "-- ==========================================\n"
                      "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
                      "if not baseAddr then\n"
                      "    print('[Lua Error] Không tìm thấy base UnityFramework!')\n"
                      "    return\n"
                      "end\n\n"
-                     "local rva = il2cpp.get_method_offset('ShowEntity.CanSight')\n"
+                     "local rva = il2cpp.get_method_offset('CanSight')\n"
+                     "if not rva then\n"
+                     "    rva = il2cpp.get_method_offset('IsCanSee')\n"
+                     "end\n\n"
                      "if rva then\n"
                      "    local targetAddr = baseAddr + rva\n"
                      "    il2cpp.patch_memory(targetAddr, '20008052C0035FD6')\n"
-                     "    print('[Lua Success] Hack Map thành công tại: 0x' .. string.format('%X', targetAddr))\n"
-                     "        end\n"
-                     "    end\n"
-                     "    print('[Ai Eri] Kích hoạt Mod Skin trong game thành công!')\n"
+                     "    print('[Lua Success] Hack Map thành công tại RVA: 0x' .. string.format('%X', rva))\n"
+                     "else\n"
+                     "    print('[Lua Warning] Không tìm thấy hàm CanSight.')\n"
                      "end";
     }
     else if ([lower containsString:@"skin"] || [lower containsString:@"mod skin"]) {
-        aiResponseText = @"[Ai Eri] Đang xử lý mở khóa trang phục qua bộ hàm IsCanUseSkin, IsFreeSkin, OnShowHeroSkin...";
+        aiResponseText = @"[Ai Eri] Đang quét các hàm trang phục trên game này...";
         luaPayload = @"-- ==========================================\n"
-                     "-- [Ai Eri] Mod Skin IL2CPP Thực Chiến\n"
+                     "-- [Ai Eri] Dynamic Mod Skin Script\n"
                      "-- ==========================================\n"
                      "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
                      "if baseAddr then\n"
-                     "    local methods = {'IsCanUseSkin', 'IsFreeSkin', 'OnShowHeroSkin'}\n"
+                     "    local methods = {'IsCanUseSkin', 'IsFreeSkin', 'OnShowHeroSkin', 'CheckSkinValid'}\n"
                      "    for _, m in ipairs(methods) do\n"
                      "        local rva = il2cpp.get_method_offset(m)\n"
                      "        if rva then\n"
@@ -117,36 +119,34 @@
                      "            print('[Lua] Patched skin method: ' .. m)\n"
                      "        end\n"
                      "    end\n"
-                     "    print('[Ai Eri] Kích hoạt Mod Skin trong game thành công!')\n"
                      "end";
     }
     else if ([lower containsString:@"bất tử"] || [lower containsString:@"god mode"]) {
-        aiResponseText = @"[Ai Eri] Đang thiết lập chế độ Bất tử, vô hiệu hóa hàm TakeDamage...";
+        aiResponseText = @"[Ai Eri] Đang quét hàm nhận sát thương của game...";
         luaPayload = @"-- ==========================================\n"
-                     "-- [Ai Eri] Bất tử / God Mode IL2CPP\n"
+                     "-- [Ai Eri] Dynamic God Mode Script\n"
                      "-- ==========================================\n"
                      "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
                      "local rva = il2cpp.get_method_offset('TakeDamage')\n"
                      "if baseAddr and rva then\n"
                      "    il2cpp.patch_memory(baseAddr + rva, 'C0035FD6')\n"
-                     "    print('[Lua Success] Đã bật Bất tử trong game!')\n"
+                     "    print('[Lua Success] Đã bật Bất tử thành công!')\n"
                      "end";
     }
     else {
-        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã nhận lệnh '%@'. Đang soạn script quét động offset IL2CPP cho chủ nhân!", text];
+        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đang tự động tìm kiếm method '%@' trong IL2CPP...", text];
         luaPayload = [NSString stringWithFormat:
             @"-- ==========================================\n"
-             "-- [Ai Eri] Dynamic IL2CPP Patch Script\n"
-             "-- Yêu cầu: %@\n"
+             "-- [Ai Eri] Dynamic Search: %@\n"
              "-- ==========================================\n"
              "local baseAddr = il2cpp.get_image_base('UnityFramework')\n"
              "local rva = il2cpp.get_method_offset('%@')\n"
              "if baseAddr and rva then\n"
              "    il2cpp.patch_memory(baseAddr + rva, '20008052C0035FD6')\n"
-             "    print('[Lua Success] Patch động thành công!')\n"
+             "    print('[Lua Success] Patch thành công method: %@')\n"
              "else\n"
-             "    print('[Lua Info] Kiểm tra lại tên method trong Dumper!')\n"
-             "end", text, text];
+             "    print('[Lua Error] Không tìm thấy method: %@')\n"
+             "end", text, text, text, text, text];
     }
     
     [self.messages addObject:@{@"sender": @"ai", @"text": aiResponseText}];
@@ -157,9 +157,6 @@
                               atScrollPosition:UITableViewScrollPositionBottom animated:YES];
     }
     
-    // =========================================================================
-    // FIX AN TOÀN TUYỆT ĐỐI: XỬ LÝ CHUYỂN TAB VÀ NẠP LUA DÙNG PHƯƠNG THỨC ĐÃ KHAI BÁO
-    // =========================================================================
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         UIResponder *responder = self.view.window.rootViewController;
         ToolViewController *targetToolVC = nil;
@@ -178,7 +175,6 @@
         
         if (targetToolVC) {
             [targetToolVC selectTab:4];
-            
             if ([targetToolVC respondsToSelector:@selector(luaVC)]) {
                 LuaVC *luaVC = [targetToolVC valueForKey:@"luaVC"];
                 if (luaVC && [luaVC respondsToSelector:@selector(setScriptContent:)]) {
