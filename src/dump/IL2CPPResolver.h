@@ -1,10 +1,6 @@
 #import <Foundation/Foundation.h>
 #include <stdint.h>
 
-// ============================================================
-// IL2CPP types — OPAQUE
-// ============================================================
-
 typedef struct Il2CppDomain    Il2CppDomain;
 typedef struct Il2CppAssembly  Il2CppAssembly;
 typedef struct Il2CppImage     Il2CppImage;
@@ -14,13 +10,7 @@ typedef struct MethodInfo      MethodInfo;
 typedef struct FieldInfo       FieldInfo;
 typedef struct PropertyInfo    PropertyInfo;
 
-// ============================================================
-// Il2CppDomain — ĐỊNH NGHĨA ĐẦY ĐỦ
-// Các file khác (ESPOverlay, IL2CPPHeapWalker, ESPClassFinder,
-// GameFingerprint, AIMethodAnalyzer, AITool, MethodCallerVC)
-// đọc domain->assemblies và domain->assembly_count
-// → phải giữ struct này
-// ============================================================
+// Il2CppDomain — định nghĩa đầy đủ (nhiều file khác dùng)
 struct Il2CppDomain {
     int32_t         domain_id;
     int32_t         _pad;
@@ -53,6 +43,10 @@ struct Il2CppDomain {
 - (const char   *)class_get_namespace:(Il2CppClass *)k;
 - (Il2CppClass  *)class_get_parent:(Il2CppClass *)klass;
 - (void         *)class_get_static_field_data:(Il2CppClass *)klass;
+- (uint32_t     )class_get_flags:(Il2CppClass *)klass;
+- (BOOL          )class_is_enum:(Il2CppClass *)klass;
+- (BOOL          )class_is_valuetype:(Il2CppClass *)klass;
+- (BOOL          )class_is_interface:(Il2CppClass *)klass;
 
 // Methods / Fields / Properties
 - (NSArray<NSValue *> *)class_get_methods:(Il2CppClass *)klass count:(uint16_t *)count;
@@ -65,15 +59,21 @@ struct Il2CppDomain {
 - (void      *)method_get_pointer:(MethodInfo *)m;
 - (const char *)method_get_return_type:(MethodInfo *)method;
 - (uint32_t   )method_get_flags:(MethodInfo *)method;
+- (uint32_t   )method_get_param_count:(MethodInfo *)method;
+- (const char *)method_get_param_name:(MethodInfo *)method index:(uint32_t)index;
+- (const char *)method_get_param_type_name:(MethodInfo *)method index:(uint32_t)index;
 
 // Field info
 - (const char *)field_get_name:(FieldInfo *)f;
 - (int32_t    )field_get_offset:(FieldInfo *)f;
 - (uint32_t   )field_get_token:(FieldInfo *)f;
 - (const char *)field_get_type_name:(FieldInfo *)field;
+- (uint32_t   )field_get_flags:(FieldInfo *)field;
 
 // Property info
 - (const char *)property_get_name:(PropertyInfo *)p;
+- (MethodInfo *)property_get_get_method:(PropertyInfo *)p;
+- (MethodInfo *)property_get_set_method:(PropertyInfo *)p;
 
 // Type info
 - (const char *)type_get_name:(Il2CppType *)type;
