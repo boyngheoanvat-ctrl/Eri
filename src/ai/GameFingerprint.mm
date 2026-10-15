@@ -86,16 +86,8 @@ static BOOL gScanned = NO;
     gScanned = YES;
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (!r) {
-        gDetectedGame = @"Unknown";
-        gScanned = NO;
-        return;
-    }
-    if (![r resolve]) {
-        gDetectedGame = @"Unknown";
-        gScanned = NO;
-        return;
-    }
+    if (!r) { gDetectedGame = @"Unknown"; gScanned = NO; return; }
+    if (![r resolve]) { gDetectedGame = @"Unknown"; gScanned = NO; return; }
 
     Il2CppDomain *domain = [r domain_get];
     if (!domain || !domain->assemblies || domain->assembly_count == 0) {
@@ -106,10 +98,11 @@ static BOOL gScanned = NO;
     }
 
     @try {
-        BOOL hasCanSight    = [self hasAnyMethodNamed:@[@"CanSight"]];
-        BOOL hasCalcVisible = [self hasAnyMethodNamed:@[@"CalcVisible", @"RefreshVisible"]];
-        BOOL hasSetVisible  = [self hasAnyMethodNamed:@[@"SetVisible"]];
-        BOOL hasShowEntity  = [self hasAnyClassNamed:@[@"ShowEntity", @"LogicFighter"]];
+        // CHỈ duyệt 2 assembly đầu, tối đa 300 class mỗi assembly
+        BOOL hasCanSight    = [self hasAnyMethodNamed:@[@"CanSight"]        maxAsm:2 maxClass:300];
+        BOOL hasCalcVisible = [self hasAnyMethodNamed:@[@"CalcVisible", @"RefreshVisible"] maxAsm:2 maxClass:300];
+        BOOL hasSetVisible  = [self hasAnyMethodNamed:@[@"SetVisible"]      maxAsm:2 maxClass:300];
+        BOOL hasShowEntity  = [self hasAnyClassNamed:@[@"ShowEntity", @"LogicFighter"] maxAsm:2 maxClass:300];
 
         if (hasCanSight && hasShowEntity) {
             gDetectedGame = @"MLBB (Mobile Legends)";
@@ -143,16 +136,10 @@ static BOOL gScanned = NO;
 - (NSDictionary *)fingerprintInfo {
     return @{
         @"game": gDetectedGame ?: @"Unknown",
-        @"has_CanSight":       @([self hasAnyMethodNamed:@[@"CanSight"]]),
-        @"has_CalcVisible":    @([self hasAnyMethodNamed:@[@"CalcVisible"]]),
-        @"has_RefreshVisible": @([self hasAnyMethodNamed:@[@"RefreshVisible"]]),
-        @"has_SetVisible":     @([self hasAnyMethodNamed:@[@"SetVisible"]]),
-        @"has_ShowEntity":     @([self hasAnyClassNamed:@[@"ShowEntity"]]),
-        @"has_LogicFighter":   @([self hasAnyClassNamed:@[@"LogicFighter"]]),
     };
 }
 
-- (BOOL)hasAnyMethodNamed:(NSArray<NSString *> *)names {
+- (BOOL)hasAnyMethodNamed:(NSArray<NSString *> *)names maxAsm:(int)maxAsm maxClass:(int)maxClass {
     if (names.count == 0) return NO;
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
@@ -160,19 +147,17 @@ static BOOL gScanned = NO;
     if (![r resolve]) return NO;
 
     Il2CppDomain *domain = [r domain_get];
-    if (!domain) return NO;
-    if (!domain->assemblies) return NO;
+    if (!domain || !domain->assemblies) return NO;
 
-    int maxAsm = MIN((int)domain->assembly_count, 5);
-    if (maxAsm <= 0) return NO;
-
-    for (int a = 0; a < maxAsm; a++) {
+    int asmLimit = MIN((int)domain->assembly_count, maxAsm);
+    for (int a = 0; a < asmLimit; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
         if (!asm_) continue;
         Il2CppImage *image = [r assembly_get_image:asm_];
         if (!image) continue;
         size_t count = [r image_get_class_count:image];
-        for (size_t i = 0; i < count; i++) {
+        size_t limit = MIN(count, (size_t)maxClass);
+        for (size_t i = 0; i < limit; i++) {
             Il2CppClass *k = [r image_get_class:image index:i];
             if (!k) continue;
             uint16_t mCount = 0;
@@ -193,7 +178,7 @@ static BOOL gScanned = NO;
     return NO;
 }
 
-- (BOOL)hasAnyClassNamed:(NSArray<NSString *> *)names {
+- (BOOL)hasAnyClassNamed:(NSArray<NSString *> *)names maxAsm:(int)maxAsm maxClass:(int)maxClass {
     if (names.count == 0) return NO;
 
     IL2CPPResolver *r = [IL2CPPResolver shared];
@@ -201,19 +186,17 @@ static BOOL gScanned = NO;
     if (![r resolve]) return NO;
 
     Il2CppDomain *domain = [r domain_get];
-    if (!domain) return NO;
-    if (!domain->assemblies) return NO;
+    if (!domain || !domain->assemblies) return NO;
 
-    int maxAsm = MIN((int)domain->assembly_count, 5);
-    if (maxAsm <= 0) return NO;
-
-    for (int a = 0; a < maxAsm; a++) {
+    int asmLimit = MIN((int)domain->assembly_count, maxAsm);
+    for (int a = 0; a < asmLimit; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
         if (!asm_) continue;
         Il2CppImage *image = [r assembly_get_image:asm_];
         if (!image) continue;
         size_t count = [r image_get_class_count:image];
-        for (size_t i = 0; i < count; i++) {
+        size_t limit = MIN(count, (size_t)maxClass);
+        for (size_t i = 0; i < limit; i++) {
             Il2CppClass *k = [r image_get_class:image index:i];
             if (!k) continue;
             const char *cn = [r class_get_name:k];
@@ -243,13 +226,12 @@ static BOOL gScanned = NO;
     if (![r resolve]) return @[];
 
     Il2CppDomain *domain = [r domain_get];
-    if (!domain) return @[];
-    if (!domain->assemblies) return @[];
+    if (!domain || !domain->assemblies) return @[];
 
     NSMutableArray *found = [NSMutableArray array];
 
     @try {
-        int maxAsm = MIN((int)domain->assembly_count, 5);
+        int maxAsm = MIN((int)domain->assembly_count, 3);
         for (int a = 0; a < maxAsm; a++) {
             Il2CppAssembly *asm_ = domain->assemblies[a];
             if (!asm_) continue;
@@ -257,7 +239,9 @@ static BOOL gScanned = NO;
             if (!image) continue;
 
             size_t count = [r image_get_class_count:image];
-            for (size_t i = 0; i < count && found.count < (NSUInteger)max * 3; i++) {
+            size_t classLimit = MIN(count, (size_t)500);
+
+            for (size_t i = 0; i < classLimit && found.count < (NSUInteger)max * 3; i++) {
                 @autoreleasepool {
                     Il2CppClass *klass = [r image_get_class:image index:i];
                     if (!klass) continue;
