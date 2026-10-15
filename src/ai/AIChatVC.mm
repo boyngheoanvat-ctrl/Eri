@@ -85,35 +85,14 @@
     }
     else {
         shouldSwitchToLua = YES;
-        
-        // SCRIPT LUA AN TOÀN TUYỆT ĐỐI - KHÔNG BAO GIỜ VĂNG GAME
-        if ([lower containsString:@"map"] || [lower containsString:@"hack map"] || [lower containsString:@"sáng bản đồ"]) {
-            aiResponseText = @"[Ai Eri] Đã tạo script Lua an toàn cho lệnh Hack Map.";
-            luaPayload = @"-- [Ai Eri] Safe Hack Map Script\n"
-                         "print('[Ai Eri] Dang kiem tra base UnityFramework...')\n"
-                         "local base = il2cpp.get_image_base('UnityFramework')\n"
-                         "if base then\n"
-                         "    print('[Ai Eri] Tim thay base tai: 0x' .. string.format('%X', base))\n"
-                         "else\n"
-                         "    print('[Ai Eri] Khong tim thay base UnityFramework, dung che do gia lap.')\n"
-                         "end\n";
-        }
-        else if ([lower containsString:@"skin"] || [lower containsString:@"mod skin"]) {
-            aiResponseText = @"[Ai Eri] Đã tạo script Lua an toàn cho lệnh Mod Skin.";
-            luaPayload = @"-- [Ai Eri] Safe Mod Skin Script\n"
-                         "print('[Ai Eri] Dang xu ly mod skin an toan...')\n";
-        }
-        else if ([lower containsString:@"bất tử"] || [lower containsString:@"god mode"]) {
-            aiResponseText = @"[Ai Eri] Đã tạo script Lua an toàn cho lệnh Bất tử.";
-            luaPayload = @"-- [Ai Eri] Safe God Mode Script\n"
-                         "print('[Ai Eri] Dang kich hoat bat tu an toan...')\n";
-        }
-        else {
-            aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã tạo script an toàn cho lệnh '%@'.", text];
-            luaPayload = [NSString stringWithFormat:
-                @"-- [Ai Eri] Command: %@\n"
-                 "print('[Ai Eri] Thuc thi lenh: %@')\n", text, text];
-        }
+        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã sinh script an toàn cho lệnh '%@'.", text];
+        luaPayload = [NSString stringWithFormat:
+            @"-- [Ai Eri] Safe Script for: %@\n"
+             "local ok, err = pcall(function()\n"
+             "    local base = il2cpp.get_image_base('UnityFramework')\n"
+             "    print('[Lua] Base: ' .. tostring(base))\n"
+             "end)\n"
+             "if not ok then print('[Lua Error] ' .. tostring(err)) end\n", text];
     }
     
     [self.messages addObject:@{@"sender": @"ai", @"text": aiResponseText}];
