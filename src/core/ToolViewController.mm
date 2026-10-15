@@ -88,7 +88,7 @@
     titleLine.backgroundColor = [ToolTheme shared].divider;
     [self.titleBar addSubview:titleLine];
 
-    // ĐÃ ĐỔI TÊN THÀNH "Mod By Eri Nguyễn" VÀ NỚI RỘNG KHUNG ĐỂ HIỂN THỊ ĐỦ CHỮ
+    // Tiêu đề: Mod By Eri Nguyễn
     self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(12, 0, 160, 36)];
     self.titleLabel.text = @"Mod By Eri Nguyễn";
     self.titleLabel.textColor = [ToolTheme shared].textPrimary;
@@ -126,7 +126,7 @@
     self.railStack.alignment = UIStackViewAlignmentFill;
     [self.railView addSubview:self.railStack];
 
-    self.aiButton = [self makeRailButton:@"AI" symbol:@"AI" tag:0];
+    self.aiButton = [self makeRailButton:@"Ai Eri" symbol:@"AI" tag:0];
     [self.railStack addArrangedSubview:self.aiButton];
     self.dumpButton = [self makeRailButton:@"Dump" symbol:@"▼" tag:1];
     [self.railStack addArrangedSubview:self.dumpButton];
@@ -181,7 +181,7 @@
     }
 
     UIViewController *newVC = nil;
-    if (index == 0) { if (!self.aiVC) self.aiVC = [[AIChatVC alloc] init]; newVC = self.aiVC; self.subtitleLabel.text = @"AI Agent"; }
+    if (index == 0) { if (!self.aiVC) self.aiVC = [[AIChatVC alloc] init]; newVC = self.aiVC; self.subtitleLabel.text = @"Ai Eri"; }
     else if (index == 1) { if (!self.dumpVC) self.dumpVC = [[DumperVC alloc] init]; newVC = self.dumpVC; self.subtitleLabel.text = @"IL2CPP Dumper"; }
     else if (index == 2) { if (!self.memoryVC) self.memoryVC = [[MemoryVC alloc] init]; newVC = self.memoryVC; self.subtitleLabel.text = @"Memory Editor"; }
     else if (index == 3) { if (!self.methodVC) self.methodVC = [[MethodCallerVC alloc] init]; newVC = self.methodVC; self.subtitleLabel.text = @"Method Caller"; }
@@ -243,8 +243,6 @@
 
     self.titleBar.frame = CGRectMake(0, 0, panelW, 36);
     self.closeButton.frame = CGRectMake(panelW - 36, 4, 28, 28);
-    
-    // Cập nhật lại khung chữ phụ và tiêu đề khi panel thay đổi kích thước
     self.titleLabel.frame = CGRectMake(12, 0, 160, 36);
     self.subtitleLabel.frame = CGRectMake(175, 0, MAX(0, panelW - 235), 36);
 
