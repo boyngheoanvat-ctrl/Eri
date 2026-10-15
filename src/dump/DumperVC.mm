@@ -422,8 +422,9 @@
                                                 [params appendFormat:@"%@ %@", pType, pName];
                                             }
 
-                                            [csContent appendFormat:@"    %@%@ %@(%@); // RVA: 0x%llX Offset: 0x0 VA: 0x%llX Token: 0x%X\n",
-                                             mod, retType, methodName, params, rva, va, token];
+                                            // Định dạng chuẩn RVA / Offset / VA / Token theo yêu cầu
+                                            [csContent appendFormat:@"    %@%@ %@(%@); // RVA: 0x%llX Offset: 0x%llX VA: 0x%llX Token: 0x%X\n",
+                                             mod, retType, methodName, params, rva, rva, va, token];
 
                                             totalMethods++;
 
