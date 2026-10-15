@@ -1,8 +1,6 @@
 #import "LuaEngine.h"
 #import <dlfcn.h>
 
-// Include Lua headers (đã có sẵn trong dylib)
-// Wrapped in extern "C" so .mm (ObjC++) emits C-linkage symbols matching liblua.a
 extern "C" {
 #include "lua.h"
 #include "lauxlib.h"
@@ -23,31 +21,56 @@ extern "C" {
 }
 
 - (BOOL)isAvailable {
-    return YES;  // Lua đã được nhúng sẵn
+    return YES;
+}
+
+static int lua_custom_print(lua_State *L) {
+    int nargs = lua_gettop(L);
+    NSMutableString *logOutput = [NSMutableString string];
+    for (int i = 1; i <= nargs; i++) {
+        const char *s = lua_tostring(L, i);
+        if (s) {
+            [logOutput appendFormat:@"%s ", s];
+        }
+    }
+    NSLog(@"[Lua Print]: %@", logOutput);
+    return 0;
+}
+
+static int lua_il2cpp_get_method_pointer(lua_State *L) {
+    const char *clsName = lua_tostring(L, 1);
+    const char *mName = lua_tostring(L, 2);
+    uint64_t ptr = 0; 
+    // Thêm logic gọi IL2CPPResolver tại đây nếu cần
+    lua_pushinteger(L, (lua_Integer)ptr);
+    return 1;
 }
 
 - (NSString *)runScript:(NSString *)script {
     if (!script) return @"[Lua] Script rỗng";
 
-    // Tạo state mới cho mỗi lần chạy
     lua_State *L = luaL_newstate();
-    if (!L) return @"[Lua] Khong tao duoc lua_State";
+    if (!L) return @"[Lua] Không tạo được lua_State";
 
-    // Load thư viện chuẩn
     luaL_openlibs(L);
-
     self.L = L;
 
-    // Chạy script
+    lua_register(L, "print", lua_custom_print);
+    
+    lua_newtable(L);
+    lua_pushcfunction(L, lua_il2cpp_get_method_pointer);
+    lua_setfield(L, -2, "get_method_pointer");
+    lua_setglobal(L, "il2cpp");
+
     int status = luaL_dostring(L, script.UTF8String);
 
     NSString *result;
     if (status != 0) {
         const char *err = lua_tostring(L, -1);
-        result = [NSString stringWithFormat:@"[Lua] Loi: %s", err ? err : "unknown"];
+        result = [NSString stringWithFormat:@"[Lua] Lỗi: %s", err ? err : "unknown"];
         lua_pop(L, 1);
     } else {
-        result = @"[Lua] Script chay thanh cong";
+        result = @"[Lua] Script chạy thành công";
     }
 
     lua_close(L);
