@@ -32,7 +32,6 @@
 - (void)buildUI {
     CGFloat w = CGRectGetWidth(self.view.bounds);
     
-    // Sử dụng UIScrollView để chống tràn màn hình khi xoay ngang hoặc kéo khung
     self.scrollView = [[UIScrollView alloc] initWithFrame:self.view.bounds];
     self.scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.scrollView.showsVerticalScrollIndicator = YES;
@@ -42,7 +41,6 @@
     CGFloat pad = 16;
     CGFloat contentW = w - pad * 2;
 
-    // Title
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, contentW, 28)];
     title.text = @"ESP Overlay";
     title.textColor = [ToolTheme shared].textPrimary;
@@ -57,7 +55,6 @@
     [self.scrollView addSubview:sub];
     y += 28;
 
-    // Toggle rows (co giãn theo chiều rộng cửa sổ `contentW`)
     self.masterSwitch = [self addRow:@"Master Enable" desc:@"Bat/tat ESP tong" y:&y on:ESPOverlay.shared.enabled width:contentW];
     [self.masterSwitch addTarget:self action:@selector(masterChanged) forControlEvents:UIControlEventValueChanged];
 
@@ -77,7 +74,6 @@
     [self.lineSwitch addTarget:self action:@selector(optionChanged) forControlEvents:UIControlEventValueChanged];
 
     y += 10;
-    // Status label
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, contentW, 24)];
     self.statusLabel.text = ESPOverlay.shared.enabled ? @"ESP DANG HOAT DONG" : @"ESP DANG TAT";
     self.statusLabel.textColor = ESPOverlay.shared.enabled ? [ToolTheme shared].success : [ToolTheme shared].textMuted;
@@ -118,8 +114,6 @@
     *yAction += 58;
     return sw;
 }
-
-#pragma mark - Actions
 
 - (void)masterChanged {
     ESPOverlay *esp = [ESPOverlay shared];
