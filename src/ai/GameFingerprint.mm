@@ -1,15 +1,20 @@
-#import <Foundation/Foundation.h>
-
-@interface GameFingerprint : NSObject
-+ (NSArray<NSDictionary *> *)filterAndRefineMethods:(NSArray<NSDictionary *> *)rawMethods;
-@end
+#import "GameFingerprint.h"
 
 @implementation GameFingerprint
 
-+ (NSArray<NSDictionary *> *)filterAndRefineMethods:(NSArray<NSDictionary *> *)rawMethods {
++ (instancetype)shared {
+    static GameFingerprint *instance = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        instance = [[GameFingerprint alloc] init];
+    });
+    return instance;
+}
+
+- (NSArray<NSDictionary *> *)filterAndRefineMethods:(NSArray<NSDictionary *> *)rawMethods {
     NSMutableArray<NSDictionary *> *filteredList = [NSMutableArray array];
     
-    // Danh sách các namespace hệ thống cần loại bỏ triệt để (Rác .NET / Mono / Unity Core)
+    // Danh sách các namespace hệ thống rác (.NET / Mono / Unity Core) cần loại bỏ
     NSArray *blacklistedNamespaces = @[
         @"System.", 
         @"Mono.", 
@@ -27,7 +32,7 @@
         @"Runtime"
     ];
     
-    // Danh sách từ khóa ưu tiên cao cho các tính năng Mod/Hack (Map, Vision, Speed, Combat)
+    // Từ khóa ưu tiên cao cho game logic (Map, Vision, Camera, Hero, Player)
     NSArray *priorityKeywords = @[
         @"map", @"vision", @"sight", @"fog", @"camera", 
         @"hero", @"player", @"character", @"entity", 
@@ -39,12 +44,11 @@
         NSString *methodName = method[@"method"] ?: @"";
         NSString *rva = method[@"rva"] ?: @"0x0";
         
-        // Bỏ qua nếu RVA bằng 0 hoặc không hợp lệ
         if ([rva isEqualToString:@"0x0"] || [rva length] == 0) {
             continue;
         }
         
-        // Kiểm tra xem class có thuộc namespace hệ thống bị cấm không
+        // Kiểm tra namespace hệ thống
         BOOL isBlacklisted = NO;
         for (NSString *ns in blacklistedNamespaces) {
             if ([className hasPrefix:ns] || [className isEqualToString:ns]) {
@@ -52,10 +56,9 @@
                 break;
             }
         }
+        if (isBlacklisted) continue;
         
-        if (isBlacklisted) continue; // Bỏ qua các class rác hệ thống
-        
-        // Chấm điểm ưu tiên dựa trên từ khóa game logic
+        // Chấm điểm từ khóa ưu tiên
         BOOL hasPriorityKeyword = NO;
         NSString *combined = [NSString stringWithFormat:@"%@.%@", className, methodName].lowercaseString;
         for (NSString *kw in priorityKeywords) {
@@ -65,13 +68,12 @@
             }
         }
         
-        // Chỉ thêm vào danh sách nếu khớp từ khóa game hoặc ít nhất là class custom của game
         if (hasPriorityKeyword) {
             [filteredList addObject:method];
         }
     }
     
-    // Nếu lọc xong mà danh sách trống (đề phòng game dùng tên obfuscate), trả về danh sách đã bỏ rác hệ thống
+    // Fallback nếu không khớp từ khóa ưu tiên nhưng không phải rác hệ thống
     if (filteredList.count == 0) {
         for (NSDictionary *method in rawMethods) {
             NSString *className = method[@"class"] ?: @"";
