@@ -1,7 +1,5 @@
 #import "ESPOverlay.h"
 #import "ToolTheme.h"
-#import "ESPClassFinder.h"
-#import "IL2CPPHeapWalker.h"
 
 @interface ESPOverlayView : UIView
 @property (nonatomic, weak) ESPOverlay *overlayController;
@@ -20,7 +18,6 @@
 
 - (void)drawRect:(CGRect)rect {
     [super drawRect:rect];
-    
     if (!self.overlayController.enabled) return;
     
     CGContextRef context = UIGraphicsGetCurrentContext();
@@ -29,7 +26,6 @@
     CGContextSetLineWidth(context, 1.5);
     CGContextSetStrokeColorWithColor(context, [ToolTheme shared].success.CGColor);
     
-    // Vẽ Fallback tâm màn hình để chắc chắn ESP có hiển thị khi bật Master Enable
     CGFloat boxW = 70;
     CGFloat boxH = 130;
     CGFloat boxX = (rect.size.width - boxW) / 2.0;
@@ -99,7 +95,6 @@
 
 - (void)attachToWindow:(UIWindow *)window {
     if (self.overlayWindow) return;
-    
     CGRect screenBounds = [UIScreen mainScreen].bounds;
     
     if (@available(iOS 13.0, *)) {
@@ -108,7 +103,6 @@
             self.overlayWindow = [[UIWindow alloc] initWithWindowScene:scene];
         }
     }
-    
     if (!self.overlayWindow) {
         self.overlayWindow = [[UIWindow alloc] initWithFrame:screenBounds];
     }
@@ -140,7 +134,12 @@
     self.enabled = YES;
     if (self.overlayWindow) {
         self.overlayWindow.hidden = NO;
+        self.overlayWindow.alpha = 1.0;
         [self.overlayWindow makeKeyAndVisible];
+    }
+    if (self.espView) {
+        self.espView.hidden = NO;
+        [self.espView setNeedsDisplay];
     }
     self.displayLink.paused = NO;
 }
