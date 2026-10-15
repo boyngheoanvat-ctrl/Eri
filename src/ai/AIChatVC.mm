@@ -19,7 +19,7 @@
     
     [self.messages addObject:@{
         @"sender": @"ai",
-        @"text": @"Dạ chào chủ nhân Eri! Em là Ai Eri IL2CPP đây ạ. Chủ nhân cứ gõ yêu cầu (như hack map, mod skin, bất tử...), em sẽ tự động sinh script chạy thật và chuyển thẳng sang tab Lua trong 1 chạm ạ!"
+        @"text": @"Dạ chào chủ nhân ! Em là Ai Do Eri Nguyễn Tạo Ra. Chủ nhân cứ gõ yêu cầu (như hack map, mod skin, bất tử...), em sẽ tự động sinh script chạy thật và chuyển thẳng sang tab Lua trong 1 chạm ạ!"
     }];
     
     CGFloat w = CGRectGetWidth(self.view.bounds);
@@ -97,9 +97,9 @@
                      "    local targetAddr = baseAddr + rva\n"
                      "    il2cpp.patch_memory(targetAddr, '20008052C0035FD6')\n"
                      "    print('[Lua Success] Hack Map thành công tại: 0x' .. string.format('%X', targetAddr))\n"
-                     "else\n"
-                     "    il2cpp.patch_memory(baseAddr + 0x1663A60, '20008052C0035FD6')\n"
-                     "    print('[Lua Success] Patch fallback Hack Map thành công!')\n"
+                     "        end\n"
+                     "    end\n"
+                     "    print('[Ai Eri] Kích hoạt Mod Skin trong game thành công!')\n"
                      "end";
     }
     else if ([lower containsString:@"skin"] || [lower containsString:@"mod skin"]) {
