@@ -155,12 +155,13 @@ static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
 
     GameFingerprint *fp = [GameFingerprint shared];
     NSString *game = [fp detectedGame];
+    NSString *entityClass = [fp detectedEntityClass];
 
-    NSArray<NSDictionary *> *results = [fp findMethodsForConcept:concept
-                                                       maxResults:5];
+    NSArray<NSDictionary *> *results = [fp findMethodsForConcept:concept maxResults:20];
 
     return @{
         @"game": game,
+        @"entity_class": entityClass,
         @"concept": concept,
         @"count": @(results.count),
         @"results": results,
