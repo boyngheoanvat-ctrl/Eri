@@ -81,14 +81,14 @@ static const CGFloat kInputBarHeight = 50;
     [self.inputArea addSubview:topLine];
 
     self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, w - 80, 30)];
-    self.inputField.backgroundColor = [ToolTheme shared].background;
-    self.inputField.textColor = [ToolTheme shared].textPrimary;
-    self.inputField.font = [[ToolTheme shared] monoFont:11];
+    self.inputField.backgroundColor =    [ToolTheme self shared].background;
+    self.input.inputField.textColor = [ToolTheme shared].textPrimary;
+    self.inputField.fontField = [[ToolTheme shared] monoFont.left:11];
     self.inputField.layer.borderWidth = 1;
     self.inputField.layer.borderColor = [ToolTheme shared].border.CGColor;
     self.inputField.layer.cornerRadius = 4;
     self.inputField.returnKeyType = UIReturnKeySend;
-    self.inputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
+View = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
     self.inputField.leftViewMode = UITextFieldViewModeAlways;
     self.inputField.attributedPlaceholder = [[NSAttributedString alloc]
         initWithString:@"input here..."
@@ -176,48 +176,17 @@ static const CGFloat kInputBarHeight = 50;
     self.sendButton.alpha = 0.5;
     [self.spinner startAnimating];
 
-    NSString *game = @"Unknown";
-    @try {
-        game = [[GameFingerprint shared] detectedGame];
-    } @catch (NSException *e) {
-        NSLog(@"[AI] GameFingerprint crash: %@", e);
-        game = @"Unknown";
-    }
-
-    NSString *sysPrompt = [NSString stringWithFormat:
-        @"Ban la AI agent hack game IL2CPP iOS. Tra loi tieng Viet ngan gon, chinh xac.\n"
-        @"Game hien tai: %@\n"
-        @"\n"
-        @"=== TOOL ===\n"
-        @"1. find_concept(concept) — DUNG DAU TIEN\n"
-        @"   concept: map, speed, damage, health, mana, money, cooldown, ammo, level\n"
-        @"2. find_method_global(keyword) — tim method toan bo\n"
-        @"3. dump_class_runtime(class_name) — xem chi tiet class\n"
-        @"4. search_classes(keyword) — tim class\n"
-        @"5. find_classes_by_method(method_name)\n"
-        @"6. find_method_in_class(class_name, keyword)\n"
-        @"7. find_field_in_class(class_name, keyword)\n"
-        @"8. read_file(filename, keyword)\n"
-        @"\n"
-        @"=== QUY TAC ===\n"
-        @"1. Cau hoi 'hack X' → find_concept('X')\n"
-        @"2. Neu 0 ket qua → find_method_global voi tu khoa tuong tu\n"
-        @"3. Cau hoi ve class cu the → dump_class_runtime\n"
-        @"4. Tra loi RO: game + class + method + RVA\n"
-        @"5. Khong bia RVA. Khong lap tool qua 3 lan.", game];
-
-    NSMutableArray *messages = [NSMutableArray array];
-    [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
-
+    // Chuẩn bị history + tools trên main thread (nhanh)
+    NSMutableArray *history = [NSMutableArray array];
     NSInteger maxHistory = 6;
     NSInteger start = MAX(0, (NSInteger)self.items.count - maxHistory);
     for (NSInteger i = start; i < (NSInteger)self.items.count; i++) {
         NSDictionary *item = self.items[i];
         NSString *type = item[@"type"];
         if ([type isEqualToString:@"user"]) {
-            [messages addObject:@{@"role": @"user", @"content": item[@"text"]}];
+            [history addObject:@{@"role": @"user", @"content": item[@"text"]}];
         } else if ([type isEqualToString:@"ai"]) {
-            [messages addObject:@{@"role": @"assistant", @"content": item[@"text"]}];
+            [history addObject:@{@"role": @"assistant", @"content": item[@"text"]}];
         }
     }
 
@@ -227,10 +196,51 @@ static const CGFloat kInputBarHeight = 50;
     }
 
     __weak typeof(self) ws = self;
+
+    // QUAN TRỌNG: chạy hết trên background thread — không block UI
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+
+        // 1. Detect game (có thể mất vài giây — chạy trên background)
+        NSString *game = @"Unknown";
+        @try {
+            game = [[GameFingerprint shared] detectedGame];
+        } @catch (NSException *e) {
+            NSLog(@"[AI] GameFingerprint crash: %@", e);
+            game = @"Unknown";
+        }
+
+        // 2. Build messages với system prompt
+        NSString *sysPrompt = [NSString stringWithFormat:
+            @"Ban la AI agent hack game IL2CPP iOS. Tra loi tieng Viet ngan gon, chinh xac.\n"
+            @"Game hien tai: %@\n"
+            @"\n"
+            @"=== TOOL ===\n"
+            @"1. find_concept(concept) — DUNG DAU TIEN\n"
+            @"   concept: map, speed, damage, health, mana, money, cooldown, ammo, level\n"
+            @"2. find_method_global(keyword) — tim method toan bo\n"
+            @"3. dump_class_runtime(class_name) — xem chi tiet class\n"
+            @"4. search_classes(keyword) — tim class\n"
+            @"5. find_classes_by_method(method_name)\n"
+            @"6. find_method_in_class(class_name, keyword)\n"
+            @"7. find_field_in_class(class_name, keyword)\n"
+            @"8. read_file(filename, keyword)\n"
+            @"\n"
+            @"=== QUY TAC ===\n"
+            @"1. Cau hoi 'hack X' → find_concept('X')\n"
+            @"2. Neu 0 ket qua → find_method_global voi tu khoa tuong tu\n"
+            @"3. Cau hoi ve class cu the → dump_class_runtime\n"
+            @"4. Tra loi RO: game + class + method + RVA\n"
+            @"5. Khong bia RVA. Khong lap tool qua 3 lan.", game];
+
+        NSMutableArray *messages = [NSMutableArray array];
+        [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
+        [messages addObjectsFromArray:history];
+
+        // 3. Gửi request (AIProvider có tool loop riêng)
         [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
     });
 
+    // Timeout dự phòng
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (ws.isWaiting) {
