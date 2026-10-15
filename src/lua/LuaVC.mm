@@ -30,7 +30,6 @@
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
     
-    // Tích hợp thanh trượt (UIScrollView) tổng thể để hỗ trợ cuộn và co giãn
     self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
     self.scrollView.backgroundColor = [UIColor clearColor];
     self.scrollView.contentSize = CGSizeMake(w, h + 50);
@@ -39,7 +38,10 @@
 
     CGFloat pad = 8;
     CGFloat y = 8;
-    CGFloat btnW = (w - pad * 5) / 4;
+    
+    // Tính toán lại chiều rộng 4 nút chuẩn xác theo chiều ngang khung chứa (trừ lề 2 bên và khoảng cách)
+    CGFloat availableW = w - (pad * 5);
+    CGFloat btnW = availableW / 4.0;
     CGFloat btnH = 36;
 
     self.runButton = [self makeButton:@"Run" x:pad y:y w:btnW h:btnH
@@ -163,7 +165,6 @@
     self.consoleView.text = @"-- Lua Console --\n";
 }
 
-// Tự động nhận script từ AI truyền sang
 - (void)setScriptContent:(NSString *)content {
     if (content && content.length > 0) {
         dispatch_async(dispatch_get_main_queue(), ^{
