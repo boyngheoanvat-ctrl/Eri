@@ -154,7 +154,6 @@ static NSLock *gScanLock = nil;
         if (!mName) continue;
         NSString *ml = mName.lowercaseString;
 
-        // Position — nới rộng keyword
         if ([ml containsString:@"position"] ||
             [ml containsString:@"getpos"] ||
             [ml containsString:@"get_pos"] ||
@@ -162,21 +161,17 @@ static NSLock *gScanLock = nil;
             [ml containsString:@"vec3"] ||
             [ml isEqualToString:@"get_transform"]) hasPosition = YES;
 
-        // Health
         if ([ml containsString:@"hp"] ||
             [ml containsString:@"health"] ||
             [ml containsString:@"life"]) hasHp = YES;
 
-        // Name
         if ([ml isEqualToString:@"get_name"] ||
             [ml containsString:@"rolename"] ||
             [ml containsString:@"playername"] ||
             [ml isEqualToString:@"get_nickname"]) hasName = YES;
 
-        // Team
         if ([ml containsString:@"team"] || [ml containsString:@"camp"]) hasTeam = YES;
 
-        // Dead
         if ([ml containsString:@"death"] || [ml containsString:@"dead"] ||
             [ml containsString:@"alive"] || [ml containsString:@"die"]) hasDead = YES;
     }
@@ -215,134 +210,217 @@ static NSLock *gScanLock = nil;
     if (!gScanned) [self scan];
     if (max <= 0) max = 20;
 
-    // KHÔNG scan mọi class nữa — tránh match sai (VD: BigInteger.op_Division)
-    if (!gEntityClass) {
-        NSLog(@"[GameFingerprint] No entity class — skip scan");
-        return @[];
-    }
-
     IL2CPPResolver *r = [IL2CPPResolver shared];
     if (!r) return @[];
     if (![r resolve]) return @[];
     [r attachCurrentThread];
 
-    NSMutableArray *all = [NSMutableArray array];
-
-    uint16_t mCount = 0;
-    NSArray<NSValue *> *mList = [r class_get_methods:gEntityClass count:&mCount];
-
-    for (uint16_t j = 0; j < mCount; j++) {
-        MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
-        if (!m || (uintptr_t)m < 0x1000) continue;
-        const char *mn = [r method_get_name:m];
-        if (!mn) continue;
-        NSString *mName = [NSString stringWithUTF8String:mn];
-        if (!mName || mName.length == 0) continue;
-
-        if ([mName hasPrefix:@".ctor"] ||
-            [mName hasPrefix:@".cctor"] ||
-            [mName isEqualToString:@"ToString"] ||
-            [mName isEqualToString:@"GetHashCode"] ||
-            [mName isEqualToString:@"Equals"] ||
-            [mName isEqualToString:@"Finalize"] ||
-            [mName isEqualToString:@"GetType"]) continue;
-
-        void *ptr = [r method_get_pointer:m];
-        uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
-        uint32_t token = [r method_get_token:m];
-
-        [all addObject:@{
-            @"class": gEntityClassName ?: @"?",
-            @"method": mName,
-            @"rva": [NSString stringWithFormat:@"0x%llX", rva],
-            @"token": [NSString stringWithFormat:@"0x%X", token],
-        }];
-    }
-
-    // Nếu có keywords → sort (match trước)
+    NSMutableArray *scoredMethods = [NSMutableArray array];
     NSArray *keywords = [self keywordsForConcept:concept];
-    if (keywords.count > 0) {
-        NSMutableArray *sorted = [NSMutableArray array];
-        NSMutableArray *others = [NSMutableArray array];
 
-        for (NSDictionary *m in all) {
-            NSString *ml = [m[@"method"] lowercaseString];
-            BOOL match = NO;
-            for (NSString *kw in keywords) {
-                if ([ml containsString:kw]) { match = YES; break; }
+    Il2CppDomain *domain = [r domain_get];
+    if (!domain || !domain->assemblies) return @[];
+
+    // 1. Quét trên Entity Class trước nếu có (độ chính xác cao nhất)
+    if (gEntityClass) {
+        uint16_t mCount = 0;
+        NSArray<NSValue *> *mList = [r class_get_methods:gEntityClass count:&mCount];
+        for (uint16_t j = 0; j < mCount; j++) {
+            MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
+            if (!m || (uintptr_t)m < 0x1000) continue;
+            const char *mn = [r method_get_name:m];
+            if (!mn) continue;
+            NSString *mName = [NSString stringWithUTF8String:mn];
+            if (!mName) continue;
+
+            if ([mName hasPrefix:@".ctor"] || [mName hasPrefix:@".cctor"] ||
+                [mName isEqualToString:@"ToString"] || [mName isEqualToString:@"GetHashCode"]) {
+                continue;
             }
-            if (match) [sorted addObject:m];
-            else [others addObject:m];
-        }
 
-        NSMutableArray *final = [NSMutableArray array];
-        [final addObjectsFromArray:sorted];
-        [final addObjectsFromArray:others];
+            NSInteger score = 10; // Điểm nền cho entity class
+            NSString *ml = mName.lowercaseString;
+            for (NSString *kw in keywords) {
+                if ([ml containsString:kw]) {
+                    score += 50;
+                    break;
+                }
+            }
 
-        if (final.count > (NSUInteger)max) {
-            [final removeObjectsInRange:NSMakeRange(max, final.count - max)];
+            void *ptr = [r method_get_pointer:m];
+            uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
+            uint32_t token = [r method_get_token:m];
+
+            [scoredMethods addObject:@{
+                @"class": gEntityClassName ?: @"Entity",
+                @"method": mName,
+                @"rva": [NSString stringWithFormat:@"0x%llX", rva],
+                @"token": [NSString stringWithFormat:@"0x%X", token],
+                @"score": @(score)
+            }];
         }
-        return final;
     }
 
-    if (all.count > (NSUInteger)max) {
-        [all removeObjectsInRange:NSMakeRange(max, all.count - max)];
+    // 2. Quét mở rộng toàn cục an toàn (Crash-safe global fallback) để đảm bảo hỏi gì cũng ra kết quả
+    int maxAsm = MIN((int)domain->assembly_count, 3);
+    for (int a = 0; a < maxAsm; a++) {
+        Il2CppAssembly *asm_ = domain->assemblies[a];
+        if (!asm_ || (uintptr_t)asm_ < 0x1000) continue;
+        Il2CppImage *image = [r assembly_get_image:asm_];
+        if (!image || (uintptr_t)image < 0x1000) continue;
+
+        size_t count = [r image_get_class_count:image];
+        size_t limit = MIN(count, (size_t)400); // Giới hạn số lượng class mỗi image tránh quá tải
+
+        for (size_t i = 0; i < limit; i++) {
+            @autoreleasepool {
+                Il2CppClass *klass = [r image_get_class:image index:i];
+                if (!klass || (uintptr_t)klass < 0x1000) continue;
+
+                const char *cname = [r class_get_name:klass];
+                if (!cname) continue;
+                NSString *clsName = [NSString stringWithUTF8String:cname];
+                if (!clsName) continue;
+
+                // Bỏ qua các class hệ thống
+                if ([clsName hasPrefix:@"System."] || [clsName hasPrefix:@"Mono."] || [clsName hasPrefix:@"UnityEngine."]) {
+                    continue;
+                }
+
+                uint16_t mCount = 0;
+                NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
+                if (mCount == 0 || mCount > 300) continue;
+
+                for (uint16_t j = 0; j < mCount; j++) {
+                    MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
+                    if (!m || (uintptr_t)m < 0x1000) continue;
+                    const char *mn = [r method_get_name:m];
+                    if (!mn) continue;
+                    NSString *mName = [NSString stringWithUTF8String:mn];
+                    if (!mName) continue;
+
+                    if ([mName hasPrefix:@".ctor"] || [mName hasPrefix:@".cctor"] ||
+                        [mName isEqualToString:@"ToString"] || [mName isEqualToString:@"GetHashCode"]) {
+                        continue;
+                    }
+
+                    NSString *ml = mName.lowercaseString;
+                    NSInteger score = 0;
+                    for (NSString *kw in keywords) {
+                        if ([ml containsString:kw]) {
+                            score += 40;
+                            break;
+                        }
+                    }
+
+                    if (score > 0) {
+                        void *ptr = [r method_get_pointer:m];
+                        uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
+                        uint32_t token = [r method_get_token:m];
+
+                        [scoredMethods addObject:@{
+                            @"class": clsName,
+                            @"method": mName,
+                            @"rva": [NSString stringWithFormat:@"0x%llX", rva],
+                            @"token": [NSString stringWithFormat:@"0x%X", token],
+                            @"score": @(score)
+                        }];
+                    }
+                }
+            }
+        }
     }
-    return all;
+
+    // Sắp xếp theo điểm số từ cao xuống thấp
+    [scoredMethods sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
+        return [b[@"score"] compare:a[@"score"]];
+    }];
+
+    // Lọc bỏ trùng lặp và giới hạn số lượng kết quả trả về
+    NSMutableArray *finalResults = [NSMutableArray array];
+    NSMutableSet *seenSignatures = [NSMutableSet set];
+    for (NSDictionary *item in scoredMethods) {
+        NSString *sig = [NSString stringWithFormat:@"%@.%@", item[@"class"], item[@"method"]];
+        if (![seenSignatures containsObject:sig]) {
+            [seenSignatures addObject:sig];
+            [finalResults addObject:item];
+            if (finalResults.count >= (NSUInteger)max) break;
+        }
+    }
+
+    return finalResults;
 }
 
 - (NSArray<NSString *> *)keywordsForConcept:(NSString *)concept {
     NSString *c = [concept lowercaseString];
+    NSMutableArray *keywords = [NSMutableArray array];
 
-    // Map/Vision — keyword CHÍNH XÁC, không dùng "view"/"show"/"hide"/"see" ngắn
-    if ([c containsString:@"map"] || [c containsString:@"vision"] ||
-        [c containsString:@"sight"] || [c containsString:@"visible"] ||
-        [c containsString:@"nhin"] || [c containsString:@"xuyen"]) {
-        return @[
-            @"cansight", @"calcvisible", @"refreshvisible", @"setvisible",
-            @"cansse", @"isvisible", @"hasvision", @"isinsight",
-            @"setvision", @"checkvisible", @"updatevisible", @"onseeentity",
-            @"sightrange", @"visionrange", @"visible",
-        ];
+    // 1. Nhóm Map / Tầm nhìn / Xuyên sương mù / Camera
+    if ([c containsString:@"map"] || [c containsString:@"vision"] || [c containsString:@"sight"] || 
+        [c containsString:@"visible"] || [c containsString:@"nhin"] || [c containsString:@"xuyen"] || 
+        [c containsString:@"camera"] || [c containsString:@"goc nhìn"]) {
+        [keywords addObjectsFromArray:@[
+            @"visible", @"sight", @"vision", @"camp", @"team", @"sync", 
+            @"camera", @"fov", @"zoom", @"frustum", @"culling", @"isvisible"
+        ]];
     }
 
-    if ([c containsString:@"speed"] || [c containsString:@"move"] ||
-        [c containsString:@"toc"]) {
-        return @[@"speed", @"movespeed", @"runspd", @"movespd", @"velocity", @"runspeed"];
+    // 2. Nhóm Tốc độ / Di chuyển (Speed, fly, noclip, tele)
+    if ([c containsString:@"speed"] || [c containsString:@"toc"] || [c containsString:@"nhanh"] || 
+        [c containsString:@"bay"] || [c containsString:@"tele"] || [c containsString:@"di chuyen"]) {
+        [keywords addObjectsFromArray:@[
+            @"speed", @"velocity", @"move", @"run", @"walk", @"fly", 
+            @"teleport", @"position", @"pos", @"transform", @"movement"
+        ]];
     }
 
-    if ([c containsString:@"damage"] || [c containsString:@"attack"] ||
-        [c containsString:@"satthuong"]) {
-        return @[@"damage", @"attack", @"atk", @"hitdamage"];
+    // 3. Nhóm Sát thương / Đánh (Damage, one hit, atk speed)
+    if ([c containsString:@"damage"] || [c containsString:@"sat thuong"] || [c containsString:@"danh"] || 
+        [c containsString:@"attack"] || [c containsString:@"dmg"] || [c containsString:@"onehit"]) {
+        [keywords addObjectsFromArray:@[
+            @"damage", @"atk", @"attack", @"hit", @"crit", @"power", 
+            @"force", @"gore", @"hurt", @"damagefactor", @"multiplier"
+        ]];
     }
 
-    if ([c containsString:@"health"] || [c containsString:@"hp"] ||
-        [c containsString:@"mau"]) {
-        return @[@"hp", @"health", @"maxhp", @"hpmax", @"life", @"heal"];
+    // 4. Nhóm Máu / Hồi phục / Bất tử (HP, godmode, heal)
+    if ([c containsString:@"health"] || [c containsString:@"hp"] || [c containsString:@"mau"] || 
+        [c containsString:@"bat tu"] || [c containsString:@"god"] || [c containsString:@"hoi"]) {
+        [keywords addObjectsFromArray:@[
+            @"hp", @"health", @"life", @"maxhp", @"heal", @"god", 
+            @"immortal", @"invincible", @"damageable", @"take_damage"
+        ]];
     }
 
-    if ([c containsString:@"mana"] || [c containsString:@"mp"]) {
-        return @[@"mana", @"mp", @"maxmp", @"energy"];
+    // 5. Nhóm Tiền / Vàng / Tài nguyên (Money, gold, gem)
+    if ([c containsString:@"money"] || [c containsString:@"gold"] || [c containsString:@"tien"] || 
+        [c containsString:@"vang"] || [c containsString:@"gem"] || [c containsString:@"kim cuong"]) {
+        [keywords addObjectsFromArray:@[
+            @"gold", @"money", @"coin", @"cash", @"diamond", @"gem", 
+            @"currency", @"price", @"cost", @"shop", @"inventory"
+        ]];
     }
 
-    if ([c containsString:@"money"] || [c containsString:@"gold"] ||
-        [c containsString:@"tien"] || [c containsString:@"vang"]) {
-        return @[@"gold", @"money", @"coin", @"cash", @"diamond"];
+    // 6. Nhóm Hồi chiêu / Skill (Cooldown, no cd)
+    if ([c containsString:@"cooldown"] || [c containsString:@"cd"] || [c containsString:@"hoi chieu"] || 
+        [c containsString:@"skill"]) {
+        [keywords addObjectsFromArray:@[
+            @"cooldown", @"cd", @"skill", @"spell", @"cast", @"delay", 
+            @"timer", @"interval", @"ready", @"reset"
+        ]];
     }
 
-    if ([c containsString:@"cooldown"] || [c containsString:@"cd"] ||
-        [c containsString:@"hoi"]) {
-        return @[@"cooldown", @"cd", @"skillcd", @"resetcd"];
+    // Fallback thông minh: Tự bóc tách từ khóa nếu gặp câu hỏi lạ ngoài danh mục trên
+    if (keywords.count == 0) {
+        NSArray *words = [c componentsSeparatedByString:@" "];
+        for (NSString *w in words) {
+            if (w.length > 2) {
+                [keywords addObject:w];
+            }
+        }
     }
 
-    return @[];
-}
-
-#pragma mark - Fallback (không dùng nữa)
-
-- (NSArray<NSDictionary *> *)scanAllClassesForConcept:(NSString *)concept
-                                           maxResults:(NSInteger)max {
-    return @[];
+    return keywords;
 }
 
 @end
