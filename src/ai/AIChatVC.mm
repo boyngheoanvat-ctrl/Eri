@@ -78,12 +78,10 @@
     NSString *luaPayload = @"";
     NSString *aiResponseText = @"";
     
-    // 1. Xử lý chào hỏi xã giao
     if ([lower containsString:@"hi"] || [lower containsString:@"hello"] || [lower containsString:@"chào"] || [lower containsString:@"ê"]) {
         aiResponseText = [NSString stringWithFormat:@"Dạ em chào chủ nhân! Em đang sẵn sàng nghe lệnh từ chủ nhân: '%@'. Chủ nhân muốn mod game gì cứ nói em nhé!", text];
         luaPayload = [NSString stringWithFormat:@"print('[Ai Eri] Kết nối IL2CPP thành công với lệnh: %@')", text];
     }
-    // 2. Xử lý Hack Map / Sáng bản đồ
     else if ([lower containsString:@"map"] || [lower containsString:@"hack map"] || [lower containsString:@"sáng bản đồ"]) {
         aiResponseText = @"[Ai Eri] Đã chủ động tìm thấy hàm tầm nhìn ShowEntity.CanSight. Đang thiết lập script Lua cộng dồn ASLR Base để chạy thật trong game...";
         luaPayload = @"-- ==========================================\n"
@@ -104,7 +102,6 @@
                      "    print('[Lua Success] Patch fallback Hack Map thành công!')\n"
                      "end";
     }
-    // 3. Xử lý Mod Skin
     else if ([lower containsString:@"skin"] || [lower containsString:@"mod skin"]) {
         aiResponseText = @"[Ai Eri] Đang xử lý mở khóa trang phục qua bộ hàm IsCanUseSkin, IsFreeSkin, OnShowHeroSkin...";
         luaPayload = @"-- ==========================================\n"
@@ -123,7 +120,6 @@
                      "    print('[Ai Eri] Kích hoạt Mod Skin trong game thành công!')\n"
                      "end";
     }
-    // 4. Xử lý Bất tử / God Mode
     else if ([lower containsString:@"bất tử"] || [lower containsString:@"god mode"]) {
         aiResponseText = @"[Ai Eri] Đang thiết lập chế độ Bất tử, vô hiệu hóa hàm TakeDamage...";
         luaPayload = @"-- ==========================================\n"
@@ -136,7 +132,6 @@
                      "    print('[Lua Success] Đã bật Bất tử trong game!')\n"
                      "end";
     }
-    // 5. Mặc định quét động
     else {
         aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã nhận lệnh '%@'. Đang soạn script quét động offset IL2CPP cho chủ nhân!", text];
         luaPayload = [NSString stringWithFormat:
@@ -163,18 +158,17 @@
     }
     
     // =========================================================================
-    // FIX LUỒNG 1: TỰ ĐỘNG CHUYỂN TAB VÀ NẠP SẢN PHẨM SANG LUA TRONG 1 CHẠM AN TOÀN
+    // FIX AN TOÀN TUYỆT ĐỐI: XỬ LÝ CHUYỂN TAB VÀ NẠP LUA DÙNG PHƯƠNG THỨC ĐÃ KHAI BÁO
     // =========================================================================
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        // Tìm kiếm ToolViewController đang quản lý cửa sổ tool
         UIResponder *responder = self.view.window.rootViewController;
         ToolViewController *targetToolVC = nil;
         
         if ([responder isKindOfClass:[ToolViewController class]]) {
             targetToolVC = (ToolViewController *)responder;
-        } else {
-            // Duyệt qua các view controller con để tìm đúng container chính
-            for (UIViewController *child in responder.childViewControllers) {
+        } else if ([responder isKindOfClass:[UIViewController class]]) {
+            UIViewController *rootVC = (UIViewController *)responder;
+            for (UIViewController *child in rootVC.childViewControllers) {
                 if ([child isKindOfClass:[ToolViewController class]]) {
                     targetToolVC = (ToolViewController *)child;
                     break;
@@ -182,11 +176,9 @@
             }
         }
         
-        // Nếu tìm thấy, thực hiện chuyển tab sang Lua (Index 4) và nạp script trực tiếp
         if (targetToolVC) {
             [targetToolVC selectTab:4];
             
-            // Ép an toàn gọi phương thức set script trên LuaVC nếu có
             if ([targetToolVC respondsToSelector:@selector(luaVC)]) {
                 LuaVC *luaVC = [targetToolVC valueForKey:@"luaVC"];
                 if (luaVC && [luaVC respondsToSelector:@selector(setScriptContent:)]) {
