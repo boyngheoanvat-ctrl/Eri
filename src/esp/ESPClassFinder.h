@@ -1,13 +1,15 @@
 #import <Foundation/Foundation.h>
+#import "IL2CPPResolver.h"
+
+@interface ESPTargetClass : NSObject
+@property (nonatomic, assign) Il2CppClass *klass;
+@property (nonatomic, strong) NSString *className;
+@property (nonatomic, assign) int32_t positionOffset;
+@property (nonatomic, assign) int32_t hpOffset;
+@property (nonatomic, assign) int32_t maxHpOffset;
+@end
 
 @interface ESPClassFinder : NSObject
-
 + (instancetype)shared;
-
-- (NSArray<NSDictionary *> *)findEntityManagerClasses;
-- (NSArray<NSDictionary *> *)findCameraClasses;
-- (NSArray<NSDictionary *> *)findClassesWithStaticEntityList;
-- (NSArray<NSDictionary *> *)findMethodsReturningEntityList;
-- (NSDictionary *)fullScanReport;
-
+- (NSArray<ESPTargetClass *> *)scanForPotentialTargets;
 @end
