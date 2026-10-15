@@ -9,7 +9,7 @@
 - (UIColor *)background;
 - (UIColor *)surface;
 - (UIColor *)surfaceAlt;
- 
+
 // Text
 - (UIColor *)textPrimary;
 - (UIColor *)textSecondary;
