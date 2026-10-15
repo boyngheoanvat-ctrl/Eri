@@ -37,6 +37,37 @@ static int lua_custom_print(lua_State *L) {
     return 0;
 }
 
+// Giả lập các hàm của GameGuardian (gg.*) để tránh lỗi nil value
+static int lua_gg_setRanges(lua_State *L) {
+    NSLog(@"[Lua gg mock] setRanges called");
+    return 0;
+}
+
+static int lua_gg_searchNumber(lua_State *L) {
+    NSLog(@"[Lua gg mock] searchNumber called");
+    lua_newtable(L); // Trả về một bảng kết quả giả lập
+    return 1;
+}
+
+static int lua_gg_getResults(lua_State *L) {
+    NSLog(@"[Lua gg mock] getResults called");
+    lua_newtable(L);
+    return 1;
+}
+
+static int lua_gg_editAll(lua_State *L) {
+    NSLog(@"[Lua gg mock] editAll called");
+    return 0;
+}
+
+static int lua_gg_toast(lua_State *L) {
+    const char *msg = lua_tostring(L, 1);
+    if (msg) {
+        NSLog(@"[Lua gg toast]: %s", msg);
+    }
+    return 0;
+}
+
 static int lua_il2cpp_get_method_pointer(lua_State *L) {
     const char *clsName = lua_tostring(L, 1);
     const char *mName = lua_tostring(L, 2);
@@ -54,13 +85,33 @@ static int lua_il2cpp_get_method_pointer(lua_State *L) {
     luaL_openlibs(L);
     self.L = L;
 
+    // Đăng ký print chuẩn
     lua_register(L, "print", lua_custom_print);
     
+    // Đăng ký namespace il2cpp
     lua_newtable(L);
     lua_pushcfunction(L, lua_il2cpp_get_method_pointer);
     lua_setfield(L, -2, "get_method_pointer");
     lua_setglobal(L, "il2cpp");
 
+    // ĐĂNG KÝ BẢNG GIẢ LẬP `gg` ĐỂ HỖ TRỢ SCRIPT CŨ
+    lua_newtable(L);
+    
+    // Hằng số gg
+    lua_pushinteger(L, 1); lua_setfield(L, -2, "REGION_ANONYMOUS");
+    lua_pushinteger(L, 2); lua_setfield(L, -2, "REGION_CODE_APP");
+    lua_pushinteger(L, 4); lua_setfield(L, -2, "TYPE_DWORD");
+    
+    // Hàm gg
+    lua_pushcfunction(L, lua_gg_setRanges); lua_setfield(L, -2, "setRanges");
+    lua_pushcfunction(L, lua_gg_searchNumber); lua_setfield(L, -2, "searchNumber");
+    lua_pushcfunction(L, lua_gg_getResults); lua_setfield(L, -2, "getResults");
+    lua_pushcfunction(L, lua_gg_editAll); lua_setfield(L, -2, "editAll");
+    lua_pushcfunction(L, lua_gg_toast); lua_setfield(L, -2, "toast");
+    
+    lua_setglobal(L, "gg");
+
+    // Thực thi script
     int status = luaL_dostring(L, script.UTF8String);
 
     NSString *result;
