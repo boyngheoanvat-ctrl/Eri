@@ -111,7 +111,7 @@
         
         if ((info.protection & VM_PROT_READ) && (info.protection & VM_PROT_WRITE) && !(info.share_mode == SM_SHARED)) {
             int *buffer = (int *)malloc(size);
-            mach_msg_type_number_t outSize = (mach_msg_type_number_t)size;
+            vm_size_t outSize = (vm_size_t)size; // Sửa kiểu dữ liệu thành vm_size_t chuẩn iOS SDK 16.5
             if (vm_read_overwrite(task, address, size, (vm_address_t)buffer, &outSize) == KERN_SUCCESS) {
                 for (size_t i = 0; i < outSize / sizeof(int); i++) {
                     if (buffer[i] == targetVal) {
@@ -145,8 +145,8 @@
     for (NSNumber *numAddr in self.foundAddresses) {
         uint64_t addr = [numAddr unsignedLongLongValue];
         int val = 0;
-        mach_msg_type_number_t size = sizeof(int);
-        if (vm_read_overwrite(task, (vm_address_t)addr, size, (vm_address_t)&val, &size) == KERN_SUCCESS) {
+        vm_size_t size = sizeof(int); // Sửa thành vm_size_t
+        if (vm_read_overwrite(task, (vm_address_t)addr, sizeof(int), (vm_address_t)&val, &size) == KERN_SUCCESS) {
             if (val == targetVal) {
                 [survived addObject:numAddr];
                 [log appendFormat:@"Keep: 0x%llX -> Value: %d\n", addr, val];
