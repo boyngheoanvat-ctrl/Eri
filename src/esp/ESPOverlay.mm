@@ -23,12 +23,11 @@
     CGContextRef context = UIGraphicsGetCurrentContext();
     if (!context) return;
     
-    // Vẽ nét viền sáng nổi bật để chắc chắn ESP hiển thị lên màn hình game
     CGContextSetLineWidth(context, 2.5);
     CGContextSetStrokeColorWithColor(context, [ToolTheme shared].success.CGColor);
     
-    CGFloat boxW = 100;
-    CGFloat boxH = 160;
+    CGFloat boxW = 110;
+    CGFloat boxH = 180;
     CGFloat boxX = (rect.size.width - boxW) / 2.0;
     CGFloat boxY = (rect.size.height - boxH) / 2.0;
     
@@ -45,11 +44,11 @@
     UIFont *font = [[ToolTheme shared] monoBoldFont:11];
     NSDictionary *attrs = @{
         NSFontAttributeName: font,
-        NSForegroundColorAttributeName: [UIColor yellowColor]
+        NSForegroundColorAttributeName: [UIColor cyanColor]
     };
     
     if (self.overlayController.showName) {
-        [@"[Eri ESP Target]" drawAtPoint:CGPointMake(boxX, boxY - 18) withAttributes:attrs];
+        [@"[Eri ESP Active]" drawAtPoint:CGPointMake(boxX, boxY - 18) withAttributes:attrs];
     }
     
     if (self.overlayController.showHP) {
@@ -58,7 +57,7 @@
         CGContextSetFillColorWithColor(context, [UIColor colorWithRed:1 green:0 blue:0 alpha:0.9].CGColor);
         CGContextFillRect(context, CGRectMake(hpBarX, boxY, hpBarW, boxH));
         CGContextSetFillColorWithColor(context, [ToolTheme shared].success.CGColor);
-        CGContextFillRect(context, CGRectMake(hpBarX, boxY + boxH * 0.25, hpBarW, boxH * 0.75));
+        CGContextFillRect(context, CGRectMake(hpBarX, boxY + boxH * 0.2, hpBarW, boxH * 0.8));
     }
 }
 
@@ -109,7 +108,7 @@
     }
     
     self.overlayWindow.frame = screenBounds;
-    self.overlayWindow.windowLevel = UIWindowLevelAlert + 9999; // Đưa lên tầng cao nhất, đè mọi view game
+    self.overlayWindow.windowLevel = UIWindowLevelAlert + 99999;
     self.overlayWindow.backgroundColor = [UIColor clearColor];
     self.overlayWindow.userInteractionEnabled = NO;
     
