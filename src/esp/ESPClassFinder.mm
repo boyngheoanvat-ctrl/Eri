@@ -56,7 +56,6 @@
 
             if (!matched) continue;
 
-            // Quét Fields để tìm Position và HP
             uint16_t fCount = 0;
             NSArray<NSValue *> *fList = [r class_get_fields:klass count:&fCount];
             int32_t posOff = -1;
@@ -84,7 +83,6 @@
                 }
             }
 
-            // Nếu class có ít nhất offset Position hoặc HP thì lưu lại
             if (posOff != -1 || hpOff != -1) {
                 ESPTargetClass *tc = [[ESPTargetClass alloc] init];
                 tc.klass = klass;
@@ -97,6 +95,27 @@
         }
     }
     return results;
+}
+
+- (NSArray *)findEntityManagerClasses {
+    return [self scanForPotentialTargets];
+}
+
+- (NSArray *)findCameraClasses {
+    return @[];
+}
+
+- (NSArray *)findClassesWithStaticEntityList {
+    return @[];
+}
+
+- (NSArray *)findMethodsReturningEntityList {
+    return @[];
+}
+
+- (NSString *)fullScanReport {
+    NSArray *targets = [self scanForPotentialTargets];
+    return [NSString stringWithFormat:@"[ESPScan] Found %lu target classes.", (unsigned long)targets.count];
 }
 
 @end
