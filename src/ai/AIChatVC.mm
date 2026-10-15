@@ -74,7 +74,7 @@
     self.chatLogTextView.backgroundColor = [UIColor clearColor];
     self.chatLogTextView.textColor = [ToolTheme shared].textPrimary;
     self.chatLogTextView.font = [UIFont systemFontOfSize:13];
-    self.chatLogTextView.text = @"[ai] AI Agent ready.\nHỏi: hack map, hack speed...\n";
+    self.chatLogTextView.text = @"[AI Agent] Sẵn sàng tìm mã hack...\nHỏi: hack map, camera xa, speed...\n";
     [self.contentView addSubview:self.chatLogTextView];
     
     [self updateLayoutContent];
@@ -89,10 +89,10 @@
     self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n> %@", current, text];
     [self updateLayoutContent];
     
-    // AI tự động gọi GameFingerprint lấy phương thức dựa trên yêu cầu
+    // AI Agent phân tích ý định và trích xuất phương thức qua GameFingerprint
     NSArray<NSDictionary *> *foundMethods = [[GameFingerprint shared] findMethodsForConcept:text maxResults:5];
     if (foundMethods.count > 0) {
-        NSMutableString *resultLog = [NSMutableString stringWithString:@"\n[tool] find_concept -> hoàn tất\n"];
+        NSMutableString *resultLog = [NSMutableString stringWithString:@"\n[AI Analysis] Tìm thấy phương thức khớp:\n"];
         for (NSDictionary *m in foundMethods) {
             [resultLog appendFormat:@"- %@.%@ (RVA %@)\n", m[@"class"], m[@"method"], m[@"rva"]];
         }
@@ -100,18 +100,8 @@
         [self updateLayoutContent];
         [self checkAndPushScriptToLua];
     } else {
-        [AITool registerAll];
-        NSMutableArray *tools = [NSMutableArray array];
-        NSArray *toolNames = @[@"find_concept", @"search_classes", @"dump_class_runtime", @"find_method_global"];
-        for (NSString *name in toolNames) {
-            AITool *t = [AITool toolNamed:name];
-            if (t) {
-                NSDictionary *schema = [t openAISchema];
-                if (schema) [tools addObject:schema];
-            }
-        }
-        NSArray *messages = @[@{@"role": @"user", @"content": text}];
-        [[AIProvider shared] sendMessages:messages tools:tools delegate:self];
+        self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n[AI] Không tìm thấy RVA phù hợp cho yêu cầu này.", self.chatLogTextView.text];
+        [self updateLayoutContent];
     }
 }
 
@@ -139,34 +129,27 @@
     NSArray<NSTextCheckingResult *> *matches = [regex matchesInString:chatText options:0 range:NSMakeRange(0, chatText.length)];
     
     if (matches.count > 0) {
-        NSTextCheckingResult *selectedMatch = matches.firstObject;
-        for (NSTextCheckingResult *m in matches) {
-            NSString *fullMatchStr = [chatText substringWithRange:m.range];
-            if ([fullMatchStr containsString:@"CanSight"] || [fullMatchStr containsString:@"ShowEntity"]) {
-                selectedMatch = m;
-                break;
-            }
-        }
+        // Lấy kết quả phân tích chính xác mới nhất ở cuối khung chat
+        NSTextCheckingResult *selectedMatch = matches.lastObject;
         
         NSString *cls = [chatText substringWithRange:[selectedMatch rangeAtIndex:1]];
         NSString *meth = [chatText substringWithRange:[selectedMatch rangeAtIndex:2]];
         NSString *rva = [chatText substringWithRange:[selectedMatch rangeAtIndex:3]];
         
-        // Sinh đoạn Script tích hợp sẵn lệnh patch RAM và hỗ trợ menu GG trọn vẹn
+        // Sinh đoạn Script Lua tự động patch RAM và gửi tín hiệu sang tab Lua
         NSString *autoScript = [NSString stringWithFormat:
             @"-- ==========================================\n"
-             @"-- AI Auto Discovered Mod Script (LQMB)\n"
+             @"-- AI Auto Discovered Mod Script\n"
              @"-- Target: %@.%@\n"
              @"-- RVA: %@\n"
              @"-- ==========================================\n\n"
-             @"print('[AI Auto] Nạp RVA thực tế: %@.%@ -> %@')\n"
+             @"print('[AI Auto] Nạp RVA thành công: %@.%@ -> %@')\n"
              @"local targetRVA = \"%@\"\n\n"
-             @"-- Thực hiện ghi đè RAM trực tiếp qua IL2CPP Patch\n"
              @"if il2cpp.patch_memory then\n"
              @"    il2cpp.patch_memory(targetRVA, \"20008052C0035FD6\")\n"
-             @"    print('[LuaEngine] Patch CanSight thành công (Hack Map Active)!')\n"
+             @"    print('[LuaEngine] Patch thành công trực tiếp vào RAM!')\n"
              @"else\n"
-             @"    print('[LuaEngine] RVA Target: ' .. targetRVA)\n"
+             @"    print('[LuaEngine] Target RVA: ' .. targetRVA)\n"
              @"end\n",
             cls, meth, rva, cls, meth, rva, rva
         ];
@@ -177,28 +160,6 @@
                                                               userInfo:@{@"script": autoScript}];
         });
     }
-}
-
-- (void)aiStreamDidReceiveText:(NSString *)text {
-    self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n%@", self.chatLogTextView.text ?: @"", text];
-    [self updateLayoutContent];
-    [self checkAndPushScriptToLua];
-}
-
-- (void)aiStreamDidComplete {
-    [self updateLayoutContent];
-    [self checkAndPushScriptToLua];
-}
-
-- (void)aiStreamDidFailWithError:(NSError *)error {
-    self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n[Lỗi] %@", self.chatLogTextView.text ?: @"", error.localizedDescription];
-    [self updateLayoutContent];
-}
-
-- (void)aiDidCallTool:(NSString *)toolName args:(NSDictionary *)args result:(id)result {
-    self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n[tool] %@ -> hoàn tất", self.chatLogTextView.text ?: @"", toolName];
-    [self updateLayoutContent];
-    [self checkAndPushScriptToLua];
 }
 
 @end
