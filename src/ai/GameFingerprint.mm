@@ -4,6 +4,7 @@
 static NSDictionary<NSString *, NSArray<NSString *> *> *gSynonyms = nil;
 static NSString *gDetectedGame = nil;
 static BOOL gScanned = NO;
+static NSLock *gScanLock = nil;
 
 @implementation GameFingerprint
 
@@ -12,6 +13,7 @@ static BOOL gScanned = NO;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         instance = [[GameFingerprint alloc] init];
+        gScanLock = [[NSLock alloc] init];
         [instance setupSynonyms];
     });
     return instance;
@@ -82,23 +84,39 @@ static BOOL gScanned = NO;
 #pragma mark - Scan
 
 - (void)scan {
-    if (gScanned) return;
+    [gScanLock lock];
+    if (gScanned) { [gScanLock unlock]; return; }
     gScanned = YES;
-
-    IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (!r) { gDetectedGame = @"Unknown"; gScanned = NO; return; }
-    [r attachCurrentThread];
-    if (![r resolve]) { gDetectedGame = @"Unknown"; gScanned = NO; return; }
-
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain || !domain->assemblies || domain->assembly_count == 0) {
-        NSLog(@"[GameFingerprint] IL2CPP not ready yet");
-        gDetectedGame = @"Unknown";
-        gScanned = NO;
-        return;
-    }
+    [gScanLock unlock];
 
     @try {
+        IL2CPPResolver *r = [IL2CPPResolver shared];
+        if (!r) { gDetectedGame = @"Unknown"; return; }
+
+        [r attachCurrentThread];
+
+        if (![r resolve]) {
+            NSLog(@"[GameFingerprint] resolve failed");
+            gDetectedGame = @"Unknown";
+            return;
+        }
+
+        Il2CppDomain *domain = [r domain_get];
+        if (!domain || (uintptr_t)domain < 0x1000) {
+            NSLog(@"[GameFingerprint] domain null/invalid");
+            gDetectedGame = @"Unknown";
+            return;
+        }
+        if (!domain->assemblies) {
+            gDetectedGame = @"Unknown";
+            return;
+        }
+        int asmCount = (int)domain->assembly_count;
+        if (asmCount <= 0 || asmCount > 10000) {
+            gDetectedGame = @"Unknown";
+            return;
+        }
+
         BOOL hasCanSight    = [self hasAnyMethodNamed:@[@"CanSight"]        maxAsm:2 maxClass:300];
         BOOL hasCalcVisible = [self hasAnyMethodNamed:@[@"CalcVisible", @"RefreshVisible"] maxAsm:2 maxClass:300];
         BOOL hasSetVisible  = [self hasAnyMethodNamed:@[@"SetVisible"]      maxAsm:2 maxClass:300];
@@ -119,7 +137,7 @@ static BOOL gScanned = NO;
             }
         }
     } @catch (NSException *e) {
-        NSLog(@"[GameFingerprint] scan crash: %@", e);
+        NSLog(@"[GameFingerprint] scan exception: %@", e);
         gDetectedGame = @"Unknown";
     }
 
@@ -134,9 +152,7 @@ static BOOL gScanned = NO;
 }
 
 - (NSDictionary *)fingerprintInfo {
-    return @{
-        @"game": gDetectedGame ?: @"Unknown",
-    };
+    return @{ @"game": gDetectedGame ?: @"Unknown" };
 }
 
 - (BOOL)hasAnyMethodNamed:(NSArray<NSString *> *)names maxAsm:(int)maxAsm maxClass:(int)maxClass {
@@ -148,24 +164,26 @@ static BOOL gScanned = NO;
     if (![r resolve]) return NO;
 
     Il2CppDomain *domain = [r domain_get];
-    if (!domain || !domain->assemblies) return NO;
+    if (!domain || (uintptr_t)domain < 0x1000) return NO;
+    if (!domain->assemblies) return NO;
 
     int asmLimit = MIN((int)domain->assembly_count, maxAsm);
     for (int a = 0; a < asmLimit; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
+        if (!asm_ || (uintptr_t)asm_ < 0x1000) continue;
         Il2CppImage *image = [r assembly_get_image:asm_];
-        if (!image) continue;
+        if (!image || (uintptr_t)image < 0x1000) continue;
         size_t count = [r image_get_class_count:image];
+        if (count == 0 || count > 100000) continue;
         size_t limit = MIN(count, (size_t)maxClass);
         for (size_t i = 0; i < limit; i++) {
             Il2CppClass *k = [r image_get_class:image index:i];
-            if (!k) continue;
+            if (!k || (uintptr_t)k < 0x1000) continue;
             uint16_t mCount = 0;
             NSArray<NSValue *> *mList = [r class_get_methods:k count:&mCount];
             for (uint16_t j = 0; j < mCount; j++) {
                 MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
-                if (!m) continue;
+                if (!m || (uintptr_t)m < 0x1000) continue;
                 const char *mn = [r method_get_name:m];
                 if (!mn) continue;
                 NSString *n = [NSString stringWithUTF8String:mn];
@@ -188,19 +206,21 @@ static BOOL gScanned = NO;
     if (![r resolve]) return NO;
 
     Il2CppDomain *domain = [r domain_get];
-    if (!domain || !domain->assemblies) return NO;
+    if (!domain || (uintptr_t)domain < 0x1000) return NO;
+    if (!domain->assemblies) return NO;
 
     int asmLimit = MIN((int)domain->assembly_count, maxAsm);
     for (int a = 0; a < asmLimit; a++) {
         Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
+        if (!asm_ || (uintptr_t)asm_ < 0x1000) continue;
         Il2CppImage *image = [r assembly_get_image:asm_];
-        if (!image) continue;
+        if (!image || (uintptr_t)image < 0x1000) continue;
         size_t count = [r image_get_class_count:image];
+        if (count == 0 || count > 100000) continue;
         size_t limit = MIN(count, (size_t)maxClass);
         for (size_t i = 0; i < limit; i++) {
             Il2CppClass *k = [r image_get_class:image index:i];
-            if (!k) continue;
+            if (!k || (uintptr_t)k < 0x1000) continue;
             const char *cn = [r class_get_name:k];
             if (!cn) continue;
             NSString *n = [NSString stringWithUTF8String:cn];
@@ -229,7 +249,8 @@ static BOOL gScanned = NO;
     if (![r resolve]) return @[];
 
     Il2CppDomain *domain = [r domain_get];
-    if (!domain || !domain->assemblies) return @[];
+    if (!domain || (uintptr_t)domain < 0x1000) return @[];
+    if (!domain->assemblies) return @[];
 
     NSMutableArray *found = [NSMutableArray array];
 
@@ -237,17 +258,18 @@ static BOOL gScanned = NO;
         int maxAsm = MIN((int)domain->assembly_count, 3);
         for (int a = 0; a < maxAsm; a++) {
             Il2CppAssembly *asm_ = domain->assemblies[a];
-            if (!asm_) continue;
+            if (!asm_ || (uintptr_t)asm_ < 0x1000) continue;
             Il2CppImage *image = [r assembly_get_image:asm_];
-            if (!image) continue;
+            if (!image || (uintptr_t)image < 0x1000) continue;
 
             size_t count = [r image_get_class_count:image];
+            if (count == 0 || count > 100000) continue;
             size_t classLimit = MIN(count, (size_t)500);
 
             for (size_t i = 0; i < classLimit && found.count < (NSUInteger)max * 3; i++) {
                 @autoreleasepool {
                     Il2CppClass *klass = [r image_get_class:image index:i];
-                    if (!klass) continue;
+                    if (!klass || (uintptr_t)klass < 0x1000) continue;
                     const char *cname = [r class_get_name:klass];
                     if (!cname) continue;
                     NSString *className = [NSString stringWithUTF8String:cname];
@@ -264,7 +286,7 @@ static BOOL gScanned = NO;
                     NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
                     for (uint16_t j = 0; j < mCount; j++) {
                         MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
-                        if (!m) continue;
+                        if (!m || (uintptr_t)m < 0x1000) continue;
                         const char *mn = [r method_get_name:m];
                         if (!mn) continue;
                         NSString *mName = [NSString stringWithUTF8String:mn];
