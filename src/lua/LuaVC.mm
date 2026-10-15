@@ -74,10 +74,7 @@
     self.editorView.text = @"-- Lua Script\n"
                            @"print(\"Hello from Lua!\")\n"
                            @"local x = 10 + 20\n"
-                           @"print(\"x =\", x)\n"
-                           @"for i = 1, 5 do\n"
-                           @"  print(\"i =\", i)\n"
-                           @"end";
+                           @"print(\"x =\", x)\n";
     self.editorView.autocorrectionType = UITextAutocorrectionTypeNo;
     self.editorView.autocapitalizationType = UITextAutocapitalizationTypeNone;
     [self.view addSubview:self.editorView];
@@ -102,6 +99,30 @@
     self.consoleView.text = @"-- Lua Console --\n";
     self.consoleView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
     [self.view addSubview:self.consoleView];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    CGFloat w = CGRectGetWidth(self.view.bounds);
+    CGFloat h = CGRectGetHeight(self.view.bounds);
+    CGFloat pad = 8;
+    CGFloat y = 8;
+    CGFloat btnW = (w - pad * 5) / 4;
+    CGFloat btnH = 36;
+
+    self.runButton.frame = CGRectMake(pad, y, btnW, btnH);
+    self.stopButton.frame = CGRectMake(pad * 2 + btnW, y, btnW, btnH);
+    self.pasteButton.frame = CGRectMake(pad * 3 + btnW * 2, y, btnW, btnH);
+    self.clearButton.frame = CGRectMake(pad * 4 + btnW * 3, y, btnW, btnH);
+    y += btnH + 28; // Bao gồm cả nhãn Editor
+
+    CGFloat editorH = 180;
+    self.editorView.frame = CGRectMake(pad, y, w - pad * 2, editorH);
+    y += editorH + 28; // Bao gồm cả nhãn Console
+
+    CGFloat consoleH = h - y - pad;
+    if (consoleH < 80) consoleH = 80;
+    self.consoleView.frame = CGRectMake(pad, y, w - pad * 2, consoleH);
 }
 
 - (UIButton *)makeButton:(NSString *)title x:(CGFloat)x y:(CGFloat)y w:(CGFloat)w h:(CGFloat)h color:(UIColor *)color {
@@ -159,6 +180,9 @@
     });
 }
 
-- (void)reload {}
+- (void)reload {
+    [self.view setNeedsLayout];
+    [self.view layoutIfNeeded];
+}
 
 @end
