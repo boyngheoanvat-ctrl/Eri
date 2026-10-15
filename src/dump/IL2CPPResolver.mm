@@ -49,7 +49,6 @@ static void *g_class_get_fields = NULL;
 static void *g_class_get_properties = NULL;
 static void *g_method_get_name = NULL;
 static void *g_method_get_token = NULL;
-static void *g_method_get_pointer = NULL;
 static void *g_method_get_return_type = NULL;
 static void *g_method_get_flags = NULL;
 static void *g_method_get_param_count = NULL;
@@ -66,6 +65,8 @@ static void *g_property_get_set_method = NULL;
 static void *g_type_get_name = NULL;
 static void *g_free = NULL;
 static void *g_thread_attach = NULL;
+
+static uint64_t g_il2cpp_base = 0;
 
 #pragma mark -
 
@@ -138,7 +139,6 @@ static void *g_thread_attach = NULL;
     g_class_get_properties          = find_sym(self.handle, "il2cpp_class_get_properties");
     g_method_get_name               = find_sym(self.handle, "il2cpp_method_get_name");
     g_method_get_token              = find_sym(self.handle, "il2cpp_method_get_token");
-    g_method_get_pointer            = find_sym(self.handle, "il2cpp_method_get_pointer");
     g_method_get_return_type        = find_sym(self.handle, "il2cpp_method_get_return_type");
     g_method_get_flags              = find_sym(self.handle, "il2cpp_method_get_flags");
     g_method_get_param_count        = find_sym(self.handle, "il2cpp_method_get_param_count");
@@ -156,7 +156,38 @@ static void *g_thread_attach = NULL;
     g_free                          = find_sym(self.handle, "il2cpp_free");
     g_thread_attach                 = find_sym(self.handle, "il2cpp_thread_attach");
 
+    // ===== Base address của UnityFramework — dùng để tính RVA =====
+    if (g_domain_get) {
+        Dl_info info;
+        if (dladdr(g_domain_get, &info)) {
+            g_il2cpp_base = (uint64_t)info.dli_fbase;
+        }
+    }
+    if (g_il2cpp_base == 0 && g_domain_get_assemblies) {
+        Dl_info info;
+        if (dladdr(g_domain_get_assemblies, &info)) {
+            g_il2cpp_base = (uint64_t)info.dli_fbase;
+        }
+    }
+    if (g_il2cpp_base == 0) {
+        // Fallback: image header của UnityFramework
+        uint32_t count = _dyld_image_count();
+        for (uint32_t i = 0; i < count; i++) {
+            const char *name = _dyld_get_image_name(i);
+            if (name && (strstr(name, "UnityFramework") ||
+                         strstr(name, "GameAssembly"))) {
+                const struct mach_header *hdr = _dyld_get_image_header(i);
+                intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+                if (hdr) {
+                    g_il2cpp_base = (uint64_t)((uintptr_t)hdr) + slide;
+                    break;
+                }
+            }
+        }
+    }
+
     NSLog(@"[IL2CPPResolver] Symbols cached");
+    NSLog(@"[IL2CPPResolver]   base = 0x%llX", g_il2cpp_base);
     NSLog(@"[IL2CPPResolver]   domain=%p image_name=%p class_name=%p",
           g_domain_get, g_image_get_name, g_class_get_name);
     NSLog(@"[IL2CPPResolver]   method_param=%p field_type=%p property=%p",
@@ -166,6 +197,8 @@ static void *g_thread_attach = NULL;
 }
 
 - (BOOL)isResolved { return self.handle != NULL; }
+
+- (uint64_t)il2cppBase { return g_il2cpp_base; }
 
 #pragma mark - Thread
 
@@ -351,13 +384,10 @@ static void *g_thread_attach = NULL;
     return ((fn_t)g_method_get_token)(m);
 }
 
+// MethodInfo có 1 field duy nhất methodPointer ở offset 0 — đọc trực tiếp
 - (void *)method_get_pointer:(MethodInfo *)m {
     if (!m) return NULL;
-    if (g_method_get_pointer) {
-        typedef void *(*fn_t)(const MethodInfo *);
-        return ((fn_t)g_method_get_pointer)(m);
-    }
-    return NULL;
+    return m->methodPointer;
 }
 
 - (const char *)method_get_return_type:(MethodInfo *)method {
