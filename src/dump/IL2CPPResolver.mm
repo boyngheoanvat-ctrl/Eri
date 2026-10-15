@@ -1,61 +1,87 @@
 #import "IL2CPPResolver.h"
 #import <dlfcn.h>
 #import <mach-o/dyld.h>
+#import <mach-o/loader.h>
+#import <mach-o/nlist.h>
 #include <string.h>
 #include <stdio.h>
 
-#pragma mark - Symbol map
+#pragma mark - Auto symbol finder (không hard-code)
 
-static const struct { const char *base; const char *mangled; } kSymbolMap[] = {
-    {"il2cpp_domain_get",             "__Z16il2cpp_domain_getv"},
-    {"il2cpp_image_get_class_count",  "__Z28il2cpp_image_get_class_countPK11Il2CppImage"},
-    {"il2cpp_image_get_class",        "__Z29il2cpp_image_get_classPK11Il2CppImagem"},
-    {"il2cpp_class_get_methods",      "__Z23il2cpp_class_get_methodsP11Il2CppClassPPv"},
-    {"il2cpp_class_get_fields",       "__Z22il2cpp_class_get_fieldsP11Il2CppClassPPv"},
-    {"il2cpp_class_get_properties",   "__Z26il2cpp_class_get_propertiesP11Il2CppClassPPv"},
-    {"il2cpp_assembly_get_image",     "__Z23il2cpp_assembly_get_imagePK14Il2CppAssembly"},
-    {"il2cpp_image_get_name",         "__Z19il2cpp_image_get_namePK11Il2CppImage"},
-    {"il2cpp_class_get_name",         "__Z20il2cpp_class_get_nameP11Il2CppClass"},
-    {"il2cpp_class_get_namespace",    "__Z25il2cpp_class_get_namespaceP11Il2CppClass"},
-    {"il2cpp_class_get_parent",       "__Z22il2cpp_class_get_parentP11Il2CppClass"},
-    {"il2cpp_class_get_static_field_data", "__Z32il2cpp_class_get_static_field_dataP11Il2CppClass"},
-    {"il2cpp_method_get_name",        "__Z21il2cpp_method_get_namePK10MethodInfo"},
-    {"il2cpp_method_get_pointer",     "__Z25il2cpp_method_get_pointerPK10MethodInfo"},
-    {"il2cpp_method_get_token",       "__Z22il2cpp_method_get_tokenPK10MethodInfo"},
-    {"il2cpp_field_get_name",         "__Z20il2cpp_field_get_nameP9FieldInfo"},
-    {"il2cpp_field_get_offset",       "__Z22il2cpp_field_get_offsetP9FieldInfo"},
-    {"il2cpp_field_get_token",        "__Z21il2cpp_field_get_tokenP9FieldInfo"},
-    {"il2cpp_type_get_name",          "__Z19il2cpp_type_get_namePK10Il2CppType"},
-    {"il2cpp_property_get_name",      "__Z24il2cpp_property_get_nameP13PropertyInfo"},
-    {NULL, NULL}
-};
-
+// Tìm symbol bằng nhiều cách:
+// 1. Tên C trực tiếp
+// 2. Tên C có gạch dưới
+// 3. C++ mangled void() dạng __Z<len><name>v
+// 4. RTLD_DEFAULT
+// 5. Duyệt toàn bộ symbol table UnityFramework, tìm substring
 static void *find_sym(void *handle, const char *baseName) {
     if (!handle || !baseName) return NULL;
 
-    for (int i = 0; kSymbolMap[i].base; i++) {
-        if (strcmp(kSymbolMap[i].base, baseName) == 0) {
-            void *p = dlsym(handle, kSymbolMap[i].mangled);
-            if (p) return p;
-            break;
-        }
-    }
-
+    // 1. Tên C trực tiếp
     void *p = dlsym(handle, baseName);
     if (p) return p;
 
+    // 2. Có gạch dưới đầu
     char buf[512];
     snprintf(buf, sizeof(buf), "_%s", baseName);
     p = dlsym(handle, buf);
     if (p) return p;
 
+    // 3. C++ mangled void() dạng __Z<len><name>v
     size_t n = strlen(baseName);
     snprintf(buf, sizeof(buf), "__Z%zu%sv", n, baseName);
     p = dlsym(handle, buf);
     if (p) return p;
 
+    // 4. RTLD_DEFAULT
     p = dlsym(RTLD_DEFAULT, baseName);
     if (p) return p;
+
+    // 5. Duyệt toàn bộ symbol table của UnityFramework image — tìm substring
+    uint32_t count = _dyld_image_count();
+    for (uint32_t i = 0; i < count; i++) {
+        const char *imgName = _dyld_get_image_name(i);
+        if (!imgName) continue;
+        if (!strstr(imgName, "UnityFramework") &&
+            !strstr(imgName, "il2cpp") &&
+            !strstr(imgName, "GameAssembly")) continue;
+
+        const struct mach_header_64 *hdr =
+            (const struct mach_header_64 *)_dyld_get_image_header(i);
+        if (!hdr) continue;
+
+        intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+        const uint8_t *base = (const uint8_t *)hdr;
+        const uint8_t *cmds = base + sizeof(struct mach_header_64);
+        uint32_t off = 0;
+
+        for (uint32_t j = 0; j < hdr->ncmds; j++) {
+            const struct load_command *lc =
+                (const struct load_command *)(cmds + off);
+            if (lc->cmd == LC_SYMTAB) {
+                const struct symtab_command *sym =
+                    (const struct symtab_command *)lc;
+                const struct nlist_64 *nl =
+                    (const struct nlist_64 *)(base + sym->symoff);
+                const char *strtab = (const char *)(base + sym->stroff);
+
+                for (uint32_t k = 0; k < sym->nsyms; k++) {
+                    if (nl[k].n_un.n_strx == 0) continue;
+                    const char *nm = strtab + nl[k].n_un.n_strx;
+
+                    // Tìm substring "il2cpp_xxx" trong mangled name
+                    if (strstr(nm, baseName)) {
+                        uint64_t va = nl[k].n_value + slide;
+                        void *fnPtr = (void *)(uintptr_t)va;
+                        NSLog(@"[IL2CPPResolver] Found '%s' as '%s' @ %p",
+                              baseName, nm, fnPtr);
+                        return fnPtr;
+                    }
+                }
+            }
+            off += lc->cmdsize;
+        }
+    }
 
     return NULL;
 }
@@ -87,7 +113,10 @@ static void *find_sym(void *handle, const char *baseName) {
     };
     for (int i = 0; paths[i]; i++) {
         self.handle = dlopen(paths[i], RTLD_NOW);
-        if (self.handle) break;
+        if (self.handle) {
+            NSLog(@"[IL2CPPResolver] Opened: %s", paths[i]);
+            break;
+        }
     }
 
     if (!self.handle) {
@@ -98,7 +127,10 @@ static void *find_sym(void *handle, const char *baseName) {
                          strstr(name, "il2cpp") ||
                          strstr(name, "GameAssembly"))) {
                 self.handle = dlopen(name, RTLD_NOW);
-                if (self.handle) break;
+                if (self.handle) {
+                    NSLog(@"[IL2CPPResolver] Opened via dyld: %s", name);
+                    break;
+                }
             }
         }
     }
