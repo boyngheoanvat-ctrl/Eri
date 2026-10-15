@@ -40,6 +40,10 @@ static void *g_class_get_name = NULL;
 static void *g_class_get_namespace = NULL;
 static void *g_class_get_parent = NULL;
 static void *g_class_get_static_field_data = NULL;
+static void *g_class_get_flags = NULL;
+static void *g_class_is_enum = NULL;
+static void *g_class_is_valuetype = NULL;
+static void *g_class_is_interface = NULL;
 static void *g_class_get_methods = NULL;
 static void *g_class_get_fields = NULL;
 static void *g_class_get_properties = NULL;
@@ -48,11 +52,17 @@ static void *g_method_get_token = NULL;
 static void *g_method_get_pointer = NULL;
 static void *g_method_get_return_type = NULL;
 static void *g_method_get_flags = NULL;
+static void *g_method_get_param_count = NULL;
+static void *g_method_get_param_name = NULL;
+static void *g_method_get_param = NULL;
 static void *g_field_get_name = NULL;
 static void *g_field_get_offset = NULL;
 static void *g_field_get_token = NULL;
 static void *g_field_get_type = NULL;
+static void *g_field_get_flags = NULL;
 static void *g_property_get_name = NULL;
+static void *g_property_get_get_method = NULL;
+static void *g_property_get_set_method = NULL;
 static void *g_type_get_name = NULL;
 static void *g_free = NULL;
 static void *g_thread_attach = NULL;
@@ -119,6 +129,10 @@ static void *g_thread_attach = NULL;
     g_class_get_namespace           = find_sym(self.handle, "il2cpp_class_get_namespace");
     g_class_get_parent              = find_sym(self.handle, "il2cpp_class_get_parent");
     g_class_get_static_field_data   = find_sym(self.handle, "il2cpp_class_get_static_field_data");
+    g_class_get_flags               = find_sym(self.handle, "il2cpp_class_get_flags");
+    g_class_is_enum                 = find_sym(self.handle, "il2cpp_class_is_enum");
+    g_class_is_valuetype            = find_sym(self.handle, "il2cpp_class_is_valuetype");
+    g_class_is_interface            = find_sym(self.handle, "il2cpp_class_is_interface");
     g_class_get_methods             = find_sym(self.handle, "il2cpp_class_get_methods");
     g_class_get_fields              = find_sym(self.handle, "il2cpp_class_get_fields");
     g_class_get_properties          = find_sym(self.handle, "il2cpp_class_get_properties");
@@ -127,20 +141,26 @@ static void *g_thread_attach = NULL;
     g_method_get_pointer            = find_sym(self.handle, "il2cpp_method_get_pointer");
     g_method_get_return_type        = find_sym(self.handle, "il2cpp_method_get_return_type");
     g_method_get_flags              = find_sym(self.handle, "il2cpp_method_get_flags");
+    g_method_get_param_count        = find_sym(self.handle, "il2cpp_method_get_param_count");
+    g_method_get_param_name         = find_sym(self.handle, "il2cpp_method_get_param_name");
+    g_method_get_param              = find_sym(self.handle, "il2cpp_method_get_param");
     g_field_get_name                = find_sym(self.handle, "il2cpp_field_get_name");
     g_field_get_offset              = find_sym(self.handle, "il2cpp_field_get_offset");
     g_field_get_token               = find_sym(self.handle, "il2cpp_field_get_token");
     g_field_get_type                = find_sym(self.handle, "il2cpp_field_get_type");
+    g_field_get_flags               = find_sym(self.handle, "il2cpp_field_get_flags");
     g_property_get_name             = find_sym(self.handle, "il2cpp_property_get_name");
+    g_property_get_get_method       = find_sym(self.handle, "il2cpp_property_get_get_method");
+    g_property_get_set_method       = find_sym(self.handle, "il2cpp_property_get_set_method");
     g_type_get_name                 = find_sym(self.handle, "il2cpp_type_get_name");
     g_free                          = find_sym(self.handle, "il2cpp_free");
     g_thread_attach                 = find_sym(self.handle, "il2cpp_thread_attach");
 
     NSLog(@"[IL2CPPResolver] Symbols cached");
-    NSLog(@"[IL2CPPResolver]   domain_get=%p assemblies=%p",
-          g_domain_get, g_domain_get_assemblies);
-    NSLog(@"[IL2CPPResolver]   image_get_name=%p class_get_name=%p",
-          g_image_get_name, g_class_get_name);
+    NSLog(@"[IL2CPPResolver]   domain=%p image_name=%p class_name=%p",
+          g_domain_get, g_image_get_name, g_class_get_name);
+    NSLog(@"[IL2CPPResolver]   method_param=%p field_type=%p property=%p",
+          g_method_get_param, g_field_get_type, g_property_get_get_method);
 
     return YES;
 }
@@ -170,8 +190,7 @@ static void *g_thread_attach = NULL;
 }
 
 - (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(size_t *)count {
-    if (!domain) { if (count) *count = 0; return NULL; }
-    if (!g_domain_get_assemblies) { if (count) *count = 0; return NULL; }
+    if (!domain || !g_domain_get_assemblies) { if (count) *count = 0; return NULL; }
 
     typedef const Il2CppAssembly **(*fn_t)(const Il2CppDomain *, size_t *);
     size_t sz = 0;
@@ -230,6 +249,30 @@ static void *g_thread_attach = NULL;
     if (!klass || !g_class_get_static_field_data) return NULL;
     typedef void *(*fn_t)(Il2CppClass *);
     return ((fn_t)g_class_get_static_field_data)(klass);
+}
+
+- (uint32_t)class_get_flags:(Il2CppClass *)klass {
+    if (!klass || !g_class_get_flags) return 0;
+    typedef int (*fn_t)(const Il2CppClass *);
+    return (uint32_t)((fn_t)g_class_get_flags)(klass);
+}
+
+- (BOOL)class_is_enum:(Il2CppClass *)klass {
+    if (!klass || !g_class_is_enum) return NO;
+    typedef bool (*fn_t)(const Il2CppClass *);
+    return ((fn_t)g_class_is_enum)(klass) ? YES : NO;
+}
+
+- (BOOL)class_is_valuetype:(Il2CppClass *)klass {
+    if (!klass || !g_class_is_valuetype) return NO;
+    typedef bool (*fn_t)(const Il2CppClass *);
+    return ((fn_t)g_class_is_valuetype)(klass) ? YES : NO;
+}
+
+- (BOOL)class_is_interface:(Il2CppClass *)klass {
+    if (!klass || !g_class_is_interface) return NO;
+    typedef bool (*fn_t)(const Il2CppClass *);
+    return ((fn_t)g_class_is_interface)(klass) ? YES : NO;
 }
 
 #pragma mark - Methods / Fields / Properties
@@ -346,6 +389,40 @@ static void *g_thread_attach = NULL;
     return ((fn_t)g_method_get_flags)(method, &iflags);
 }
 
+- (uint32_t)method_get_param_count:(MethodInfo *)method {
+    if (!method || !g_method_get_param_count) return 0;
+    typedef uint32_t (*fn_t)(const MethodInfo *);
+    return ((fn_t)g_method_get_param_count)(method);
+}
+
+- (const char *)method_get_param_name:(MethodInfo *)method index:(uint32_t)index {
+    if (!method || !g_method_get_param_name) return NULL;
+    typedef const char *(*fn_t)(const MethodInfo *, uint32_t);
+    return ((fn_t)g_method_get_param_name)(method, index);
+}
+
+- (const char *)method_get_param_type_name:(MethodInfo *)method index:(uint32_t)index {
+    if (!method || !g_method_get_param || !g_type_get_name) return NULL;
+
+    typedef const Il2CppType *(*fn_t)(const MethodInfo *, uint32_t);
+    const Il2CppType *type = ((fn_t)g_method_get_param)(method, index);
+    if (!type) return NULL;
+
+    typedef const char *(*tn_t)(const Il2CppType *);
+    const char *name = ((tn_t)g_type_get_name)(type);
+    if (!name) return NULL;
+
+    static char buf[512];
+    strncpy(buf, name, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    if (g_free) {
+        typedef void (*fr_t)(void *);
+        ((fr_t)g_free)((void *)name);
+    }
+    return buf;
+}
+
 #pragma mark - FieldInfo
 
 - (const char *)field_get_name:(FieldInfo *)f {
@@ -388,12 +465,30 @@ static void *g_thread_attach = NULL;
     return buf;
 }
 
+- (uint32_t)field_get_flags:(FieldInfo *)field {
+    if (!field || !g_field_get_flags) return 0;
+    typedef int (*fn_t)(FieldInfo *);
+    return (uint32_t)((fn_t)g_field_get_flags)(field);
+}
+
 #pragma mark - PropertyInfo
 
 - (const char *)property_get_name:(PropertyInfo *)p {
     if (!p || !g_property_get_name) return NULL;
     typedef const char *(*fn_t)(const PropertyInfo *);
     return ((fn_t)g_property_get_name)(p);
+}
+
+- (MethodInfo *)property_get_get_method:(PropertyInfo *)p {
+    if (!p || !g_property_get_get_method) return NULL;
+    typedef const MethodInfo *(*fn_t)(PropertyInfo *);
+    return (MethodInfo *)((fn_t)g_property_get_get_method)(p);
+}
+
+- (MethodInfo *)property_get_set_method:(PropertyInfo *)p {
+    if (!p || !g_property_get_set_method) return NULL;
+    typedef const MethodInfo *(*fn_t)(PropertyInfo *);
+    return (MethodInfo *)((fn_t)g_property_get_set_method)(p);
 }
 
 #pragma mark - Type
