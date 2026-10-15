@@ -23,11 +23,12 @@
     CGContextRef context = UIGraphicsGetCurrentContext();
     if (!context) return;
     
-    CGContextSetLineWidth(context, 2.0);
+    // Vẽ nét viền sáng nổi bật để chắc chắn ESP hiển thị lên màn hình game
+    CGContextSetLineWidth(context, 2.5);
     CGContextSetStrokeColorWithColor(context, [ToolTheme shared].success.CGColor);
     
-    CGFloat boxW = 90;
-    CGFloat boxH = 150;
+    CGFloat boxW = 100;
+    CGFloat boxH = 160;
     CGFloat boxX = (rect.size.width - boxW) / 2.0;
     CGFloat boxY = (rect.size.height - boxH) / 2.0;
     
@@ -41,23 +42,23 @@
         CGContextStrokePath(context);
     }
     
-    UIFont *font = [[ToolTheme shared] monoBoldFont:10];
+    UIFont *font = [[ToolTheme shared] monoBoldFont:11];
     NSDictionary *attrs = @{
         NSFontAttributeName: font,
-        NSForegroundColorAttributeName: [ToolTheme shared].textPrimary
+        NSForegroundColorAttributeName: [UIColor yellowColor]
     };
     
     if (self.overlayController.showName) {
-        [@"[Eri] Target Player" drawAtPoint:CGPointMake(boxX, boxY - 16) withAttributes:attrs];
+        [@"[Eri ESP Target]" drawAtPoint:CGPointMake(boxX, boxY - 18) withAttributes:attrs];
     }
     
     if (self.overlayController.showHP) {
-        CGFloat hpBarX = boxX - 6;
-        CGFloat hpBarW = 4;
-        CGContextSetFillColorWithColor(context, [UIColor colorWithRed:1 green:0 blue:0 alpha:0.8].CGColor);
+        CGFloat hpBarX = boxX - 8;
+        CGFloat hpBarW = 5;
+        CGContextSetFillColorWithColor(context, [UIColor colorWithRed:1 green:0 blue:0 alpha:0.9].CGColor);
         CGContextFillRect(context, CGRectMake(hpBarX, boxY, hpBarW, boxH));
         CGContextSetFillColorWithColor(context, [ToolTheme shared].success.CGColor);
-        CGContextFillRect(context, CGRectMake(hpBarX, boxY + boxH * 0.3, hpBarW, boxH * 0.7));
+        CGContextFillRect(context, CGRectMake(hpBarX, boxY + boxH * 0.25, hpBarW, boxH * 0.75));
     }
 }
 
@@ -108,7 +109,7 @@
     }
     
     self.overlayWindow.frame = screenBounds;
-    self.overlayWindow.windowLevel = UIWindowLevelAlert + 999;
+    self.overlayWindow.windowLevel = UIWindowLevelAlert + 9999; // Đưa lên tầng cao nhất, đè mọi view game
     self.overlayWindow.backgroundColor = [UIColor clearColor];
     self.overlayWindow.userInteractionEnabled = NO;
     
