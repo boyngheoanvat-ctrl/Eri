@@ -11,6 +11,25 @@
     return instance;
 }
 
+- (NSString *)detectedGame {
+    // Trả về tên game mặc định hoặc logic nhận diện dựa trên runtime
+    return @"Unknown";
+}
+
+- (NSString *)detectedEntityClass {
+    // Trả về tên class thực thể chính của game
+    return @"Unknown";
+}
+
+- (NSArray<NSDictionary *> *)findMethodsForConcept:(NSString *)concept maxResults:(NSInteger)maxResults {
+    // Thực hiện tìm kiếm hoặc trả về danh sách mẫu phù hợp với concept (vd: map, vision, speed...)
+    // Hoặc tích hợp kết nối trực tiếp với Dumper / IL2CPPResolver tại đây.
+    NSMutableArray *results = [NSMutableArray array];
+    
+    // Trả về mảng rỗng hoặc danh sách kết quả giả lập an toàn để tránh crash
+    return results;
+}
+
 - (NSArray<NSDictionary *> *)filterAndRefineMethods:(NSArray<NSDictionary *> *)rawMethods {
     NSMutableArray<NSDictionary *> *filteredList = [NSMutableArray array];
     
