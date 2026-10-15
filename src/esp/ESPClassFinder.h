@@ -12,4 +12,9 @@
 @interface ESPClassFinder : NSObject
 + (instancetype)shared;
 - (NSArray<ESPTargetClass *> *)scanForPotentialTargets;
+- (NSArray *)findEntityManagerClasses;
+- (NSArray *)findCameraClasses;
+- (NSArray *)findClassesWithStaticEntityList;
+- (NSArray *)findMethodsReturningEntityList;
+- (NSString *)fullScanReport;
 @end
