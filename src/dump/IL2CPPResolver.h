@@ -3,7 +3,6 @@
 
 // ============================================================
 // IL2CPP types — OPAQUE
-// Không định nghĩa field. Mọi truy cập phải qua API function.
 // ============================================================
 
 typedef struct Il2CppDomain    Il2CppDomain;
@@ -14,6 +13,21 @@ typedef struct Il2CppType      Il2CppType;
 typedef struct MethodInfo      MethodInfo;
 typedef struct FieldInfo       FieldInfo;
 typedef struct PropertyInfo    PropertyInfo;
+
+// ============================================================
+// Il2CppDomain — ĐỊNH NGHĨA ĐẦY ĐỦ
+// Các file khác (ESPOverlay, IL2CPPHeapWalker, ESPClassFinder,
+// GameFingerprint, AIMethodAnalyzer, AITool, MethodCallerVC)
+// đọc domain->assemblies và domain->assembly_count
+// → phải giữ struct này
+// ============================================================
+struct Il2CppDomain {
+    int32_t         domain_id;
+    int32_t         _pad;
+    void           *method_table;
+    Il2CppAssembly **assemblies;
+    size_t          assembly_count;
+};
 
 @interface IL2CPPResolver : NSObject
 
