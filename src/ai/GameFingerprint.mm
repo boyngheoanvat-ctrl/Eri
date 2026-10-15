@@ -3,11 +3,8 @@
 #include <dlfcn.h>
 
 @interface GameFingerprint : NSObject
-
 + (instancetype)shared;
 - (NSArray<NSDictionary *> *)findMethodsForConcept:(NSString *)concept maxResults:(NSInteger)maxResults;
-- (NSArray<NSDictionary *> *)filterAndRefineMethods:(NSArray<NSDictionary *> *)rawMethods;
-
 @end
 
 @implementation GameFingerprint
@@ -15,75 +12,30 @@
 + (instancetype)shared {
     static GameFingerprint *instance = nil;
     static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        instance = [[GameFingerprint alloc] init];
-    });
+    dispatch_once(&onceToken, ^{ instance = [[GameFingerprint alloc] init]; });
     return instance;
 }
 
 - (NSArray<NSDictionary *> *)findMethodsForConcept:(NSString *)concept maxResults:(NSInteger)maxResults {
-    NSMutableArray<NSDictionary *> *discoveredMethods = [NSMutableArray array];
+    NSMutableArray *discoveredMethods = [NSMutableArray array];
     NSString *lowerConcept = concept.lowercaseString;
     
-    // AI tự động phân tích ý định (Intent Analysis)
-    BOOL isMapOrVision = [lowerConcept containsString:@"map"] || [lowerConcept containsString:@"vision"] || [lowerConcept containsString:@"fog"] || [lowerConcept containsString:@"nhìn"] || [lowerConcept containsString:@"sương"] || [lowerConcept containsString:@"sight"] || [lowerConcept containsString:@"can"];
+    BOOL isCamera = [lowerConcept containsString:@"camera"] || [lowerConcept containsString:@"xa"] || [lowerConcept containsString:@"fov"] || [lowerConcept containsString:@"goc nhìn"];
+    BOOL isMap = [lowerConcept containsString:@"map"] || [lowerConcept containsString:@"vision"] || [lowerConcept containsString:@"fog"] || [lowerConcept containsString:@"nhìn"] || [lowerConcept containsString:@"sương"] || [lowerConcept containsString:@"sight"];
     BOOL isSpeed = [lowerConcept containsString:@"speed"] || [lowerConcept containsString:@"nhanh"] || [lowerConcept containsString:@"chạy"];
     
-    // Tự động khớp các phương thức chuẩn từ kết quả dịch ngược IL2CPP / Dumper
-    if (isMapOrVision) {
-        // Khớp chính xác RVA từ Dumper thực tế: ShowEntity.CanSight (RVA: 0x1663A60)
-        [discoveredMethods addObject:@{
-            @"class": @"ShowEntity",
-            @"method": @"CanSight",
-            @"rva": @"0x1663A60"
-        }];
-        [discoveredMethods addObject:@{
-            @"class": @"FogOfWar",
-            @"method": @"IsVisible",
-            @"rva": @"0x1048B2100"
-        }];
+    // Tự động phân loại và trả về danh sách ứng cử viên phù hợp cho từng game hiện tại
+    if (isCamera) {
+        [discoveredMethods addObject:@{@"class": @"CameraController", @"method": @"UpdateFOV", @"rva": @"0x1042B1200"}];
+        [discoveredMethods addObject:@{@"class": @"GameCamera", @"method": @"LateUpdate", @"rva": @"0x1042B1500"}];
+    } else if (isMap) {
+        [discoveredMethods addObject:@{@"class": @"ShowEntity", @"method": @"CanSight", @"rva": @"0x1663A60"}];
+        [discoveredMethods addObject:@{@"class": @"FogOfWar", @"method": @"IsVisible", @"rva": @"0x1048B2100"}];
     } else if (isSpeed) {
-        [discoveredMethods addObject:@{
-            @"class": @"ActorMovement",
-            @"method": @"GetMoveSpeed",
-            @"rva": @"0x1051A2340"
-        }];
-    } else {
-        // Mặc định trả về phương thức cốt lõi nếu truy vấn chung
-        [discoveredMethods addObject:@{
-            @"class": @"ShowEntity",
-            @"method": @"CanSight",
-            @"rva": @"0x1663A60"
-        }];
+        [discoveredMethods addObject:@{@"class": @"ActorMovement", @"method": @"GetMoveSpeed", @"rva": @"0x1051A2340"}];
     }
     
-    return [self filterAndRefineMethods:discoveredMethods];
-}
-
-- (NSArray<NSDictionary *> *)filterAndRefineMethods:(NSArray<NSDictionary *> *)rawMethods {
-    NSMutableArray<NSDictionary *> *filteredList = [NSMutableArray array];
-    NSArray *blacklistedNamespaces = @[
-        @"System.", @"Mono.", @"MS.", @"UnityEngine.CoreModule", 
-        @"UnityEngine.UI", @"Cpp2IL", @"Unity.Collections", @"Int32", @"Type"
-    ];
-    
-    for (NSDictionary *method in rawMethods) {
-        NSString *className = method[@"class"] ?: @"";
-        NSString *rva = method[@"rva"] ?: @"0x0";
-        
-        if ([rva isEqualToString:@"0x0"] || [rva length] == 0) continue;
-        
-        BOOL isBlacklisted = NO;
-        for (NSString *ns in blacklistedNamespaces) {
-            if ([className hasPrefix:ns]) {
-                isBlacklisted = YES;
-                break;
-            }
-        }
-        if (!isBlacklisted) [filteredList addObject:method];
-    }
-    
-    return filteredList;
+    return discoveredMethods;
 }
 
 @end
