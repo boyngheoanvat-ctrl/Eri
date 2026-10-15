@@ -159,9 +159,6 @@
 
 - (void)aiStreamDidComplete {
     [self updateLayoutContent];
-    
-    // Tự động trích xuất kết quả và đẩy sang Lua tab sau khi hoàn tất
-    [self autoPushGeneratedLuaScriptToLuaTab];
 }
 
 - (void)aiStreamDidFailWithError:(NSError *)error {
@@ -175,13 +172,24 @@
     self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n%@", self.chatLogTextView.text ?: @"", toolLog];
     [self updateLayoutContent];
     
-    // Nếu tool là find_concept hoặc trả về RVA, tự động tạo script Lua đẩy đi
-    if ([toolName isEqualToString:@"find_concept"] && [result isKindOfClass:[NSArray class]] && ((NSArray *)result).count > 0) {
-        NSDictionary *firstItem = ((NSArray *)result).firstObject;
-        NSString *cls = firstItem[@"class"] ?: @"UnknownClass";
-        NSString *meth = firstItem[@"method"] ?: @"UnknownMethod";
-        NSString *rva = firstItem[@"rva"] ?: @"0x0";
+    // Tự động quét và đẩy script sang tab Lua khi tool trả về kết quả RVA / method
+    if ([toolName isEqualToString:@"find_concept"] || [toolName isEqualToString:@"find_method_global"] || [toolName isEqualToString:@"search_classes"]) {
+        NSString *cls = @"UnknownClass";
+        NSString *meth = @"UnknownMethod";
+        NSString *rva = @"0x0";
         
+        if ([result isKindOfClass:[NSArray class]] && ((NSArray *)result).count > 0) {
+            NSDictionary *firstItem = ((NSArray *)result).firstObject;
+            cls = firstItem[@"class"] ?: cls;
+            meth = firstItem[@"method"] ?: meth;
+            rva = firstItem[@"rva"] ?: rva;
+        } else if ([result isKindOfClass:[NSDictionary class]]) {
+            cls = result[@"class"] ?: cls;
+            meth = result[@"method"] ?: meth;
+            rva = result[@"rva"] ?: rva;
+        }
+        
+        // Sinh đoạn mã Lua chuẩn bị sẵn sàng patch
         NSString *autoScript = [NSString stringWithFormat:
             @"-- ==========================================\n"
              @"-- Auto-generated AI Mod Script\n"
@@ -190,21 +198,23 @@
              @"-- RVA: %@\n"
              @"-- ==========================================\n\n"
              @"print('[AI Auto] Đang thực thi patch cho: %@.%@')\n"
-             @"local rvaAddr = \"%@\"\n"
-             @"print('[AI Auto] Địa chỉ RVA: ' .. rvaAddr)\n"
-             @"-- Thêm logic ghi nhớ/patch bộ nhớ tại đây\n"
-             @"print('[AI Auto] Hoàn tất script!')\n",
-            cls, meth, rva, cls, meth, rva
+             @"local targetRVA = \"%@\"\n"
+             @"print('[AI Auto] Địa chỉ RVA mục tiêu: ' .. targetRVA)\n\n"
+             @"-- Gọi lệnh lấy con trỏ hoặc patch bộ nhớ\n"
+             @"local ptr = il2cpp.get_method_pointer(\"%@\", \"%@\")\n"
+             @"if ptr ~= 0 then\n"
+             @"    print('[LuaEngine] Đã trỏ tới con trỏ phương thức thành công!')\n"
+             @"else\n"
+             @"    print('[LuaEngine Warning] Sử dụng trực tiếp RVA: ' .. targetRVA)\n"
+             @"end\n",
+            cls, meth, rva, cls, meth, rva, cls, meth
         ];
         
+        // Gửi thông báo tự động đẩy sang LuaVC
         [[NSNotificationCenter defaultCenter] postNotificationName:@"PushScriptToLuaNotification"
                                                             object:nil
                                                           userInfo:@{@"script": autoScript}];
     }
-}
-
-- (void)autoPushGeneratedLuaScriptToLuaTab {
-    // Phương thức dự phòng nếu cần đẩy thủ công từ lịch sử chat
 }
 
 @end
