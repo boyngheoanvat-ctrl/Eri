@@ -17,7 +17,10 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     self.messages = [NSMutableArray array];
     
-    [self.messages addObject:@{@"sender": @"ai", @"text": @"Hello người ae! Tui là tool do Eri Nguyễn tạo ra."}];
+    [self.messages addObject:@{
+        @"sender": @"ai",
+        @"text": @"Hello người ae! Tui là tool do Eri Nguyễn tạo ra."
+    }];
     
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
@@ -77,17 +80,44 @@
     BOOL shouldSwitchToLua = NO;
     
     if ([lower containsString:@"hi"] || [lower containsString:@"hello"] || [lower containsString:@"chào"] || [lower containsString:@"alo"]) {
-        aiResponseText = [NSString stringWithFormat:@"Hello người ae! Đã nhận lệnh '%@'.", text];
-    } else {
+        aiResponseText = [NSString stringWithFormat:@"Hello người ae! Đã nhận lệnh '%@'. Chúc chơi game vui vẻ!", text];
+        shouldSwitchToLua = NO;
+    }
+    else {
         shouldSwitchToLua = YES;
-        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã sinh script Lua an toàn cho lệnh '%@'.", text];
-        luaPayload = [NSString stringWithFormat:
-            @"-- [Ai Eri] Safe Script for: %@\n"
-             "local ok, err = pcall(function()\n"
-             "    local base = il2cpp.get_image_base('UnityFramework')\n"
-             "    print('[Lua] UnityFramework Base: ' .. tostring(base))\n"
-             "end)\n"
-             "if not ok then print('[Lua Error] ' .. tostring(err)) end\n", text];
+        
+        // BỌC pcall AN TOÀN TUYỆT ĐỐI - KHÔNG BAO GIỜ VĂNG GAME KHI HACK MAP
+        if ([lower containsString:@"map"] || [lower containsString:@"hack map"] || [lower containsString:@"sáng bản đồ"]) {
+            aiResponseText = @"[Ai Eri] Đã sinh script Lua an toàn cho lệnh Hack Map (bọc pcall chống văng).";
+            luaPayload = @"-- [Ai Eri] Safe Hack Map Script\n"
+                         "local ok, err = pcall(function()\n"
+                         "    print('[Lua Safe] Đang kiểm tra base UnityFramework...')\n"
+                         "    local base = il2cpp.get_image_base('UnityFramework')\n"
+                         "    if base then\n"
+                         "        print('[Lua Safe] Tìm thấy base tại: 0x' .. string.format('%X', base))\n"
+                         "    else\n"
+                         "        print('[Lua Safe] Không tìm thấy base UnityFramework.')\n"
+                         "    end\n"
+                         "end)\n"
+                         "if not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n";
+        }
+        else if ([lower containsString:@"skin"] || [lower containsString:@"mod skin"]) {
+            aiResponseText = @"[Ai Eri] Đã sinh script Lua an toàn cho lệnh Mod Skin.";
+            luaPayload = @"-- [Ai Eri] Safe Mod Skin Script\n"
+                         "local ok, err = pcall(function()\n"
+                         "    print('[Lua Safe] Đang xử lý mod skin an toàn...')\n"
+                         "end)\n"
+                         "if not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n";
+        }
+        else {
+            aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã sinh script an toàn cho lệnh '%@'.", text];
+            luaPayload = [NSString stringWithFormat:
+                @"-- [Ai Eri] Command: %@\n"
+                 "local ok, err = pcall(function()\n"
+                 "    print('[Lua Safe] Thực thi lệnh an toàn: %@')\n"
+                 "end)\n"
+                 "if not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n", text, text];
+        }
     }
     
     [self.messages addObject:@{@"sender": @"ai", @"text": aiResponseText}];
@@ -102,6 +132,7 @@
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIResponder *responder = self.view.window.rootViewController;
             ToolViewController *targetToolVC = nil;
+            
             if ([responder isKindOfClass:[ToolViewController class]]) {
                 targetToolVC = (ToolViewController *)responder;
             } else if ([responder isKindOfClass:[UIViewController class]]) {
@@ -112,13 +143,18 @@
                     }
                 }
             }
+            
             if (targetToolVC) {
                 [targetToolVC selectTab:4];
                 if ([targetToolVC respondsToSelector:@selector(luaVC)]) {
-                    LuaVC *luaVC = [targetToolVC valueForKey:@"luaVC"];
+                    id luaVC = [targetToolVC valueForKey:@"luaVC"];
                     if (luaVC) {
-                        if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) [luaVC loadViewIfNeeded];
-                        [luaVC setScriptContent:luaPayload];
+                        if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) {
+                            [luaVC loadViewIfNeeded];
+                        }
+                        if ([luaVC respondsToSelector:@selector(setScriptContent:)]) {
+                            [luaVC setScriptContent:luaPayload];
+                        }
                     }
                 }
             }
