@@ -1,5 +1,10 @@
 #import "ESPOverlay.h"
 #import "ToolTheme.h"
+#import "ESPClassFinder.h"
+#import <mach/mach.h>
+
+typedef struct { float x, y, z; } Vector3_t;
+typedef struct { float x, y; } Vector2_t;
 
 @interface ESPOverlayView : UIView
 @property (nonatomic, weak) ESPOverlay *overlayController;
@@ -16,6 +21,16 @@
     return self;
 }
 
+// Giả lập WorldToScreen đơn giản (Góc nhìn trung tâm màn hình)
+- (BOOL)worldToScreen:(Vector3_t)world pos:(Vector2_t *)screen rect:(CGRect)rect {
+    // Trong thực tế sẽ đọc Camera.main.WorldToScreenPoint hoặc Matrix
+    // Đảm bảo an toàn không crash nếu chưa hook Camera
+    if (world.x == 0 && world.y == 0 && world.z == 0) return NO;
+    screen->x = rect.size.width / 2.0f + world.x;
+    screen->y = rect.size.height / 2.0f - world.y;
+    return YES;
+}
+
 - (void)drawRect:(CGRect)rect {
     [super drawRect:rect];
     if (!self.overlayController.enabled) return;
@@ -23,41 +38,49 @@
     CGContextRef context = UIGraphicsGetCurrentContext();
     if (!context) return;
     
-    CGContextSetLineWidth(context, 2.5);
-    CGContextSetStrokeColorWithColor(context, [ToolTheme shared].success.CGColor);
+    CGContextSetLineWidth(context, 2.0);
     
-    CGFloat boxW = 110;
-    CGFloat boxH = 180;
-    CGFloat boxX = (rect.size.width - boxW) / 2.0;
-    CGFloat boxY = (rect.size.height - boxH) / 2.0;
-    
-    if (self.overlayController.showBox) {
-        CGContextStrokeRect(context, CGRectMake(boxX, boxY, boxW, boxH));
+    // Nếu chưa quét hoặc danh sách trống, vẽ mô phỏng khung nhận diện động
+    NSArray<ESPTargetClass *> *targets = self.overlayController.detectedTargets;
+    if (!targets || targets.count == 0) {
+        // Khung chờ quét động
+        CGContextSetStrokeColorWithColor(context, [ToolTheme shared].accent.CGColor);
+        CGFloat boxW = 100, boxH = 160;
+        CGFloat boxX = (rect.size.width - boxW) / 2.0;
+        CGFloat boxY = (rect.size.height - boxH) / 2.0;
+        
+        if (self.overlayController.showBox) CGContextStrokeRect(context, CGRectMake(boxX, boxY, boxW, boxH));
+        if (self.overlayController.showLine) {
+            CGContextMoveToPoint(context, rect.size.width / 2.0, rect.size.height);
+            CGContextAddLineToPoint(context, boxX + boxW / 2.0, boxY + boxH);
+            CGContextStrokePath(context);
+        }
+        
+        NSDictionary *attrs = @{NSFontAttributeName: [[ToolTheme shared] monoBoldFont:11], NSForegroundColorAttributeName: [UIColor yellowColor]};
+        [@"[Auto-ESP] Scanning Game Memory..." drawAtPoint:CGPointMake(boxX - 20, boxY - 20) withAttributes:attrs];
+        return;
     }
-    
-    if (self.overlayController.showLine) {
-        CGContextMoveToPoint(context, rect.size.width / 2.0, rect.size.height);
-        CGContextAddLineToPoint(context, boxX + boxW / 2.0, boxY + boxH);
-        CGContextStrokePath(context);
-    }
-    
-    UIFont *font = [[ToolTheme shared] monoBoldFont:11];
-    NSDictionary *attrs = @{
-        NSFontAttributeName: font,
-        NSForegroundColorAttributeName: [UIColor cyanColor]
-    };
-    
-    if (self.overlayController.showName) {
-        [@"[Eri ESP Active]" drawAtPoint:CGPointMake(boxX, boxY - 18) withAttributes:attrs];
-    }
-    
-    if (self.overlayController.showHP) {
-        CGFloat hpBarX = boxX - 8;
-        CGFloat hpBarW = 5;
-        CGContextSetFillColorWithColor(context, [UIColor colorWithRed:1 green:0 blue:0 alpha:0.9].CGColor);
-        CGContextFillRect(context, CGRectMake(hpBarX, boxY, hpBarW, boxH));
-        CGContextSetFillColorWithColor(context, [ToolTheme shared].success.CGColor);
-        CGContextFillRect(context, CGRectMake(hpBarX, boxY + boxH * 0.2, hpBarW, boxH * 0.8));
+
+    // Vẽ danh sách Target tìm thấy tự động
+    for (ESPTargetClass *target in targets) {
+        CGContextSetStrokeColorWithColor(context, [ToolTheme shared].success.CGColor);
+        
+        CGFloat boxW = 90, boxH = 150;
+        CGFloat boxX = (rect.size.width - boxW) / 2.0;
+        CGFloat boxY = (rect.size.height - boxH) / 2.0;
+        
+        if (self.overlayController.showBox) CGContextStrokeRect(context, CGRectMake(boxX, boxY, boxW, boxH));
+        if (self.overlayController.showLine) {
+            CGContextMoveToPoint(context, rect.size.width / 2.0, rect.size.height);
+            CGContextAddLineToPoint(context, boxX + boxW / 2.0, boxY + boxH);
+            CGContextStrokePath(context);
+        }
+        
+        if (self.overlayController.showName) {
+            NSDictionary *attrs = @{NSFontAttributeName: [[ToolTheme shared] monoBoldFont:10], NSForegroundColorAttributeName: [UIColor cyanColor]};
+            NSString *label = [NSString stringWithFormat:@"[%@]", target.className];
+            [label drawAtPoint:CGPointMake(boxX, boxY - 16) withAttributes:attrs];
+        }
     }
 }
 
@@ -67,6 +90,7 @@
 @property (nonatomic, strong) UIWindow *overlayWindow;
 @property (nonatomic, strong) ESPOverlayView *espView;
 @property (nonatomic, strong) CADisplayLink *displayLink;
+@property (nonatomic, strong, readwrite) NSArray<ESPTargetClass *> *detectedTargets;
 @end
 
 @implementation ESPOverlay
@@ -74,9 +98,7 @@
 + (instancetype)shared {
     static ESPOverlay *instance;
     static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        instance = [[ESPOverlay alloc] init];
-    });
+    dispatch_once(&onceToken, ^{ instance = [[ESPOverlay alloc] init]; });
     return instance;
 }
 
@@ -99,13 +121,9 @@
     
     if (@available(iOS 13.0, *)) {
         UIWindowScene *scene = window.windowScene;
-        if (scene) {
-            self.overlayWindow = [[UIWindow alloc] initWithWindowScene:scene];
-        }
+        if (scene) self.overlayWindow = [[UIWindow alloc] initWithWindowScene:scene];
     }
-    if (!self.overlayWindow) {
-        self.overlayWindow = [[UIWindow alloc] initWithFrame:screenBounds];
-    }
+    if (!self.overlayWindow) self.overlayWindow = [[UIWindow alloc] initWithFrame:screenBounds];
     
     self.overlayWindow.frame = screenBounds;
     self.overlayWindow.windowLevel = UIWindowLevelAlert + 99999;
@@ -132,6 +150,15 @@
 
 - (void)show {
     self.enabled = YES;
+    
+    // Tự động kích hoạt quét bộ nhớ tìm Class/Method khi bật ESP
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSArray<ESPTargetClass *> *found = [[ESPClassFinder shared] scanForPotentialTargets];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.detectedTargets = found;
+        });
+    });
+
     if (self.overlayWindow) {
         self.overlayWindow.hidden = NO;
         self.overlayWindow.alpha = 1.0;
@@ -146,9 +173,7 @@
 
 - (void)hide {
     self.enabled = NO;
-    if (self.overlayWindow) {
-        self.overlayWindow.hidden = YES;
-    }
+    if (self.overlayWindow) self.overlayWindow.hidden = YES;
     self.displayLink.paused = YES;
 }
 
@@ -158,9 +183,7 @@
 }
 
 - (void)reload {
-    if (self.espView) {
-        [self.espView setNeedsDisplay];
-    }
+    if (self.espView) [self.espView setNeedsDisplay];
 }
 
 @end
