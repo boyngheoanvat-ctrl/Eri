@@ -7,6 +7,7 @@
 @property (nonatomic, strong) UIScrollView *chatScrollView;
 @property (nonatomic, strong) UIView *contentView;
 @property (nonatomic, strong) UITextView *chatLogTextView;
+@property (nonatomic, strong) UIView *bottomBar;
 @property (nonatomic, strong) UITextView *inputTextView;
 @property (nonatomic, strong) UIButton *sendButton;
 
@@ -22,16 +23,16 @@
     CGFloat width = bounds.size.width;
     CGFloat height = bounds.size.height;
     
-    // 1. Khung chứa input và nút gửi ở đáy (chiều cao 50px)
+    // 1. Khung chứa input và nút gửi ở đáy (chiều cao 50px, tự động co giãn theo chiều ngang khi kéo cửa sổ)
     CGFloat bottomBarHeight = 50;
     CGFloat inputHeight = 36;
     
-    UIView *bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, height - bottomBarHeight, width, bottomBarHeight)];
-    bottomBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
-    bottomBar.backgroundColor = [UIColor colorWithRed:0.18 green:0.18 blue:0.20 alpha:1.0];
-    [self.view addSubview:bottomBar];
+    self.bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, height - bottomBarHeight, width, bottomBarHeight)];
+    self.bottomBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
+    self.bottomBar.backgroundColor = [UIColor colorWithRed:0.18 green:0.18 blue:0.20 alpha:1.0];
+    [self.view addSubview:self.bottomBar];
     
-    // 2. Nút Send đặt ở góc phải của bottomBar (chiều rộng 60px, cách lề phải 10px)
+    // 2. Nút Send nằm sát góc phải
     CGFloat sendBtnWidth = 60;
     CGFloat padding = 10;
     
@@ -44,9 +45,9 @@
     self.sendButton.layer.cornerRadius = 6;
     self.sendButton.layer.masksToBounds = YES;
     [self.sendButton addTarget:self action:@selector(didTapSend) forControlEvents:UIControlEventTouchUpInside];
-    [bottomBar addSubview:self.sendButton];
+    [self.bottomBar addSubview:self.sendButton];
     
-    // 3. Ô nhập liệu (inputTextView) nằm bên trái nút Send, cách lề trái 10px
+    // 3. Ô nhập liệu (inputTextView) co giãn linh hoạt theo chiều rộng cửa sổ
     CGFloat inputWidth = width - sendBtnWidth - (padding * 3);
     self.inputTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, (bottomBarHeight - inputHeight) / 2, inputWidth, inputHeight)];
     self.inputTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleRightMargin;
@@ -56,15 +57,16 @@
     self.inputTextView.layer.cornerRadius = 6;
     self.inputTextView.layer.masksToBounds = YES;
     self.inputTextView.delegate = self;
-    [bottomBar addSubview:self.inputTextView];
+    [self.bottomBar addSubview:self.inputTextView];
     
-    // 4. UIScrollView hiển thị nội dung chat phía trên bottomBar
+    // 4. UIScrollView hiển thị nội dung chat phía trên
     CGFloat scrollHeight = height - bottomBarHeight;
     self.chatScrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, width, scrollHeight)];
     self.chatScrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.chatScrollView];
     
     self.contentView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, scrollHeight)];
+    self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.chatScrollView addSubview:self.contentView];
     
     // 5. TextView chứa lịch sử chat
@@ -78,6 +80,12 @@
     self.chatLogTextView.text = @"[ai] AI Agent ready.\nHoi: hack map, hack speed, tim class...\n";
     [self.contentView addSubview:self.chatLogTextView];
     
+    [self updateLayoutContent];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    // Đồng bộ lại kích thước nội dung khi giao diện bị kéo thay đổi kích thước (resize/drag)
     [self updateLayoutContent];
 }
 
@@ -99,26 +107,39 @@
     self.chatLogTextView.text = [NSString stringWithFormat:@"%@\n> %@", current, text];
     [self updateLayoutContent];
     
-    // Gửi yêu cầu qua AIProvider
+    // Đảm bảo tất cả các tool đã được đăng ký và an toàn tuyệt đối chống crash nil object
+    [AITool registerAll];
+    
+    NSMutableArray *tools = [NSMutableArray array];
+    NSArray *toolNames = @[@"find_concept", @"search_classes", @"dump_class_runtime", @"find_method_global"];
+    for (NSString *name in toolNames) {
+        AITool *t = [AITool toolNamed:name];
+        if (t) {
+            NSDictionary *schema = [t openAISchema];
+            if (schema) {
+                [tools addObject:schema];
+            }
+        }
+    }
+    
     NSArray *messages = @[@{@"role": @"user", @"content": text}];
-    NSArray *tools = @[[[AITool toolNamed:@"find_concept"] openAISchema],
-                       [[AITool toolNamed:@"search_classes"] openAISchema],
-                       [[AITool toolNamed:@"dump_class_runtime"] openAISchema],
-                       [[AITool toolNamed:@"find_method_global"] openAISchema]];
-                       
     [[AIProvider shared] sendMessages:messages tools:tools delegate:self];
 }
 
 - (void)updateLayoutContent {
-    CGSize size = [self.chatLogTextView sizeThatFits:CGSizeMake(self.chatScrollView.bounds.size.width - 20, CGFLOAT_MAX)];
+    CGFloat currentWidth = self.chatScrollView.bounds.size.width;
+    if (currentWidth <= 0) currentWidth = self.view.bounds.size.width;
+    
+    CGSize size = [self.chatLogTextView sizeThatFits:CGSizeMake(currentWidth - 20, CGFLOAT_MAX)];
     CGFloat newHeight = MAX(size.height + 20, self.chatScrollView.bounds.size.height);
     
     CGRect frame = self.chatLogTextView.frame;
+    frame.size.width = currentWidth - 20;
     frame.size.height = MAX(size.height, self.chatScrollView.bounds.size.height - 20);
     self.chatLogTextView.frame = frame;
     
-    self.contentView.frame = CGRectMake(0, 0, self.chatScrollView.bounds.size.width, newHeight);
-    self.chatScrollView.contentSize = CGSizeMake(self.chatScrollView.bounds.size.width, newHeight);
+    self.contentView.frame = CGRectMake(0, 0, currentWidth, newHeight);
+    self.chatScrollView.contentSize = CGSizeMake(currentWidth, newHeight);
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self scrollToBottomAnimated:YES];
