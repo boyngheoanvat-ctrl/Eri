@@ -2,8 +2,10 @@
 #import "AIProvider.h"
 #import "AITool.h"
 #import "AIMemoryTool.h"
-#import "AIESPTool.h"
-#import "GameFingerprint.h"
+#import "AIESPTool.h"#import "DumperVC.h"
+#import "IL2CPPResolver.h"
+#import "ToolTheme.h"
+#import <mach-o/dyld.h>
 #import "ToolTheme.h"
 
 static const CGFloat kInputBarHeight = 50;
