@@ -6,7 +6,7 @@
 
 @interface AIChatCell : UITableViewCell
 @property (nonatomic, strong) UILabel *contentLbl;
-@property (nonatomic, strong) UIButton *copyBtn;
+@property (nonatomic, strong) UIButton *copyButton;
 @property (nonatomic, copy) void (^onCopyBlock)(void);
 @end
 
@@ -22,14 +22,14 @@
         self.contentLbl.font = [[ToolTheme shared] monoFont:11];
         [self.contentView addSubview:self.contentLbl];
 
-        self.copyBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-        [self.copyBtn setTitle:@"Copy" forState:UIControlStateNormal];
-        [self.copyBtn setTitleColor:[ToolTheme shared].accent forState:UIControlStateNormal];
-        self.copyBtn.titleLabel.font = [[ToolTheme shared] monoBoldFont:10];
-        self.copyBtn.backgroundColor = [ToolTheme shared].surfaceAlt;
-        self.copyBtn.layer.cornerRadius = 4;
-        [self.copyBtn addTarget:self action:@selector(didTapCopy) forControlEvents:UIControlEventTouchUpInside];
-        [self.contentView addSubview:self.copyBtn];
+        self.copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        [self.copyButton setTitle:@"Copy" forState:UIControlStateNormal];
+        [self.copyButton setTitleColor:[ToolTheme shared].accent forState:UIControlStateNormal];
+        self.copyButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:10];
+        self.copyButton.backgroundColor = [ToolTheme shared].surfaceAlt;
+        self.copyButton.layer.cornerRadius = 4;
+        [self.copyButton addTarget:self action:@selector(didTapCopy) forControlEvents:UIControlEventTouchUpInside];
+        [self.contentView addSubview:self.copyButton];
     }
     return self;
 }
@@ -49,10 +49,10 @@
     self.contentLbl.frame = CGRectMake(padding, 8, maxW, size.height);
 
     if ([role isEqualToString:@"assistant"]) {
-        self.copyBtn.hidden = NO;
-        self.copyBtn.frame = CGRectMake(width - 70 - padding, 8 + size.height + 4, 60, 24);
+        self.copyButton.hidden = NO;
+        self.copyButton.frame = CGRectMake(width - 70 - padding, 8 + size.height + 4, 60, 24);
     } else {
-        self.copyBtn.hidden = YES;
+        self.copyButton.hidden = YES;
     }
 }
 @end
@@ -87,7 +87,7 @@
         if (h <= 50) h = 300;
 
         CGFloat bottomH = 60;
-        CGFloat tableH = h - bottomH - 45; // Trừ phần tab bar phía trên
+        CGFloat tableH = h - bottomH - 45;
 
         self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 45, w, tableH) style:UITableViewStylePlain];
         self.tableView.backgroundColor = [UIColor clearColor];
@@ -101,7 +101,7 @@
         [self.view addSubview:self.bottomBar];
 
         self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 10, w - 90, 40)];
-        self.inputField.placeholder = @"Nhập câu hỏi AI ở đây";
+        self.inputField.placeholder = @"Nhập câu hỏi ở đây";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
         self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -132,7 +132,7 @@
         [self.messages addObject:@{@"role": @"user", @"content": text}];
         [self.messages addObject:@{@"role": @"assistant", @"content": @"[Đang phân tích...]"}];
         [self.tableView reloadData];
-        self.scrollToBottom;
+        [self scrollToBottom];
         self.isWaitingResponse = YES;
 
         NSMutableArray *apiMessages = [NSMutableArray array];
@@ -175,10 +175,8 @@
     NSString *role = m[@"role"];
     NSString *content = m[@"content"];
 
-    __weak typeof(self) ws = self;
     cell.onCopyBlock = ^{
         [[UIPasteboard generalPasteboard] setString:content];
-        // Hiển thị thông báo nhỏ hoặc đổi tên nút thành Copied
     };
 
     [cell configureWithRole:role text:content width:CGRectGetWidth(tableView.bounds)];
