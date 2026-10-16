@@ -6,8 +6,9 @@
 #import "MethodCallerVC.h"
 #import "LuaVC.h"
 #import "ESPVC.h"
+#import "ToolWindow.h"
 
-@interface ToolViewController ()
+@interface ToolViewController () <UIGestureRecognizerDelegate>
 @property (nonatomic, strong) UIView *headerView;
 @property (nonatomic, strong) UIView *sidebarView;
 @property (nonatomic, strong) UIView *contentView;
@@ -18,7 +19,7 @@
 @property (nonatomic, strong) DumperVC *dumperVC;
 @property (nonatomic, strong) MemoryVC *memoryVC;
 @property (nonatomic, strong) MethodCallerVC *methodCallerVC;
-@property (nonatomic, strong) LuaVC *luaVC;
+@property (nonatomic, strong, readwrite) LuaVC *luaVC; // Redeclare readwrite để tương thích với readonly ở .h
 @property (nonatomic, strong) ESPVC *espVC;
 @end
 
@@ -50,29 +51,29 @@
     if (totalW <= 0) totalW = 500;
     if (totalH <= 0) totalH = 320;
     
-    CGFloat headerH = 36; // Chiều cao cố định thanh tiêu đề
-    CGFloat sidebarW = 72; // Độ rộng cột menu tab bên trái
+    CGFloat headerH = 36;
+    CGFloat sidebarW = 72;
     
-    // 1. Thanh tiêu đề đặt đúng ở góc trên cùng (Y = 0)
+    // Thanh tiêu đề phía trên
     self.headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, headerH)];
     self.headerView.backgroundColor = [ToolTheme shared].surfaceAlt;
     self.headerView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:self.headerView];
     
     UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 6, totalW - 24, 24)];
-    titleLbl.text = @"Mod By Eri Nguyễn (Chạm 3 ngón để Hiện & Menu Chạm 2 ngón để ẩn Menu)";
+    titleLbl.text = @"Mod By Eri Nguyễn (Chạm 3 ngón để ẩn/hiện)";
     titleLbl.textColor = [ToolTheme shared].textPrimary;
     titleLbl.font = [[ToolTheme shared] monoBoldFont:11];
     titleLbl.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.headerView addSubview:titleLbl];
     
-    // 2. Sidebar đặt ngay bên dưới thanh tiêu đề (Y = headerH, Chiều cao = totalH - headerH)
+    // Sidebar chọn tab bên trái
     self.sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, headerH, sidebarW, totalH - headerH)];
     self.sidebarView.backgroundColor = [ToolTheme shared].surfaceAlt;
     self.sidebarView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleRightMargin;
     [self.view addSubview:self.sidebarView];
     
-    // 3. Content View đặt bên cạnh sidebar và bên dưới tiêu đề
+    // Vùng chứa nội dung các tab bên phải
     self.contentView = [[UIView alloc] initWithFrame:CGRectMake(sidebarW, headerH, totalW - sidebarW, totalH - headerH)];
     self.contentView.backgroundColor = [UIColor clearColor];
     self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -104,24 +105,26 @@
     [self selectTab:0];
 }
 
-#pragma mark - Gestures (Chạm 2 ngón tay để ẩn menu)
+#pragma mark - Gestures (Chạm 3 ngón tay để ẩn/hiện menu)
 
 - (void)setupGestures {
-    UITapGestureRecognizer *twoFingerTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTwoFingerTap:)];
-    twoFingerTap.numberOfTouchesRequired = 2;
-    twoFingerTap.numberOfTapsRequired = 1;
-    [self.view addGestureRecognizer:twoFingerTap];
+    UITapGestureRecognizer *threeFingerTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleThreeFingerTap:)];
+    threeFingerTap.numberOfTouchesRequired = 3;
+    threeFingerTap.numberOfTapsRequired = 1;
+    threeFingerTap.cancelsTouchesInView = NO;
+    threeFingerTap.delegate = self;
+    [self.view addGestureRecognizer:threeFingerTap];
 }
 
-- (void)handleTwoFingerTap:(UITapGestureRecognizer *)gesture {
+- (void)handleThreeFingerTap:(UITapGestureRecognizer *)gesture {
     if (gesture.state == UIGestureRecognizerStateEnded) {
-        [UIView animateWithDuration:0.25 animations:^{
-            self.view.alpha = 0.0;
-        } completion:^(BOOL finished) {
-            self.view.window.hidden = YES;
-            self.view.alpha = 1.0;
-        }];
+        NSLog(@"[ToolViewController] 3-finger tap detected");
+        [[ToolWindow shared] toggle];
     }
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
+    return YES;
 }
 
 - (void)didTapTabButton:(UIButton *)sender {
@@ -145,7 +148,7 @@
         case 0: targetVC = self.aiVC; break;
         case 1: targetVC = self.dumperVC; break;
         case 2: targetVC = self.memoryVC; break;
-        case 3: targetVC = self.methodCallerVC; break: // syntax safe
+        case 3: targetVC = self.methodCallerVC; break;
         case 4: targetVC = self.luaVC; break;
         case 5: targetVC = self.espVC; break;
         default: targetVC = self.aiVC; break;
