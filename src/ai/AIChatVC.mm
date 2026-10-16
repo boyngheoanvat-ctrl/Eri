@@ -2,10 +2,11 @@
 #import "ToolViewController.h"
 #import "LuaVC.h"
 #import "ToolTheme.h"
+#include <dlfcn.h>
 
 @interface AIChatVC () <UITextFieldDelegate, UITableViewDataSource, UITableViewDelegate>
 @property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) NSMutableArray<NSDictionary *> *messages;
+@property (nonatomic, strong, nonnull) NSMutableArray<NSDictionary *> *messages;
 @property (nonatomic, strong) UITextField *inputField;
 @property (nonatomic, strong) UIButton *sendButton;
 @end
@@ -19,7 +20,7 @@
     
     [self.messages addObject:@{
         @"sender": @"ai",
-        @"text": @"Hello người ae! AI Eri đã sẵn sàng trích xuất RVA & Offset chuẩn xác cho game."
+        @"text": @"Hello người ae! AI Eri đã sẵn sàng phân tích chuẩn xác Class, Method và RVA."
     }];
     
     CGFloat w = CGRectGetWidth(self.view.bounds);
@@ -79,56 +80,48 @@
     NSString *aiResponseText = @"";
     BOOL shouldSwitchToLua = NO;
     
-    if ([lower containsString:@"hi"] || [lower containsString:@"hello"] || [lower containsString:@"chào"] || [lower containsString:@"alo"]) {
-        aiResponseText = [NSString stringWithFormat:@"Hello người ae! Đã sẵn sàng phân tích. Yêu cầu: '%@'.", text];
+    if ([lower containsString:@"hi"] || [lower containsString:@"hello"] || [lower containsString:@"chào"]) {
+        aiResponseText = [NSString stringWithFormat:@"Hello người ae! Đã sẵn sàng phân tích cho yêu cầu: '%@'.", text];
         shouldSwitchToLua = NO;
     }
     else {
         shouldSwitchToLua = YES;
         
-        if ([lower containsString:@"map"] || [lower containsString:@"hack map"] || [lower containsString:@"sáng bản đồ"]) {
-            aiResponseText = @"[Ai Eri] Đã phân tích chuẩn xác Method Hack Map:\n\n"
+        if ([lower containsString:@"map"] || [lower containsString:@"hack map"]) {
+            aiResponseText = @"[Ai Eri] Đã tìm thấy Method Hack Map:\n\n"
                               @"• Class: CameraUtils\n"
                               @"• Method: CanSight\n"
                               @"• RVA: 0x1097E5678\n"
-                              @"• Offset: 0x1097E5678\n"
-                              @"• Trạng thái: Đã tự động sinh script Lua chống văng!";
+                              @"• Trạng thái: Sẵn sàng thực thi Lua chống văng!";
                               
-            luaPayload = @"-- [Ai Eri] Pro Hack Map Script (Active RVA)\n"
+            luaPayload = @"-- [Ai Eri] Hack Map Script (Active)\n"
                          "local ok, err = pcall(function()\n"
                          "    local base = il2cpp.get_image_base('UnityFramework')\n"
                          "    if base then\n"
                          "        local target = base + 0x1097E5678\n"
-                         "        print('[Lua Safe] CameraUtils$$CanSight Patch Address: 0x' .. string.format('%X', target))\n"
-                         "    else\n"
-                         "        print('[Lua Safe] Không tìm thấy base UnityFramework.')\n"
+                         "        print('[Lua Safe] CameraUtils$$CanSight: 0x' .. string.format('%X', target))\n"
                          "    end\n"
                          "end)\n"
                          "if not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n";
         }
         else if ([lower containsString:@"skin"] || [lower containsString:@"mod skin"]) {
-            aiResponseText = @"[Ai Eri] Đã phân tích chuẩn xác Method Mod Skin:\n\n"
+            aiResponseText = @"[Ai Eri] Đã tìm thấy Method Mod Skin:\n\n"
                               @"• Class: HeroSkinManager\n"
                               @"• Method: ApplySkinOverride\n"
                               @"• RVA: 0x10842B100\n"
-                              @"• Offset: 0x10842B100\n"
-                              @"• Trạng thái: Đã sẵn sàng nạp payload!";
+                              @"• Trạng thái: Nạp payload an toàn!";
                               
-            luaPayload = @"-- [Ai Eri] Pro Mod Skin Script\n"
+            luaPayload = @"-- [Ai Eri] Mod Skin Script\n"
                          "local ok, err = pcall(function()\n"
-                         "    local base = il2cpp.get_image_base('UnityFramework')\n"
-                         "    if base then\n"
-                         "        print('[Lua Safe] HeroSkinManager$$ApplySkinOverride active!')\n"
-                         "    end\n"
+                         "    print('[Lua Safe] HeroSkinManager active!')\n"
                          "end)\n"
                          "if not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n";
         }
         else {
-            aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Phân tích yêu cầu '%@':\n\n"
+            aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Phân tích '%@':\n\n"
                                                         @"• Class: GameCoreSystem\n"
                                                         @"• Method: ExecuteAction\n"
-                                                        @"• RVA: 0x105001234\n"
-                                                        @"• Đã sinh script Lua tương ứng.", text];
+                                                        @"• RVA: 0x105001234", text];
                                                         
             luaPayload = [NSString stringWithFormat:
                 @"-- [Ai Eri] Custom Script: %@\n"
@@ -168,9 +161,7 @@
                 if ([targetToolVC respondsToSelector:@selector(luaVC)]) {
                     id luaVC = [targetToolVC valueForKey:@"luaVC"];
                     if (luaVC) {
-                        if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) {
-                            [luaVC loadViewIfNeeded];
-                        }
+                        if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) [luaVC loadViewIfNeeded];
                         if ([luaVC respondsToSelector:@selector(setScriptContent:)]) {
                             [luaVC performSelector:@selector(setScriptContent:) withObject:luaPayload];
                         }
