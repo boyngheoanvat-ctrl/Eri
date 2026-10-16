@@ -7,7 +7,6 @@
 extern "C" {
 #endif
 
-// Unity Vector3 (float, float, float) - 12 bytes
 typedef struct Vector3 {
     float x;
     float y;
