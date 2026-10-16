@@ -19,6 +19,7 @@ libtool_FILES = \
     src/ai/AIMemoryTool.mm \
     src/ai/AIESPTool.mm \
     src/ai/GameFingerprint.mm \
+    src/ai/AICHookGenerator.mm \
     src/memory/MemoryResult.mm \
     src/memory/MemoryEditor.mm \
     src/memory/MemoryVC.mm \
