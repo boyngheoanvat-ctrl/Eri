@@ -4,7 +4,7 @@
 @interface LuaVC () <UITextViewDelegate>
 @property (nonatomic, strong) UIView *headerView;
 @property (nonatomic, strong) UIView *statusBar;
-@property (nonatomic, UIButton *clearButton;
+@property (nonatomic, strong) UIButton *clearButton;
 @property (nonatomic, strong) UITextView *editorTextView;
 @property (nonatomic, strong) UITextView *outputTextView;
 @end
@@ -23,7 +23,6 @@
     if (totalW <= 50) totalW = 450;
     if (totalH <= 50) totalH = 300;
     
-    // 1. Header View chứa thanh trạng thái và nút Clear (Cố định chiều cao 36px)
     CGFloat headerH = 36;
     self.headerView = [[UIView alloc] initWithFrame:CGRectMake(12, 10, totalW - 24, headerH)];
     self.headerView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
@@ -34,7 +33,6 @@
     CGFloat spacing = 8;
     CGFloat barW = headerW - rightButtonW - spacing;
     
-    // Thanh trạng thái / Progress bar bên trái
     self.statusBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, barW, headerH)];
     self.statusBar.backgroundColor = [UIColor colorWithRed:0.20 green:0.60 blue:0.40 alpha:1.0];
     self.statusBar.layer.cornerRadius = 6;
@@ -42,19 +40,17 @@
     self.statusBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleRightMargin;
     [self.headerView addSubview:self.statusBar];
     
-    // Nút Clear nằm gọn bên phải, KHÔNG BAO GIỜ bị tràn
-    UIButton *clearBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    clearBtn.frame = CGRectMake(headerW - rightButtonW, 0, rightButtonW, headerH);
-    clearBtn.backgroundColor = [ToolTheme shared].surfaceAlt;
-    [clearBtn setTitle:@"Clear" forState:UIControlStateNormal];
-    [clearBtn setTitleColor:[ToolTheme shared].textPrimary forState:UIControlStateNormal];
-    clearBtn.titleLabel.font = [[ToolTheme shared] monoBoldFont:12];
-    clearBtn.layer.cornerRadius = 6;
-    clearBtn.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
-    [clearBtn addTarget:self action:@selector(didTapClear) forControlEvents:UIControlEventTouchUpInside];
-    [self.headerView addSubview:clearBtn];
+    self.clearButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.clearButton.frame = CGRectMake(headerW - rightButtonW, 0, rightButtonW, headerH);
+    self.clearButton.backgroundColor = [ToolTheme shared].surfaceAlt;
+    [self.clearButton setTitle:@"Clear" forState:UIControlStateNormal];
+    [self.clearButton setTitleColor:[ToolTheme shared].textPrimary forState:UIControlStateNormal];
+    self.clearButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:12];
+    self.clearButton.layer.cornerRadius = 6;
+    self.clearButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+    [self.clearButton addTarget:self action:@selector(didTapClear) forControlEvents:UIControlEventTouchUpInside];
+    [self.headerView addSubview:self.clearButton];
     
-    // 2. Editor TextView (Nhập script Lua & ImGui)
     CGFloat editorY = 10 + headerH + 10;
     CGFloat editorH = (totalH - editorY - 140) / 2;
     if (editorH < 80) editorH = 80;
@@ -77,7 +73,6 @@
     self.editorTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:self.editorTextView];
     
-    // 3. Console Output TextView
     CGFloat outputY = editorY + editorH + 24;
     CGFloat outputH = totalH - outputY - 12;
     if (outputH < 60) outputH = 60;
@@ -105,6 +100,12 @@
 - (void)didTapClear {
     self.editorTextView.text = @"";
     self.outputTextView.text = @"-- Cleared --";
+}
+
+- (void)setScriptContent:(NSString *)content {
+    if (self.editorTextView) {
+        self.editorTextView.text = content;
+    }
 }
 
 - (void)reload {
