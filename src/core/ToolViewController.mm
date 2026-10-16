@@ -22,9 +22,8 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    // Thiết kế khung cửa sổ chính mang phong cách ImGui Window
     self.view.backgroundColor = [ToolTheme shared].background;
-    self.view.layer.cornerRadius = 4.0; // Bo góc nhẹ đặc trưng ImGui
+    self.view.layer.cornerRadius = 4.0;
     self.view.layer.borderWidth = 1.0;
     self.view.layer.borderColor = [ToolTheme shared].border.CGColor;
     self.view.clipsToBounds = YES;
@@ -38,7 +37,6 @@
     if (totalW <= 50) totalW = 550;
     if (totalH <= 50) totalH = 340;
     
-    // 1. ImGui Title Bar (Thanh tiêu đề giả lập)
     UIView *titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, 26)];
     titleBar.backgroundColor = [ToolTheme shared].surfaceAlt;
     titleBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
@@ -51,13 +49,11 @@
     self.titleLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [titleBar addSubview:self.titleLabel];
     
-    // Đường viền dưới thanh tiêu đề
     UIView *titleSep = [[UIView alloc] initWithFrame:CGRectMake(0, 25, totalW, 1)];
     titleSep.backgroundColor = [ToolTheme shared].border;
     titleSep.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [titleBar addSubview:titleSep];
     
-    // 2. Navigation Rail (Cột nút chuyển tab bên trái chuẩn ImGui)
     CGFloat railW = 90;
     CGFloat railY = 26;
     CGFloat railH = totalH - railY;
@@ -72,7 +68,6 @@
     railSep.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleLeftMargin;
     [self.railView addSubview:railSep];
     
-    // 3. Content Area (Khu vực hiển thị nội dung tính năng)
     CGFloat contentX = railW;
     CGFloat contentY = railY;
     CGFloat contentW = totalW - railW;
@@ -83,7 +78,6 @@
     self.contentArea.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.contentArea];
     
-    // 4. Khởi tạo các View Controllers cho từng Tab
     self.childViewControllersList = @[
         [[ESPVC alloc] init],
         [[DumperVC alloc] init],
@@ -110,29 +104,25 @@
         btnY += btnH + 6;
     }
     
-    // Mặc định chọn tab đầu tiên (ESP)
-    [self switchTab:0];
+    [self selectTab:0];
 }
 
 - (void)didSelectTab:(ToolRailButton *)sender {
-    [self switchTab:sender.tag];
+    [self selectTab:sender.tag];
 }
 
-- (void)switchTab:(NSInteger)index {
+- (void)selectTab:(NSInteger)index {
     if (index < 0 || index >= self.childViewControllersList.count) return;
     self.currentIndex = index;
     
-    // Cập nhật trạng thái active cho các nút trên Rail
     for (NSInteger i = 0; i < self.railButtons.count; i++) {
         self.railButtons[i].selected = (i == index);
     }
     
-    // Xóa view cũ trong content area an toàn
     for (UIView *subview in self.contentArea.subviews) {
         [subview removeFromSuperview];
     }
     
-    // Load view controller tương ứng
     UIViewController *targetVC = self.childViewControllersList[index];
     targetVC.view.frame = self.contentArea.bounds;
     targetVC.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -143,6 +133,15 @@
     
     if ([targetVC respondsToSelector:@selector(reload)]) {
         [targetVC performSelector:@selector(reload)];
+    }
+}
+
+- (void)reload {
+    if (self.currentIndex >= 0 && self.currentIndex < self.childViewControllersList.count) {
+        UIViewController *currentVC = self.childViewControllersList[self.currentIndex];
+        if ([currentVC respondsToSelector:@selector(reload)]) {
+            [currentVC performSelector:@selector(reload)];
+        }
     }
 }
 
