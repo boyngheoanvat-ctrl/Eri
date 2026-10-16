@@ -96,7 +96,7 @@ jobs:
             -framework QuartzCore \
             -install_name @rpath/libtool.dylib \
             -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
-            -Isrc/memory -Isrc/dump -Isrc/lua -Isrc/esp \
+            -Isrc/memory -Isrc/dump -Isrc/lua -Isrc/esp -Isrc/c \
             -Ilibs \
             -Llibs \
             -llua \
