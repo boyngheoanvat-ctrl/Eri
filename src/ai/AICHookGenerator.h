@@ -1,0 +1,18 @@
+#import <Foundation/Foundation.h>
+
+@interface AICHookGeneratorResult : NSObject
+@property (nonatomic, strong) NSString *offsetAddress;
+@property (nonatomic, strong) NSString *cppCode;
+@property (nonatomic, strong) NSString *luaCode;
+@end
+
+@interface AICHookGenerator : NSObject
+
++ (instancetype)shared;
+
+/**
+ * Xử lý yêu cầu chat của người dùng, tự động tìm offset và sinh code C++ + Lua
+ */
+- (void)generateMapHackForQuery:(NSString *)query completion:(void(^)(AICHookGeneratorResult *result))completion;
+
+@end
