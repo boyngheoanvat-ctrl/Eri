@@ -97,6 +97,10 @@
     return results;
 }
 
++ (NSArray<ESPTargetClass *> *)scanActiveTargets {
+    return [[ESPClassFinder shared] scanForPotentialTargets];
+}
+
 - (NSArray *)findEntityManagerClasses {
     return [self scanForPotentialTargets];
 }
