@@ -32,7 +32,7 @@
 
         CGFloat y = 16;
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
-        title.text = @"ESP Overlay & Target Configuration";
+        title.text = @"ESP All Game";
         title.textColor = [ToolTheme shared].textPrimary;
         title.font = [[ToolTheme shared] monoBoldFont:16];
         [self.scrollView addSubview:title];
