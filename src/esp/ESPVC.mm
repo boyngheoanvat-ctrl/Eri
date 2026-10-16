@@ -15,7 +15,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [ToolTheme shared].background;
+    self.view.backgroundColor = [UIColor clearColor];
     [self buildUI];
 }
 
@@ -30,66 +30,79 @@
     self.scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.scrollView];
     
-    CGFloat pad = 16;
-    CGFloat y = 16;
-    CGFloat rowH = 44;
-    CGFloat availableW = w - (pad * 2);
+    CGFloat y = 12;
+    CGFloat rowH = 36; // Chiều cao dòng gọn nhẹ kiểu ImGui
+    CGFloat availableW = w - 24;
     
-    [self addRowTitle:@"🟢 Kích Hoạt ESP (Master Toggle)" y:y w:availableW];
-    self.masterSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(availableW - 50, y - 2, 51, 31)];
-    self.masterSwitch.onTintColor = [ToolTheme shared].accent;
+    // Header Section / Group Box style ImGui
+    [self addImGuiSectionHeader:@"[ CONFIGURATION ]" y:y w:availableW];
+    y += 24;
+    
+    [self addRowTitle:@"  > Master Toggle (Bật/Tắt ESP)" y:y w:availableW];
+    self.masterSwitch = [self makeImGuiSwitch];
+    self.masterSwitch.frame = CGRectMake(availableW - 55, y - 4, 51, 31);
     [self.masterSwitch addTarget:self action:@selector(masterSwitchChanged:) forControlEvents:UIControlEventValueChanged];
     [self.scrollView addSubview:self.masterSwitch];
+    y += rowH + 6;
     
-    y += rowH + 8;
-    
-    UIView *sep = [[UIView alloc] initWithFrame:CGRectMake(pad, y, availableW, 1)];
-    sep.backgroundColor = [ToolTheme shared].surfaceAlt;
+    // Separator line
+    UIView *sep = [[UIView alloc] initWithFrame:CGRectMake(12, y, availableW, 1)];
+    sep.backgroundColor = [ToolTheme shared].border;
     [self.scrollView addSubview:sep];
-    y += 16;
+    y += 12;
     
-    NSArray *titles = @[@"ESP Box (Khung nhân vật)", 
-                          @"ESP Line (Đường gióng)", 
-                          @"ESP Distance (Khoảng cách)", 
-                          @"ESP Health (Thanh máu)"];
+    [self addImGuiSectionHeader:@"[ VISUAL FEATURES ]" y:y w:availableW];
+    y += 24;
+    
+    NSArray *titles = @[@"  > Box (Khung nhân vật)", 
+                          @"  > Line (Đường gióng)", 
+                          @"  > Distance (Khoảng cách)", 
+                          @"  > Health Bar (Thanh máu)"];
     
     NSArray *switches = @[
-        (self.boxSwitch = [self makeSwitch]),
-        (self.lineSwitch = [self makeSwitch]),
-        (self.distSwitch = [self makeSwitch]),
-        (self.healthSwitch = [self makeSwitch])
+        (self.boxSwitch = [self makeImGuiSwitch]),
+        (self.lineSwitch = [self makeImGuiSwitch]),
+        (self.distSwitch = [self makeImGuiSwitch]),
+        (self.healthSwitch = [self makeImGuiSwitch])
     ];
     
     for (int i = 0; i < titles.count; i++) {
         [self addRowTitle:titles[i] y:y w:availableW - 70];
         UISwitch *sw = switches[i];
-        sw.frame = CGRectMake(availableW - 50, y - 2, 51, 31);
-        sw.onTintColor = [ToolTheme shared].accent;
+        sw.frame = CGRectMake(availableW - 55, y - 4, 51, 31);
         sw.enabled = NO;
         [sw addTarget:self action:@selector(subSwitchChanged:) forControlEvents:UIControlEventValueChanged];
         [self.scrollView addSubview:sw];
-        
         y += rowH;
     }
     
     self.scrollView.contentSize = CGSizeMake(w, y + 20);
 }
 
-- (UISwitch *)makeSwitch {
-    return [[UISwitch alloc] init];
+- (UISwitch *)makeImGuiSwitch {
+    UISwitch *sw = [[UISwitch alloc] init];
+    sw.onTintColor = [ToolTheme shared].accent;
+    return sw;
+}
+
+- (void)addImGuiSectionHeader:(NSString *)title y:(CGFloat)y w:(CGFloat)w {
+    UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(12, y, w, 18)];
+    lbl.text = title;
+    lbl.textColor = [ToolTheme shared].accent;
+    lbl.font = [[ToolTheme shared] monoBoldFont:11];
+    [self.scrollView addSubview:lbl];
 }
 
 - (void)addRowTitle:(NSString *)title y:(CGFloat)y w:(CGFloat)w {
-    UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w, 28)];
+    UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(12, y, w, 24)];
     lbl.text = title;
     lbl.textColor = [ToolTheme shared].textPrimary;
-    lbl.font = [[ToolTheme shared] monoBoldFont:12];
+    lbl.font = [[ToolTheme shared] monoFont:11];
     [self.scrollView addSubview:lbl];
 }
 
 - (void)masterSwitchChanged:(UISwitch *)sender {
     BOOL isOn = sender.isOn;
-    
     self.boxSwitch.enabled = isOn;
     self.lineSwitch.enabled = isOn;
     self.distSwitch.enabled = isOn;
@@ -104,7 +117,6 @@
     } else {
         [[ESPOverlay shared] show];
     }
-     
     [self updateOverlayConfig];
 }
 
@@ -122,9 +134,7 @@
 }
 
 - (void)reload {
-    if ([self isViewLoaded]) {
-        // Đồng bộ trạng thái giao diện
-    }
+    if ([self isViewLoaded]) {}
 }
 
 @end
