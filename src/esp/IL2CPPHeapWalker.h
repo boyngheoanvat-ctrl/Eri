@@ -6,7 +6,7 @@ typedef NS_ENUM(NSInteger, ESPCollectStrategy) {
     ESPCollectStrategySingletonList,
     ESPCollectStrategyStaticList,
     ESPCollectStrategySingletonGetter,
-};
+}; 
 
 @interface IL2CPPHeapWalker : NSObject
 
