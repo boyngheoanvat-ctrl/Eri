@@ -5,9 +5,9 @@
 @property (nonatomic, strong) UITextField *searchField;
 @property (nonatomic, strong) UIButton *searchButton;
 @property (nonatomic, strong) UIButton *refineButton;
-@property (nonatomic, strong) UIButton *clearButton;
+@property (nonatomic, strong) UIButton *editAllButton; // Đổi từ clearButton thành editAllButton
 @property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) NSMutableArray<NSDictionary *> *searchResults; // Lưu giữ kết quả quét ngầm
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *searchResults;
 @property (nonatomic, strong) UILabel *statusLabel;
 @end
 
@@ -34,9 +34,8 @@
     [self.view addSubview:title];
     y += 36;
 
-    // Ô nhập giá trị cần tìm (ví dụ: 130)
     self.searchField = [[UITextField alloc] initWithFrame:CGRectMake(16, y, w - 32, 40)];
-    self.searchField.placeholder = @"Nhập giá trị cần tìm (vd: 130)...";
+    self.searchField.placeholder = @"Nhập giá trị cần tìm hoặc giá trị Edit All...";
     self.searchField.backgroundColor = [ToolTheme shared].surface;
     self.searchField.textColor = [ToolTheme shared].textPrimary;
     self.searchField.font = [[ToolTheme shared] monoFont:12];
@@ -50,17 +49,15 @@
 
     CGFloat btnW = (w - 40) / 3.0;
     
-    // Nút Tìm Mới (New Search)
     self.searchButton = [self makeButton:@"Tìm Mới" x:16 y:y w:btnW h:36 color:[ToolTheme shared].accent];
     [self.searchButton addTarget:self action:@selector(didTapNewSearch) forControlEvents:UIControlEventTouchUpInside];
 
-    // Nút Lọc Tiếp (Refine / Next Search)
     self.refineButton = [self makeButton:@"Lọc Tiếp" x:24 + btnW y:y w:btnW h:36 color:[UIColor colorWithRed:0.20 green:0.60 blue:0.40 alpha:1.0]];
     [self.refineButton addTarget:self action:@selector(didTapRefineSearch) forControlEvents:UIControlEventTouchUpInside];
 
-    // Nút Xóa Kết Quả (Clear)
-    self.clearButton = [self makeButton:@"Xóa" x:32 + btnW * 2 y:y w:btnW h:36 color:[UIColor colorWithRed:0.60 green:0.30 blue:0.30 alpha:1.0]];
-    [self.clearButton addTarget:self action:@selector(didTapClear) forControlEvents:UIControlEventTouchUpInside];
+    // Nút Edit All (thay cho nút Xóa cũ)
+    self.editAllButton = [self makeButton:@"Edit All" x:32 + btnW * 2 y:y w:btnW h:36 color:[UIColor colorWithRed:0.80 green:0.50 blue:0.20 alpha:1.0]];
+    [self.editAllButton addTarget:self action:@selector(didTapEditAll) forControlEvents:UIControlEventTouchUpInside];
     
     y += 46;
 
@@ -132,10 +129,24 @@
     [self.tableView reloadData];
 }
 
-- (void)didTapClear {
-    [self.searchResults removeAllObjects];
-    self.searchField.text = @"";
-    [self.statusLabel setText:@"Đã xóa kết quả quét."];
+- (void)didTapEditAll {
+    NSString *newVal = self.searchField.text;
+    if (newVal.length == 0 || self.searchResults.count == 0) {
+        [self.statusLabel setText:@"[Lỗi] Không có kết quả hoặc chưa nhập giá trị mới để Edit!"];
+        return;
+    }
+    [self.searchField resignFirstResponder];
+
+    // Cập nhật giá trị mới cho toàn bộ danh sách kết quả đang hiển thị
+    NSMutableArray *updated = [NSMutableArray array];
+    for (NSDictionary *item in self.searchResults) {
+        [updated addObject:@{
+            @"address": item[@"address"],
+            @"value": newVal
+        }];
+    }
+    self.searchResults = updated;
+    [self.statusLabel setText:[NSString stringWithFormat:@"[Thành công] Đã đổi toàn bộ giá trị thành: %@", newVal]];
     [self.tableView reloadData];
 }
 
