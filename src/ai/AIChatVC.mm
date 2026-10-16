@@ -1,582 +1,377 @@
+#import "AIChatVC.h"
+#import "AIProvider.h"
 #import "AITool.h"
-#import "IL2CPPResolver.h"
+#import "AIMemoryTool.h"
+#import "AIESPTool.h"
 #import "GameFingerprint.h"
+#import "ToolTheme.h"
 
-static NSMutableDictionary<NSString *, AITool *> *gTools = nil;
+static const CGFloat kInputBarHeight = 50;
 
-@implementation AITool
+@interface AIChatVC () <AIStreamDelegate, UITableViewDataSource, UITableViewDelegate, UIGestureRecognizerDelegate>
+@property (nonatomic, strong) UITableView *tableView;
+@property (nonatomic, strong) UIView *inputArea;
+@property (nonatomic, strong) UITextField *inputField;
+@property (nonatomic, strong) UIButton *sendButton;
+@property (nonatomic, strong) UIActivityIndicatorView *spinner;
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *items;
+@property (nonatomic, assign) BOOL isWaiting;
+@property (nonatomic, strong) NSMutableString *currentAIResponse;
+@end
 
-+ (instancetype)toolWithName:(NSString *)name description:(NSString *)desc
-                  parameters:(NSDictionary *)params handler:(id (^)(NSDictionary *))handler {
-    AITool *t = [[AITool alloc] init];
-    t.name = name; t.toolDescription = desc; t.parameters = params; t.handler = handler;
-    return t;
-}
+@implementation AIChatVC
 
-+ (NSArray<AITool *> *)allTools { return gTools.allValues ?: @[]; }
-+ (AITool *)toolNamed:(NSString *)name { return gTools[name]; }
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    NSLog(@"[AI] viewDidLoad START");
 
-+ (void)registerTool:(AITool *)tool {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{ gTools = [NSMutableDictionary dictionary]; });
-    if (tool.name) gTools[tool.name] = tool;
-}
+    self.view.backgroundColor = [ToolTheme shared].background;
+    self.items = [NSMutableArray array];
 
-+ (void)registerAll {
-    [self registerTool:[AITool toolWithName:@"find_concept"
-        description:@"Tim method hack theo KHAI NIEM. concept: map, speed, damage, health, mana, money, cooldown"
-        parameters:@{@"type": @"object", @"properties": @{
-            @"concept": @{@"type": @"string"}}, @"required": @[@"concept"]}
-        handler:^id(NSDictionary *args) {
-            [[IL2CPPResolver shared] attachCurrentThread];
-            return [AITool safeFindConcept:args[@"concept"] ?: @""];
-        }]];
-
-    [self registerTool:[AITool toolWithName:@"search_classes"
-        description:@"Tim class IL2CPP theo keyword."
-        parameters:@{@"type": @"object", @"properties": @{
-            @"keyword": @{@"type": @"string"}}, @"required": @[@"keyword"]}
-        handler:^id(NSDictionary *args) {
-            [[IL2CPPResolver shared] attachCurrentThread];
-            return [AITool safeSearchClasses:args[@"keyword"] ?: @""];
-        }]];
-
-    [self registerTool:[AITool toolWithName:@"dump_class_runtime"
-        description:@"Xem chi tiet 1 class."
-        parameters:@{@"type": @"object", @"properties": @{
-            @"class_name": @{@"type": @"string"}}, @"required": @[@"class_name"]}
-        handler:^id(NSDictionary *args) {
-            [[IL2CPPResolver shared] attachCurrentThread];
-            return [AITool safeDumpClass:args[@"class_name"] ?: @""];
-        }]];
-
-    [self registerTool:[AITool toolWithName:@"find_method_in_class"
-        description:@"Tim method trong 1 class."
-        parameters:@{@"type": @"object", @"properties": @{
-            @"class_name": @{@"type": @"string"},
-            @"keyword": @{@"type": @"string"}},
-            @"required": @[@"class_name", @"keyword"]}
-        handler:^id(NSDictionary *args) {
-            [[IL2CPPResolver shared] attachCurrentThread];
-            return [AITool safeFindMethodInClass:args[@"class_name"] ?: @""
-                                         keyword:args[@"keyword"] ?: @""];
-        }]];
-
-    [self registerTool:[AITool toolWithName:@"find_method_global"
-        description:@"Tim method tren TOAN BO assembly theo keyword."
-        parameters:@{@"type": @"object", @"properties": @{
-            @"keyword": @{@"type": @"string"},
-            @"max_results": @{@"type": @"integer"}},
-            @"required": @[@"keyword"]}
-        handler:^id(NSDictionary *args) {
-            [[IL2CPPResolver shared] attachCurrentThread];
-            return [AITool safeFindMethodGlobal:args[@"keyword"] ?: @""
-                                     maxResults:[args[@"max_results"] integerValue] ?: 10];
-        }]];
-
-    [self registerTool:[AITool toolWithName:@"find_field_in_class"
-        description:@"Tim field trong class."
-        parameters:@{@"type": @"object", @"properties": @{
-            @"class_name": @{@"type": @"string"},
-            @"keyword": @{@"type": @"string"}},
-            @"required": @[@"class_name", @"keyword"]}
-        handler:^id(NSDictionary *args) {
-            [[IL2CPPResolver shared] attachCurrentThread];
-            return [AITool safeFindFieldInClass:args[@"class_name"] ?: @""
-                                        keyword:args[@"keyword"] ?: @""];
-        }]];
-
-    [self registerTool:[AITool toolWithName:@"find_classes_by_method"
-        description:@"Tim class nao co method ten cu the."
-        parameters:@{@"type": @"object", @"properties": @{
-            @"method_name": @{@"type": @"string"}}, @"required": @[@"method_name"]}
-        handler:^id(NSDictionary *args) {
-            [[IL2CPPResolver shared] attachCurrentThread];
-            return [AITool safeFindClassesByMethod:args[@"method_name"] ?: @""];
-        }]];
-
-    [self registerTool:[AITool toolWithName:@"read_file"
-        description:@"Grep file dump."
-        parameters:@{@"type": @"object", @"properties": @{
-            @"filename": @{@"type": @"string"},
-            @"keyword": @{@"type": @"string"}}, @"required": @[@"filename"]}
-        handler:^id(NSDictionary *args) {
-            return [AITool safeReadFile:args[@"filename"] ?: @""
-                                keyword:args[@"keyword"] ?: @""];
-        }]];
-}
-
-- (NSDictionary *)openAISchema {
-    return @{@"type": @"function", @"function": @{
-        @"name": self.name ?: @"", @"description": self.toolDescription ?: @"",
-        @"parameters": self.parameters ?: @{@"type": @"object", @"properties": @{}}}};
-}
-
-#pragma mark - Safe wrappers
-
-+ (id)safeFindConcept:(NSString *)concept {
     @try {
-        return [self findConcept:concept];
+        [AITool registerAll];
+        [AIMemoryTool registerAll];
+        [AIESPTool registerAll];
     } @catch (NSException *e) {
-        return @{@"error": e.reason ?: @"Exception"};
-    } @catch (...) {
-        return @{@"error": @"unknown"};
-    }
-}
-
-+ (id)safeSearchClasses:(NSString *)keyword {
-    @try {
-        return [self searchClasses:keyword];
-    } @catch (NSException *e) {
-        return @{@"error": e.reason ?: @"Exception"};
-    } @catch (...) {
-        return @{@"error": @"unknown"};
-    }
-}
-
-+ (id)safeDumpClass:(NSString *)name {
-    @try {
-        return [self dumpClassRuntime:name];
-    } @catch (NSException *e) {
-        return @{@"error": e.reason ?: @"Exception"};
-    } @catch (...) {
-        return @{@"error": @"unknown"};
-    }
-}
-
-+ (id)safeFindMethodInClass:(NSString *)cls keyword:(NSString *)kw {
-    @try {
-        return [self findMethodInClass:cls keyword:kw];
-    } @catch (NSException *e) {
-        return @{@"error": e.reason ?: @"Exception"};
-    } @catch (...) {
-        return @{@"error": @"unknown"};
-    }
-}
-
-+ (id)safeFindMethodGlobal:(NSString *)kw maxResults:(NSInteger)max {
-    @try {
-        return [self findMethodGlobal:kw maxResults:max];
-    } @catch (NSException *e) {
-        return @{@"error": e.reason ?: @"Exception"};
-    } @catch (...) {
-        return @{@"error": @"unknown"};
-    }
-}
-
-+ (id)safeFindFieldInClass:(NSString *)cls keyword:(NSString *)kw {
-    @try {
-        return [self findFieldInClass:cls keyword:kw];
-    } @catch (NSException *e) {
-        return @{@"error": e.reason ?: @"Exception"};
-    } @catch (...) {
-        return @{@"error": @"unknown"};
-    }
-}
-
-+ (id)safeFindClassesByMethod:(NSString *)method {
-    @try {
-        return [self findClassesByMethod:method];
-    } @catch (NSException *e) {
-        return @{@"error": e.reason ?: @"Exception"};
-    } @catch (...) {
-        return @{@"error": @"unknown"};
-    }
-}
-
-+ (id)safeReadFile:(NSString *)file keyword:(NSString *)kw {
-    @try {
-        return [self readFile:file keyword:kw];
-    } @catch (NSException *e) {
-        return @{@"error": e.reason ?: @"Exception"};
-    } @catch (...) {
-        return @{@"error": @"unknown"};
-    }
-}
-
-#pragma mark - Helpers
-
-+ (BOOL)isSystemName:(NSString *)name {
-    if (name.length == 0) return YES;
-    NSString *l = name.lowercaseString;
-    NSArray<NSString *> *skip = @[@"util", @"helper", @"config", @"system.", @"unityengine."];
-    for (NSString *s in skip) {
-        if ([l containsString:s]) return YES;
-    }
-    return NO;
-}
-
-+ (NSUInteger)classPriority:(NSString *)className {
-    if (className.length == 0) return 0;
-    if ([className isEqualToString:@"ShowEntity"])       return 100;
-    if ([className isEqualToString:@"LogicFighter"])     return 90;
-    if ([className isEqualToString:@"Hero"])             return 80;
-    if ([className isEqualToString:@"Player"])           return 80;
-    NSString *l = className.lowercaseString;
-    if ([l containsString:@"entity"])   return 60;
-    if ([l containsString:@"fighter"])  return 60;
-    if ([l containsString:@"hero"])     return 60;
-    if ([l containsString:@"player"])   return 60;
-    if ([l containsString:@"camera"])   return 55;
-    return 10;
-}
-
-#pragma mark - Tools
-
-+ (id)findConcept:(NSString *)concept {
-    if (concept.length == 0) return @{@"error": @"required"};
-
-    GameFingerprint *fp = [GameFingerprint shared];
-    NSString *game = @"Unknown";
-    NSString *entityClass = @"Unknown";
-    NSArray *results = @[];
-
-    @try { game = [fp detectedGame] ?: @"Unknown"; } @catch (NSException *e) {}
-    @try { entityClass = [fp detectedEntityClass] ?: @"Unknown"; } @catch (NSException *e) {}
-    @try { results = [fp findMethodsForConcept:concept maxResults:20] ?: @[]; } @catch (NSException *e) {}
-
-    return @{
-        @"game": game,
-        @"entity_class": entityClass,
-        @"concept": concept,
-        @"count": @(results.count),
-        @"results": results,
-    };
-}
-
-+ (id)searchClasses:(NSString *)keyword {
-    if (keyword.length == 0) return @{@"error": @"required"};
-    IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (![r resolve]) return @{@"error": @"IL2CPP not resolved"};
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain || !domain->assemblies) return @{@"error": @"No domain"};
-
-    NSString *lower = keyword.lowercaseString;
-    NSMutableArray *results = [NSMutableArray array];
-
-    int maxAsm = MIN((int)domain->assembly_count, 3);
-    for (int a = 0; a < maxAsm && results.count < 20; a++) {
-        Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
-        Il2CppImage *image = [r assembly_get_image:asm_];
-        if (!image) continue;
-
-        size_t count = [r image_get_class_count:image];
-        size_t limit = MIN(count, (size_t)1000);
-
-        for (size_t i = 0; i < limit && results.count < 20; i++) {
-            @autoreleasepool {
-                Il2CppClass *klass = [r image_get_class:image index:i];
-                if (!klass) continue;
-                const char *cname = [r class_get_name:klass];
-                if (!cname) continue;
-                NSString *name = [NSString stringWithUTF8String:cname];
-                if (!name) continue;
-                if ([self isSystemName:name]) continue;
-
-                const char *cns = [r class_get_namespace:klass];
-                NSString *ns = (cns && [NSString stringWithUTF8String:cns])
-                              ? [NSString stringWithUTF8String:cns] : @"";
-
-                if ([name.lowercaseString containsString:lower] ||
-                    [ns.lowercaseString containsString:lower]) {
-                    [results addObject:@{
-                        @"name": name,
-                        @"namespace": ns ?: @"",
-                        @"priority": @([self classPriority:name]),
-                    }];
-                }
-            }
-        }
+        NSLog(@"[AI] Register tools exception: %@", e);
     }
 
-    [results sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
-        return [b[@"priority"] compare:a[@"priority"]];
+    [self buildUI];
+    [self setupKeyboardObservers];
+
+    NSString *welcome = @"AI Agent ready.\nHoi: hack map, hack speed, tim class...";
+    [self.items addObject:@{@"type": @"ai", @"text": welcome}];
+    [self.tableView reloadData];
+
+    NSLog(@"[AI] viewDidLoad DONE");
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+#pragma mark - UI
+
+- (void)buildUI {
+    CGFloat w = CGRectGetWidth(self.view.bounds);
+    CGFloat h = CGRectGetHeight(self.view.bounds);
+
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, w, h - kInputBarHeight)
+                                                     style:UITableViewStylePlain];
+    self.tableView.dataSource = self;
+    self.tableView.delegate = self;
+    self.tableView.backgroundColor = [ToolTheme shared].background;
+    self.tableView.separatorColor = [UIColor clearColor];
+    self.tableView.rowHeight = UITableViewAutomaticDimension;
+    self.tableView.estimatedRowHeight = 40;
+    self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    self.tableView.alwaysBounceVertical = YES;
+    self.tableView.showsVerticalScrollIndicator = YES;
+    self.tableView.scrollEnabled = YES;
+    self.tableView.delaysContentTouches = NO;
+    self.tableView.canCancelContentTouches = YES;
+    self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.tableView.contentInset = UIEdgeInsetsMake(8, 0, 8, 0);
+    [self.view addSubview:self.tableView];
+
+    self.inputArea = [[UIView alloc] initWithFrame:CGRectMake(0, h - kInputBarHeight, w, kInputBarHeight)];
+    self.inputArea.backgroundColor = [ToolTheme shared].surface;
+    self.inputArea.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
+    [self.view addSubview:self.inputArea];
+
+    UIView *topLine = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 1)];
+    topLine.backgroundColor = [ToolTheme shared].divider;
+    [self.inputArea addSubview:topLine];
+
+    self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, w - 80, 30)];
+    self.inputField.backgroundColor = [ToolTheme shared].background;
+    self.inputField.textColor = [ToolTheme shared].textPrimary;
+    self.inputField.font = [[ToolTheme shared] monoFont:11];
+    self.inputField.layer.borderWidth = 1;
+    self.inputField.layer.borderColor = [ToolTheme shared].border.CGColor;
+    self.inputField.layer.cornerRadius = 4;
+    self.inputField.returnKeyType = UIReturnKeySend;
+    self.inputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
+    self.inputField.leftViewMode = UITextFieldViewModeAlways;
+    self.inputField.attributedPlaceholder = [[NSAttributedString alloc]
+        initWithString:@"input here..."
+            attributes:@{NSForegroundColorAttributeName: [ToolTheme shared].textMuted}];
+    self.inputField.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.inputField addTarget:self action:@selector(sendTapped)
+              forControlEvents:UIControlEventEditingDidEndOnExit];
+    [self.inputArea addSubview:self.inputField];
+
+    self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.sendButton.frame = CGRectMake(w - 64, 10, 54, 30);
+    self.sendButton.backgroundColor = [ToolTheme shared].accent;
+    self.sendButton.layer.cornerRadius = 4;
+    [self.sendButton setTitle:@"Send" forState:UIControlStateNormal];
+    [self.sendButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.sendButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
+    self.sendButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+    [self.sendButton addTarget:self action:@selector(sendTapped)
+              forControlEvents:UIControlEventTouchUpInside];
+    [self.inputArea addSubview:self.sendButton];
+
+    self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:
+        UIActivityIndicatorViewStyleMedium];
+    self.spinner.color = [ToolTheme shared].accent;
+    self.spinner.center = self.view.center;
+    self.spinner.hidesWhenStopped = YES;
+    self.spinner.userInteractionEnabled = NO;
+    [self.view addSubview:self.spinner];
+}
+
+#pragma mark - Keyboard
+
+- (void)setupKeyboardObservers {
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWillShow:)
+                                                 name:UIKeyboardWillShowNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWillHide:)
+                                                 name:UIKeyboardWillHideNotification object:nil];
+}
+
+- (void)keyboardWillShow:(NSNotification *)note {
+    NSDictionary *info = note.userInfo;
+    CGRect kbFrame = [info[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    NSTimeInterval dur = [info[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    CGRect kbInView = [self.view convertRect:kbFrame fromView:nil];
+    CGFloat overlap = CGRectGetHeight(self.view.bounds) - CGRectGetMinY(kbInView);
+
+    [UIView animateWithDuration:dur animations:^{
+        CGFloat w = CGRectGetWidth(self.view.bounds);
+        CGFloat h = CGRectGetHeight(self.view.bounds);
+        CGFloat visibleH = h - overlap;
+        self.tableView.frame = CGRectMake(0, 0, w, visibleH - kInputBarHeight);
+        self.inputArea.frame = CGRectMake(0, visibleH - kInputBarHeight, w, kInputBarHeight);
+    } completion:^(BOOL finished) {
+        [self scrollToBottomAnimated:YES];
     }];
-
-    return @{@"count": @(results.count), @"classes": results};
 }
 
-+ (id)dumpClassRuntime:(NSString *)className {
-    if (className.length == 0) return @{@"error": @"required"};
-    IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (![r resolve]) return @{@"error": @"IL2CPP not resolved"};
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain) return @{@"error": @"No domain"};
-
-    Il2CppClass *klass = NULL;
-    int maxAsm = MIN((int)domain->assembly_count, 5);
-    for (int a = 0; a < maxAsm && !klass; a++) {
-        Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
-        Il2CppImage *image = [r assembly_get_image:asm_];
-        if (!image) continue;
-        size_t count = [r image_get_class_count:image];
-        size_t limit = MIN(count, (size_t)2000);
-        for (size_t i = 0; i < limit; i++) {
-            Il2CppClass *k = [r image_get_class:image index:i];
-            if (!k) continue;
-            const char *cn = [r class_get_name:k];
-            if (!cn) continue;
-            NSString *n = [NSString stringWithUTF8String:cn];
-            if (n && [n isEqualToString:className]) { klass = k; break; }
-        }
-    }
-    if (!klass) return @{@"error": @"Class not found"};
-
-    NSMutableArray *fields = [NSMutableArray array];
-    uint16_t fCount = 0;
-    NSArray<NSValue *> *fList = [r class_get_fields:klass count:&fCount];
-    for (uint16_t j = 0; j < fCount && fields.count < 50; j++) {
-        FieldInfo *f = (FieldInfo *)fList[j].pointerValue;
-        if (!f) continue;
-        const char *fn = [r field_get_name:f];
-        int32_t off = [r field_get_offset:f];
-        if (fn) {
-            [fields addObject:@{
-                @"name": [NSString stringWithUTF8String:fn],
-                @"offset": [NSString stringWithFormat:@"0x%X", off],
-            }];
-        }
-    }
-
-    NSMutableArray *methods = [NSMutableArray array];
-    uint16_t mCount = 0;
-    NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
-    for (uint16_t j = 0; j < mCount && methods.count < 50; j++) {
-        MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
-        if (!m) continue;
-        const char *mn = [r method_get_name:m];
-        void *ptr = [r method_get_pointer:m];
-        uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
-        if (mn) {
-            [methods addObject:@{
-                @"name": [NSString stringWithUTF8String:mn],
-                @"rva": [NSString stringWithFormat:@"0x%llX", rva],
-            }];
-        }
-    }
-
-    return @{
-        @"class": className,
-        @"field_count": @(fields.count),
-        @"method_count": @(methods.count),
-        @"fields": fields,
-        @"methods": methods,
-    };
-}
-
-+ (id)findMethodInClass:(NSString *)className keyword:(NSString *)keyword {
-    if (className.length == 0 || keyword.length == 0) return @{@"error": @"required"};
-    NSDictionary *dump = [self dumpClassRuntime:className];
-    if (dump[@"error"]) return dump;
-
-    NSArray *methods = dump[@"methods"];
-    NSString *lowerKw = keyword.lowercaseString;
-    NSMutableArray *found = [NSMutableArray array];
-
-    if ([methods isKindOfClass:[NSArray class]]) {
-        for (NSDictionary *m in methods) {
-            NSString *name = m[@"name"];
-            if ([name.lowercaseString containsString:lowerKw]) {
-                [found addObject:m];
-            }
-        }
-    }
-
-    return @{@"class": className, @"keyword": keyword,
-             @"count": @(found.count), @"methods": found};
-}
-
-+ (id)findMethodGlobal:(NSString *)keyword maxResults:(NSInteger)maxResults {
-    if (keyword.length == 0) return @{@"error": @"required"};
-    if (maxResults <= 0) maxResults = 10;
-    if (maxResults > 30) maxResults = 30;
-
-    IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (![r resolve]) return @{@"error": @"IL2CPP not resolved"};
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain) return @{@"error": @"No domain"};
-
-    NSString *lowerKw = keyword.lowercaseString;
-    NSMutableArray *found = [NSMutableArray array];
-
-    int maxAsm = MIN((int)domain->assembly_count, 3);
-    for (int a = 0; a < maxAsm && found.count < (NSUInteger)maxResults * 2; a++) {
-        Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
-        Il2CppImage *image = [r assembly_get_image:asm_];
-        if (!image) continue;
-
-        size_t count = [r image_get_class_count:image];
-        size_t limit = MIN(count, (size_t)500);
-
-        for (size_t i = 0; i < limit && found.count < (NSUInteger)maxResults * 2; i++) {
-            @autoreleasepool {
-                Il2CppClass *klass = [r image_get_class:image index:i];
-                if (!klass) continue;
-                const char *cname = [r class_get_name:klass];
-                if (!cname) continue;
-                NSString *className = [NSString stringWithUTF8String:cname];
-                if (!className) continue;
-                if ([self isSystemName:className]) continue;
-
-                NSUInteger cPriority = [self classPriority:className];
-
-                uint16_t mCount = 0;
-                NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
-                for (uint16_t j = 0; j < mCount; j++) {
-                    MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
-                    if (!m) continue;
-                    const char *mn = [r method_get_name:m];
-                    if (!mn) continue;
-                    NSString *mName = [NSString stringWithUTF8String:mn];
-                    if (!mName) continue;
-                    if (![mName.lowercaseString containsString:lowerKw]) continue;
-
-                    void *ptr = [r method_get_pointer:m];
-                    uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
-
-                    NSUInteger score = cPriority;
-                    if ([mName isEqualToString:keyword]) score += 100;
-
-                    [found addObject:@{
-                        @"class": className,
-                        @"method": mName,
-                        @"rva": [NSString stringWithFormat:@"0x%llX", rva],
-                        @"score": @(score),
-                    }];
-                }
-            }
-        }
-    }
-
-    [found sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
-        return [b[@"score"] compare:a[@"score"]];
+- (void)keyboardWillHide:(NSNotification *)note {
+    NSDictionary *info = note.userInfo;
+    NSTimeInterval dur = [info[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    [UIView animateWithDuration:dur animations:^{
+        CGFloat w = CGRectGetWidth(self.view.bounds);
+        CGFloat h = CGRectGetHeight(self.view.bounds);
+        self.tableView.frame = CGRectMake(0, 0, w, h - kInputBarHeight);
+        self.inputArea.frame = CGRectMake(0, h - kInputBarHeight, w, kInputBarHeight);
     }];
-
-    if (found.count > (NSUInteger)maxResults) {
-        [found removeObjectsInRange:NSMakeRange(maxResults, found.count - maxResults)];
-    }
-
-    return @{@"keyword": keyword, @"count": @(found.count), @"methods": found};
 }
 
-+ (id)findFieldInClass:(NSString *)className keyword:(NSString *)keyword {
-    if (className.length == 0 || keyword.length == 0) return @{@"error": @"required"};
-    NSDictionary *dump = [self dumpClassRuntime:className];
-    if (dump[@"error"]) return dump;
+#pragma mark - Send
 
-    NSArray *fields = dump[@"fields"];
-    NSString *lowerKw = keyword.lowercaseString;
-    NSMutableArray *found = [NSMutableArray array];
+- (void)sendTapped {
+    NSString *text = self.inputField.text;
+    if (text.length == 0 || self.isWaiting) return;
 
-    if ([fields isKindOfClass:[NSArray class]]) {
-        for (NSDictionary *f in fields) {
-            NSString *name = f[@"name"];
-            if ([name.lowercaseString containsString:lowerKw]) {
-                [found addObject:f];
-            }
+    [self.items addObject:@{@"type": @"user", @"text": text}];
+    self.inputField.text = @"";
+    [self.tableView reloadData];
+    [self scrollToBottomAnimated:YES];
+
+    self.isWaiting = YES;
+    self.currentAIResponse = [NSMutableString string];
+    self.sendButton.enabled = NO;
+    self.sendButton.alpha = 0.5;
+    [self.spinner startAnimating];
+
+    NSMutableArray *history = [NSMutableArray array];
+    NSInteger maxHistory = 6;
+    NSInteger start = MAX(0, (NSInteger)self.items.count - maxHistory);
+    for (NSInteger i = start; i < (NSInteger)self.items.count; i++) {
+        NSDictionary *item = self.items[i];
+        NSString *type = item[@"type"];
+        if ([type isEqualToString:@"user"]) {
+            [history addObject:@{@"role": @"user", @"content": item[@"text"]}];
+        } else if ([type isEqualToString:@"ai"]) {
+            [history addObject:@{@"role": @"assistant", @"content": item[@"text"]}];
         }
     }
 
-    return @{@"class": className, @"keyword": keyword,
-             @"count": @(found.count), @"fields": found};
+    NSMutableArray *tools = [NSMutableArray array];
+    for (AITool *t in [AITool allTools]) {
+        [tools addObject:[t openAISchema]];
+    }
+
+    __weak typeof(self) ws = self;
+
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+
+        NSString *game = @"Unknown";
+        @try {
+            game = [[GameFingerprint shared] detectedGame];
+        } @catch (NSException *e) {
+            NSLog(@"[AI] GameFingerprint crash: %@", e);
+            game = @"Unknown";
+        }
+
+        NSString *sysPrompt = [NSString stringWithFormat:
+            @"Ban la AI agent hack game IL2CPP iOS. Tra loi tieng Viet ngan gon, chinh xac.\n"
+            @"Game hien tai: %@\n"
+            @"\n"
+            @"=== TOOL ===\n"
+            @"1. find_concept(concept) — DUNG DAU TIEN\n"
+            @"   concept: map, speed, damage, health, mana, money, cooldown, ammo, level\n"
+            @"2. find_method_global(keyword) — tim method toan bo\n"
+            @"3. dump_class_runtime(class_name) — xem chi tiet class\n"
+            @"4. search_classes(keyword) — tim class\n"
+            @"5. find_classes_by_method(method_name)\n"
+            @"6. find_method_in_class(class_name, keyword)\n"
+            @"7. find_field_in_class(class_name, keyword)\n"
+            @"8. read_file(filename, keyword)\n"
+            @"\n"
+            @"=== QUY TAC ===\n"
+            @"1. Cau hoi 'hack X' → find_concept('X')\n"
+            @"2. Neu 0 ket qua → find_method_global voi tu khoa tuong tu\n"
+            @"3. Cau hoi ve class cu thể → dump_class_runtime\n"
+            @"4. Trả lời RÕ: game + class + method + RVA\n"
+            @"5. Không bịa RVA. Không lặp tool quá 3 lần.", game];
+
+        NSMutableArray *messages = [NSMutableArray array];
+        [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
+        [messages addObjectsFromArray:history];
+
+        [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
+    });
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (ws.isWaiting) {
+            ws.isWaiting = NO;
+            ws.sendButton.enabled = YES;
+            ws.sendButton.alpha = 1.0;
+            [ws.spinner stopAnimating];
+            [ws.items addObject:@{@"type": @"error", @"text": @"Timeout 60s"}];
+            [ws.tableView reloadData];
+            [ws scrollToBottomAnimated:YES];
+        }
+    });
 }
 
-+ (id)findClassesByMethod:(NSString *)methodName {
-    if (methodName.length == 0) return @{@"error": @"required"};
+#pragma mark - Scroll
 
-    IL2CPPResolver *r = [IL2CPPResolver shared];
-    if (![r resolve]) return @{@"error": @"IL2CPP not resolved"};
-    Il2CppDomain *domain = [r domain_get];
-    if (!domain) return @{@"error": @"No domain"};
-
-    NSMutableArray *found = [NSMutableArray array];
-
-    int maxAsm = MIN((int)domain->assembly_count, 3);
-    for (int a = 0; a < maxAsm && found.count < 20; a++) {
-        Il2CppAssembly *asm_ = domain->assemblies[a];
-        if (!asm_) continue;
-        Il2CppImage *image = [r assembly_get_image:asm_];
-        if (!image) continue;
-
-        size_t count = [r image_get_class_count:image];
-        size_t limit = MIN(count, (size_t)1000);
-
-        for (size_t i = 0; i < limit && found.count < 20; i++) {
-            @autoreleasepool {
-                Il2CppClass *klass = [r image_get_class:image index:i];
-                if (!klass) continue;
-                const char *cname = [r class_get_name:klass];
-                if (!cname) continue;
-                NSString *className = [NSString stringWithUTF8String:cname];
-                if (!className) continue;
-                if ([self isSystemName:className]) continue;
-
-                uint16_t mCount = 0;
-                NSArray<NSValue *> *mList = [r class_get_methods:klass count:&mCount];
-                for (uint16_t j = 0; j < mCount; j++) {
-                    MethodInfo *m = (MethodInfo *)mList[j].pointerValue;
-                    if (!m) continue;
-                    const char *mn = [r method_get_name:m];
-                    if (!mn) continue;
-                    NSString *mName = [NSString stringWithUTF8String:mn];
-                    if (![mName isEqualToString:methodName]) continue;
-
-                    void *ptr = [r method_get_pointer:m];
-                    uint64_t rva = ptr ? (uint64_t)((uintptr_t)ptr) : 0;
-                    [found addObject:@{
-                        @"class": className,
-                        @"method": mName,
-                        @"rva": [NSString stringWithFormat:@"0x%llX", rva],
-                    }];
-                    break;
-                }
-            }
-        }
-    }
-
-    return @{@"method": methodName, @"count": @(found.count), @"classes": found};
+- (void)scrollToBottomAnimated:(BOOL)animated {
+    if (self.items.count == 0) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSInteger last = (NSInteger)self.items.count - 1;
+        NSIndexPath *ip = [NSIndexPath indexPathForRow:last inSection:0];
+        [self.tableView scrollToRowAtIndexPath:ip
+                              atScrollPosition:UITableViewScrollPositionBottom
+                                      animated:animated];
+    });
 }
 
-+ (id)readFile:(NSString *)filename keyword:(NSString *)keyword {
-    if (filename.length == 0) return @{@"error": @"required"};
-    NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
-    NSArray *paths = @[
-        [docs stringByAppendingPathComponent:filename],
-        [docs stringByAppendingPathComponent:@"IL2CPP_Dump"],
-        [@"/var/mobile/Documents" stringByAppendingPathComponent:filename],
-        filename,
-    ];
-    NSString *content = nil;
-    NSString *foundPath = nil;
-    for (NSString *p in paths) {
-        NSString *full = [p hasSuffix:filename] ? p : [p stringByAppendingPathComponent:filename];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:full]) {
-            content = [NSString stringWithContentsOfFile:full encoding:NSUTF8StringEncoding error:nil];
-            foundPath = full;
-            break;
-        }
-    }
-    if (!content) return @{@"error": @"File not found"};
-    NSArray *lines = [content componentsSeparatedByString:@"\n"];
-    if (keyword.length == 0) {
-        return @{@"path": foundPath ?: @"", @"total_lines": @(lines.count)};
-    }
+- (void)scrollToBottom { [self scrollToBottomAnimated:YES]; }
 
-    NSString *kwLower = keyword.lowercaseString;
-    NSMutableArray *matches = [NSMutableArray array];
-    for (NSInteger i = 0; i < (NSInteger)lines.count && matches.count < 30; i++) {
-        NSString *line = (NSString *)lines[i];
-        if ([line.lowercaseString containsString:kwLower]) {
-            [matches addObject:@{
-                @"line": @(i + 1),
-                @"text": [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]
-            }];
+#pragma mark - AIStreamDelegate
+
+- (void)aiStreamDidReceiveText:(NSString *)text {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.currentAIResponse appendString:text ?: @""];
+        NSInteger lastIdx = (NSInteger)self.items.count - 1;
+        if (lastIdx >= 0 && [self.items[lastIdx][@"type"] isEqualToString:@"ai"]) {
+            self.items[lastIdx] = @{@"type": @"ai", @"text": [self.currentAIResponse copy]};
+        } else {
+            [self.items addObject:@{@"type": @"ai", @"text": [self.currentAIResponse copy]}];
         }
-    }
-    return @{@"path": foundPath ?: @"", @"count": @(matches.count), @"matches": matches};
+        [self.tableView reloadData];
+        [self scrollToBottomAnimated:YES];
+    });
 }
+
+- (void)aiStreamDidFailWithError:(NSError *)error {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.spinner stopAnimating];
+        self.isWaiting = NO;
+        self.sendButton.enabled = YES;
+        self.sendButton.alpha = 1.0;
+        [self.items addObject:@{@"type": @"error",
+            @"text": error.localizedDescription ?: @"Loi"}];
+        [self.tableView reloadData];
+        [self scrollToBottomAnimated:YES];
+    });
+}
+
+- (void)aiStreamDidComplete {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.spinner stopAnimating];
+        self.isWaiting = NO;
+        self.sendButton.enabled = YES;
+        self.sendButton.alpha = 1.0;
+    });
+}
+
+- (void)aiDidCallTool:(NSString *)toolName args:(NSDictionary *)args result:(id)result {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSString *summary = @"OK";
+        if ([result isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *d = (NSDictionary *)result;
+            if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
+            else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ ket qua", d[@"count"]];
+        }
+        [self.items addObject:@{@"type": @"tool",
+            @"text": [NSString stringWithFormat:@"%@ → %@", toolName, summary]}];
+        [self.tableView reloadData];
+        [self scrollToBottomAnimated:YES];
+    });
+}
+
+#pragma mark - Table
+
+- (NSInteger)tableView:(UITableView *)tv numberOfRowsInSection:(NSInteger)s {
+    return self.items.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip {
+    UITableViewCell *cell = [tv dequeueReusableCellWithIdentifier:@"cell"];
+    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                             reuseIdentifier:@"cell"];
+    for (UIView *v in cell.contentView.subviews) [v removeFromSuperview];
+
+    NSDictionary *item = self.items[ip.row];
+    NSString *type = item[@"type"];
+    NSString *text = item[@"text"];
+    BOOL isUser = [type isEqualToString:@"user"];
+    BOOL isTool = [type isEqualToString:@"tool"];
+    BOOL isError = [type isEqualToString:@"error"];
+
+    NSString *prefix;
+    UIColor *prefixColor;
+    if (isUser) { prefix = @"> "; prefixColor = [ToolTheme shared].accent; }
+    else if (isTool) { prefix = @"[tool] "; prefixColor = [ToolTheme shared].warning; }
+    else if (isError) { prefix = @"[error] "; prefixColor = [ToolTheme shared].danger; }
+    else { prefix = @"[ai] "; prefixColor = [ToolTheme shared].success; }
+
+    NSString *full = [NSString stringWithFormat:@"%@%@", prefix, text ?: @""];
+    CGFloat cellW = CGRectGetWidth(tv.bounds);
+
+    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(10, 6, cellW - 20, 0)];
+    label.numberOfLines = 0;
+
+    NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] initWithString:full];
+    [attr addAttribute:NSForegroundColorAttributeName value:prefixColor range:NSMakeRange(0, prefix.length)];
+    UIColor *tc = isError ? [ToolTheme shared].danger : [ToolTheme shared].textPrimary;
+    [attr addAttribute:NSForegroundColorAttributeName value:tc range:NSMakeRange(prefix.length, (text ?: @"").length)];
+    [attr addAttribute:NSFontAttributeName value:[[ToolTheme shared] monoFont:11] range:NSMakeRange(0, full.length)];
+
+    label.attributedText = attr;
+
+    CGSize maxSize = CGSizeMake(cellW - 20, CGFLOAT_MAX);
+    CGRect rect = [attr boundingRectWithSize:maxSize
+                                     options:NSStringDrawingUsesLineFragmentOrigin
+                                     context:nil];
+    label.frame = CGRectMake(10, 6, cellW - 20, rect.size.height);
+    [cell.contentView addSubview:label];
+
+    cell.backgroundColor = [UIColor clearColor];
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    return cell;
+}
+
+- (void)reload { [self.tableView reloadData]; }
 
 @end
