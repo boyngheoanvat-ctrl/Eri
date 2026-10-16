@@ -28,7 +28,7 @@
         CGFloat y = 16;
 
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
-        title.text = @"Memory Scanner (Tìm - Lọc - Sửa)";
+        title.text = @"Memory Scanner";
         title.textColor = [ToolTheme shared].textPrimary;
         title.font = [[ToolTheme shared] monoBoldFont:16];
         [self.view addSubview:title];
