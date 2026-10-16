@@ -1,4 +1,3 @@
-
 ARCHS = arm64 arm64e
 TARGET = iphone:clang:latest:14.0
 
@@ -32,11 +31,13 @@ libtool_FILES = \
     src/esp/ESPOverlay.mm \
     src/esp/ESPVC.mm \
     src/esp/IL2CPPHeapWalker.mm \
-    src/esp/ESPClassFinder.mm
+    src/esp/ESPClassFinder.mm \
+    src/c/CHookVC.mm
 
 libtool_CFLAGS = -fobjc-arc -std=c++17 \
     -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
     -Isrc/memory -Isrc/dump -Isrc/lua -Isrc/esp \
+    -Isrc/c \
     -Ilibs \
     -Wno-everything
 
