@@ -13,6 +13,6 @@
 /**
  * Xử lý yêu cầu chat của người dùng, tự động tìm offset và sinh code C++ + Lua
  */
-- (void)generateMapHackForQuery:(NSString *)query completion:(void(^)(AIMapHookResult *result))completion;
+- (void)generateMapHackForQuery:(NSString *)query completion:(void(^)(AICHookGeneratorResult *result))completion;
 
 @end
