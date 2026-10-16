@@ -7,7 +7,7 @@
 #import "MethodCallerVC.h"
 #import "LuaVC.h"
 #import "AIChatVC.h"
-#import "CHookVC.h" // Thêm header module C++ Hook trong src/c/
+#import "CHookVC.h"
 
 @interface ToolViewController ()
 @property (nonatomic, strong) UIView *contentArea;
@@ -64,6 +64,7 @@
     
     self.railView = [[UIView alloc] initWithFrame:CGRectMake(0, railY, railW, railH)];
     self.railView.backgroundColor = [ToolTheme shared].surface;
+    // Cho phép co giãn chiều cao linh hoạt theo cửa sổ và tự động giữ nguyên vị trí
     self.railView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleRightMargin;
     [self.view addSubview:self.railView];
     
@@ -83,7 +84,7 @@
     self.contentArea.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.contentArea];
     
-    // 4. Khởi tạo danh sách các Tab VC (Bổ sung CHookVC cho src/c/)
+    // 4. Khởi tạo danh sách các Tab VC
     self.childViewControllersList = @[
         [[ESPVC alloc] init],
         [[DumperVC alloc] init],
@@ -91,19 +92,26 @@
         [[MethodCallerVC alloc] init],
         [[LuaVC alloc] init],
         [[AIChatVC alloc] init],
-        [[CHookVC alloc] init] // Thêm tab C++ Hook
+        [[CHookVC alloc] init]
     ];
     
     NSArray *titles = @[@"ESP", @"Dump", @"Mem", @"Call", @"Lua", @"AI", @"C++"];
     self.railButtons = [NSMutableArray array];
     
-    CGFloat btnH = 34; // Tinh chỉnh chiều cao nút một chút cho vừa khít 7 tab
-    CGFloat btnY = 6;
+    // Tự động tính toán chiều cao nút dựa vào tổng số lượng tab để không bao giờ bị tràn khung
+    NSInteger count = titles.count;
+    CGFloat topMargin = 8;
+    CGFloat spacing = 4;
+    CGFloat availableH = railH - (topMargin * 2) - (spacing * (count - 1));
+    CGFloat btnH = availableH / count;
+    if (btnH > 34) btnH = 34; // Giới hạn chiều cao tối đa cho đẹp mắt
+    if (btnH < 24) btnH = 24; // Đảm bảo chiều cao tối thiểu dễ bấm
     
-    for (NSInteger i = 0; i < titles.count; i++) {
+    CGFloat btnY = topMargin;
+    
+    for (NSInteger i = 0; i < count; i++) {
         ToolRailButton *btn = [[ToolRailButton alloc] initWithFrame:CGRectMake(6, btnY, railW - 12, btnH)];
         
-        // Ép kiểu tường minh để trình biên dịch Clang không báo lỗi strict selector checking
         if ([btn respondsToSelector:@selector(setTitle:forState:)]) {
             [(UIButton *)btn setTitle:titles[i] forState:UIControlStateNormal];
         } else if ([btn respondsToSelector:@selector(setTitle:)]) {
@@ -115,7 +123,7 @@
         [self.railView addSubview:btn];
         [self.railButtons addObject:btn];
         
-        btnY += btnH + 4;
+        btnY += btnH + spacing;
     }
     
     [self selectTab:0];
