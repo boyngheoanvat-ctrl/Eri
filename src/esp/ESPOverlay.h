@@ -10,7 +10,6 @@
 @property (nonatomic, assign) BOOL showBox;
 @property (nonatomic, assign) BOOL showLine;
 
-// Bổ sung thuộc tính detectedTargets để ESPOverlayView truy xuất an toàn
 @property (nonatomic, strong, readonly) NSArray<ESPTargetClass *> *detectedTargets;
 
 + (instancetype)shared;
