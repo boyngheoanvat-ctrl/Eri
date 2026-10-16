@@ -39,7 +39,7 @@ static const CGFloat kInputBarHeight = 50;
     [self buildUI];
     [self setupKeyboardObservers];
 
-    NSString *welcome = @"AI Agent & Ghidra ready.\nHỏi: phân tích Ghidra, hack map, viết code C++/Lua...";
+    NSString *welcome = @"Hi Người Anh Em !!!";
     [self.items addObject:@{@"type": @"ai", @"text": welcome}];
     [self.tableView reloadData];
 
@@ -213,11 +213,8 @@ static const CGFloat kInputBarHeight = 50;
         }
 
         NSString *sysPrompt = [NSString stringWithFormat:
-            @"Bạn là AI agent hack game IL2CPP iOS và Reverse Engineer chuyên nghiệp dùng Ghidra.\n"
-            @"- Khi cần phân tích mã lệnh tĩnh, dịch ngược hàm hoặc offset, hãy sử dụng tool `analyze_ghidra`.\n"
-            @"- Khi người dùng yêu cầu đưa mã qua tab Lua, hãy đặt toàn bộ mã nguồn trong thẻ ```lua ... ```.\n"
-            @"- Khi người dùng yêu cầu đưa mã qua tab C++, hãy đặt toàn bộ mã nguồn trong thẻ ```cpp ... ```.\n"
-            @"Game hiện tại: %@\n", game];
+            @"Tôi Có Thể Giúp Gì Cho Bạn ?"
+            @"Hãy Cho Tôi Biết Game Đang Muốn Mod : %@\n", game];
 
         NSMutableArray *messages = [NSMutableArray array];
         [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
@@ -374,7 +371,34 @@ static const CGFloat kInputBarHeight = 50;
     label.frame = CGRectMake(12, 8, cellW - 24, ceil(rect.size.height));
     [cell.contentView addSubview:label];
 
+    // Thêm nút Copy nhanh ở góc phải phía trên cho các tin nhắn AI hoặc cho phép chạm đúp để copy
+    if (!isUser) {
+        UIButton *copyBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+        copyBtn.frame = CGRectMake(cellW - 55, 4, 45, 20);
+        [copyBtn setTitle:@"Copy" forState:UIControlStateNormal];
+        [copyBtn setTitleColor:[ToolTheme shared].accent forState:UIControlStateNormal];
+        copyBtn.titleLabel.font = [[ToolTheme shared] monoBoldFont:10];
+        copyBtn.tag = ip.row;
+        [copyBtn addTarget:self action:@selector(copyMessageTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [cell.contentView addSubview:copyBtn];
+    }
+
     return cell;
+}
+
+- (void)copyMessageTapped:(UIButton *)sender {
+    NSInteger index = sender.tag;
+    if (index >= 0 && index < self.items.count) {
+        NSDictionary *item = self.items[index];
+        NSString *text = item[@"text"] ?: @"";
+        [UIPasteboard generalPasteboard].string = text;
+        
+        // Hiển thị thông báo nhỏ hoặc đổi tạm tiêu đề nút thành "Copied!"
+        [sender setTitle:@"Copied!" forState:UIControlStateNormal];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [sender setTitle:@"Copy" forState:UIControlStateNormal];
+        });
+    }
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
