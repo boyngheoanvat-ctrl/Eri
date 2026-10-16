@@ -9,6 +9,9 @@
 @property (nonatomic, strong, nonnull) NSMutableArray<NSDictionary *> *messages;
 @property (nonatomic, strong) UITextField *inputField;
 @property (nonatomic, strong) UIButton *sendButton;
+
+// Danh sách lưu các tính năng đã được yêu cầu tích lũy
+@property (nonatomic, strong) NSMutableSet<NSString *> *activeModules;
 @end
 
 @implementation AIChatVC
@@ -17,10 +20,11 @@
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
     self.messages = [NSMutableArray array];
+    self.activeModules = [NSMutableSet set];
     
     [self.messages addObject:@{
         @"sender": @"ai",
-        @"text": @"Hello người ae! AI Eri đã sẵn sàng phân tích chuẩn xác Class, Method và RVA."
+        @"text": @"Hello người ae! AI Eri đã sẵn sàng tích lũy tính năng hoặc gom nhóm thông minh theo yêu cầu."
     }];
     
     CGFloat w = CGRectGetWidth(self.view.bounds);
@@ -40,7 +44,7 @@
     [self.view addSubview:bottomBar];
     
     self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, w - 90, 36)];
-    self.inputField.placeholder = @"Nhập yêu cầu (hack map, mod skin, bất tử)...";
+    self.inputField.placeholder = @"Nhập yêu cầu (hack map, camera xa, mod skin)...";
     self.inputField.backgroundColor = [ToolTheme shared].surface;
     self.inputField.textColor = [ToolTheme shared].textPrimary;
     self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -76,61 +80,50 @@
     [self.tableView reloadData];
     
     NSString *lower = [text lowercaseString];
-    NSString *luaPayload = nil;
-    NSString *aiResponseText = @"";
-    BOOL shouldSwitchToLua = NO;
+    NSString *detectedKey = @"custom";
     
-    if ([lower containsString:@"hi"] || [lower containsString:@"hello"] || [lower containsString:@"chào"]) {
-        aiResponseText = [NSString stringWithFormat:@"Hello người ae! Đã sẵn sàng phân tích cho yêu cầu: '%@'.", text];
-        shouldSwitchToLua = NO;
+    // Phân loại từ khóa thông minh
+    if ([lower containsString:@"map"] || [lower containsString:@"sáng bản đồ"]) {
+        detectedKey = @"hack_map";
+    } else if ([lower containsString:@"camera"] || [lower containsString:@"xa"]) {
+        detectedKey = @"camera_xa";
+    } else if ([lower containsString:@"skin"] || [lower containsString:@"trang phục"]) {
+        detectedKey = @"mod_skin";
+    } else if ([lower containsString:@"bất tử"] || [lower containsString:@"god"]) {
+        detectedKey = @"god_mode";
     }
-    else {
-        shouldSwitchToLua = YES;
-        
-        if ([lower containsString:@"map"] || [lower containsString:@"hack map"]) {
-            aiResponseText = @"[Ai Eri] Đã tìm thấy Method Hack Map:\n\n"
-                              @"• Class: CameraUtils\n"
-                              @"• Method: CanSight\n"
-                              @"• RVA: 0x1097E5678\n"
-                              @"• Trạng thái: Sẵn sàng thực thi Lua chống văng!";
-                              
-            luaPayload = @"-- [Ai Eri] Hack Map Script (Active)\n"
-                         "local ok, err = pcall(function()\n"
-                         "    local base = il2cpp.get_image_base('UnityFramework')\n"
-                         "    if base then\n"
-                         "        local target = base + 0x1097E5678\n"
-                         "        print('[Lua Safe] CameraUtils$$CanSight: 0x' .. string.format('%X', target))\n"
-                         "    end\n"
-                         "end)\n"
-                         "if not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n";
-        }
-        else if ([lower containsString:@"skin"] || [lower containsString:@"mod skin"]) {
-            aiResponseText = @"[Ai Eri] Đã tìm thấy Method Mod Skin:\n\n"
-                              @"• Class: HeroSkinManager\n"
-                              @"• Method: ApplySkinOverride\n"
-                              @"• RVA: 0x10842B100\n"
-                              @"• Trạng thái: Nạp payload an toàn!";
-                              
-            luaPayload = @"-- [Ai Eri] Mod Skin Script\n"
-                         "local ok, err = pcall(function()\n"
-                         "    print('[Lua Safe] HeroSkinManager active!')\n"
-                         "end)\n"
-                         "if not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n";
-        }
-        else {
-            aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Phân tích '%@':\n\n"
-                                                        @"• Class: GameCoreSystem\n"
-                                                        @"• Method: ExecuteAction\n"
-                                                        @"• RVA: 0x105001234", text];
-                                                        
-            luaPayload = [NSString stringWithFormat:
-                @"-- [Ai Eri] Custom Script: %@\n"
-                 "local ok, err = pcall(function()\n"
-                 "    print('[Lua Safe] Thực thi: %@')\n"
-                 "end)\n"
-                 "if not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n", text, text];
+    
+    // Kiểm tra xem tính năng này đã tồn tại chưa (Tránh lặp lại nếu chat trùng ý)
+    BOOL isDuplicate = [self.activeModules containsObject:detectedKey];
+    if (!isDuplicate && ![detectedKey isEqualToString:@"custom"]) {
+        [self.activeModules addObject:detectedKey];
+    }
+    
+    NSString *aiResponseText = @"";
+    if (isDuplicate) {
+        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Tính năng này đã có sẵn trong danh sách menu hiện tại. Không tạo bản sao trùng lặp cho: '%@'.", text];
+    } else {
+        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã tích hợp thành công vào menu tổng hợp!\n• Tổng số tính năng đang hoạt động: %lu\n• Yêu cầu mới: %@", (unsigned long)self.activeModules.count, text];
+    }
+    
+    // Sinh Script Lua tổng hợp dựa trên toàn bộ các module đang được kích hoạt tích lũy
+    NSMutableString *luaPayload = [NSMutableString stringWithFormat:
+        @"-- [Ai Eri] Integrated Script Menu (Active Modules: %lu)\n"
+         "local ok, err = pcall(function()\n"
+         "    print('[Lua Safe] Khởi chạy menu tổng hợp...')\n", (unsigned long)self.activeModules.count];
+         
+    for (NSString *mod in self.activeModules) {
+        if ([mod isEqualToString:@"hack_map"]) {
+            [luaPayload appendString:@"    print('[Mod] Kích hoạt Hack Map (CameraUtils$$CanSight)')\n"];
+        } else if ([mod isEqualToString:@"camera_xa"]) {
+            [luaPayload appendString:@"    print('[Mod] Kích hoạt Camera Xa (CameraController$$Update)')\n"];
+        } else if ([mod isEqualToString:@"mod_skin"]) {
+            [luaPayload appendString:@"    print('[Mod] Kích hoạt Mod Skin (HeroSkinManager)')\n"];
+        } else if ([mod isEqualToString:@"god_mode"]) {
+            [luaPayload appendString:@"    print('[Mod] Kích hoạt Bất Tử (PlayerHealth$$TakeDamage)')\n"];
         }
     }
+    [luaPayload appendString:@"end)\nif not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n"];
     
     [self.messages addObject:@{@"sender": @"ai", @"text": aiResponseText}];
     [self.tableView reloadData];
@@ -140,36 +133,35 @@
                               atScrollPosition:UITableViewScrollPositionBottom animated:YES];
     }
     
-    if (shouldSwitchToLua && luaPayload) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIResponder *responder = self.view.window.rootViewController;
-            ToolViewController *targetToolVC = nil;
-            
-            if ([responder isKindOfClass:[ToolViewController class]]) {
-                targetToolVC = (ToolViewController *)responder;
-            } else if ([responder isKindOfClass:[UIViewController class]]) {
-                for (UIViewController *child in ((UIViewController *)responder).childViewControllers) {
-                    if ([child isKindOfClass:[ToolViewController class]]) {
-                        targetToolVC = (ToolViewController *)child;
-                        break;
+    // Tự động đẩy payload tổng hợp sang tab Lua
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIResponder *responder = self.view.window.rootViewController;
+        ToolViewController *targetToolVC = nil;
+        
+        if ([responder isKindOfClass:[ToolViewController class]]) {
+            targetToolVC = (ToolViewController *)responder;
+        } else if ([responder isKindOfClass:[UIViewController class]]) {
+            for (UIViewController *child in ((UIViewController *)responder).childViewControllers) {
+                if ([child isKindOfClass:[ToolViewController class]]) {
+                    targetToolVC = (ToolViewController *)child;
+                    break;
+                }
+            }
+        }
+        
+        if (targetToolVC) {
+            [targetToolVC selectTab:4];
+            if ([targetToolVC respondsToSelector:@selector(luaVC)]) {
+                id luaVC = [targetToolVC valueForKey:@"luaVC"];
+                if (luaVC) {
+                    if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) [luaVC loadViewIfNeeded];
+                    if ([luaVC respondsToSelector:@selector(setScriptContent:)]) {
+                        [luaVC performSelector:@selector(setScriptContent:) withObject:luaPayload];
                     }
                 }
             }
-            
-            if (targetToolVC) {
-                [targetToolVC selectTab:4];
-                if ([targetToolVC respondsToSelector:@selector(luaVC)]) {
-                    id luaVC = [targetToolVC valueForKey:@"luaVC"];
-                    if (luaVC) {
-                        if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) [luaVC loadViewIfNeeded];
-                        if ([luaVC respondsToSelector:@selector(setScriptContent:)]) {
-                            [luaVC performSelector:@selector(setScriptContent:) withObject:luaPayload];
-                        }
-                    }
-                }
-            }
-        });
-    }
+        }
+    });
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
