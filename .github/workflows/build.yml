@@ -81,17 +81,8 @@ jobs:
       - name: Build dylib with Lua
         run: |
           SDK=$HOME/sdks/iPhoneOS16.5.sdk
-          # Liệt kê tường minh toàn bộ các tệp nguồn để không bao giờ bị bỏ sót
-          SRC="src/libtool.mm src/FloatingButton.mm \
-               src/core/ToolWindow.mm src/core/ToolGestureManager.mm src/core/ToolTheme.mm src/core/ToolViewController.mm \
-               src/ui/ToolRailButton.mm \
-               src/esp/ESPOverlay.mm src/esp/ESPVC.mm src/esp/IL2CPPHeapWalker.mm src/esp/ESPClassFinder.mm \
-               src/dump/DumperVC.mm src/dump/IL2CPPResolver.mm \
-               src/memory/MethodCaller.mm src/memory/MemoryResult.mm src/memory/MemoryEditor.mm src/memory/MethodCallerVC.mm src/memory/MemoryVC.mm \
-               src/lua/LuaEngine.mm src/lua/LuaVC.mm \
-               src/ai/AIMemoryTool.mm src/ai/GameFingerprint.mm src/ai/AIProvider.mm src/ai/AIChatVC.mm src/ai/AIMethodAnalyzer.mm src/ai/AITool.mm src/ai/AIESPTool.mm src/ai/AICHookGenerator.mm \
-               src/c/CHookVC.mm"
-          
+          # Tự động tìm tất cả các tệp mã nguồn trong thư mục src/
+          SRC=$(find src -type f \( -name "*.mm" -o -name "*.m" -o -name "*.cpp" -o -name "*.c" \) | tr '\n' ' ')
           echo "Sources: $SRC"
           
           clang++ \
