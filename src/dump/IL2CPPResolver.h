@@ -1,7 +1,7 @@
 #import <Foundation/Foundation.h>
 #include <stdint.h>
 
-// Định nghĩa đầy đủ các cấu trúc (Complete structs) để tránh lỗi incomplete type
+// Định nghĩa đầy đủ các cấu trúc (Complete structs) theo chuẩn ABI IL2CPP thực tế
 typedef struct Il2CppAssembly {
     struct Il2CppImage *image;
     uint32_t  token;
@@ -13,7 +13,7 @@ typedef struct Il2CppAssembly {
 typedef struct Il2CppDomain {
     void *domain;
     Il2CppAssembly **assemblies;
-    size_t assemblyCount;
+    size_t          assembly_count; // Đã đổi từ assemblyCount sang assembly_count
 } Il2CppDomain;
 
 typedef struct Il2CppImage     Il2CppImage;
