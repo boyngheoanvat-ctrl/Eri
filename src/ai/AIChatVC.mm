@@ -259,7 +259,7 @@ static const CGFloat kInputBarHeight = 50;
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.currentAIResponse appendString:text ?: @""];
         NSInteger lastIdx = (NSInteger)self.items.count - 1;
-        if (lastIdx >= 0 && [self.items[lastIdx][^"type"] isEqualToString:@"ai"]) {
+        if (lastIdx >= 0 && [self.items[lastIdx][@"type"] isEqualToString:@"ai"]) {
             self.items[lastIdx] = @{@"type": @"ai", @"text": [self.currentAIResponse copy]};
         } else {
             [self.items addObject:@{@"type": @"ai", @"text": [self.currentAIResponse copy]}];
@@ -349,14 +349,12 @@ static const CGFloat kInputBarHeight = 50;
     [attr addAttribute:NSForegroundColorAttributeName value:textColor range:NSMakeRange(prefix.length, text.length)];
     [attr addAttribute:NSFontAttributeName value:[[ToolTheme shared] monoFont:11] range:NSMakeRange(0, full.length)];
 
-    // Highlight cơ bản cú pháp C++ / mã nguồn nếu có trong nội dung text
     if (!isUser && !isError) {
         NSArray *keywords = @[@"void", @"bool", @"int", @"uint64_t", @"float", @"double", @"char", @"const", @"return", @"if", @"else", @"for", @"while", @"struct", @"class", @"#import", @"#include", @"auto", @"static", @"true", @"false", @"nullptr"];
         NSString *lowerStr = full.lowercaseString;
         for (NSString *kw in keywords) {
             NSRange range = [lowerStr rangeOfString:kw];
             while (range.location != NSNotFound) {
-                // Kiểm tra ranh giới từ đơn giản để tô màu từ khóa C++ (màu xanh dương nhạt / cyan)
                 [attr addAttribute:NSForegroundColorAttributeName value:[UIColor colorWithRed:0.40 green:0.80 blue:1.00 alpha:1.0] range:range];
                 
                 if (range.location + range.length >= lowerStr.length) break;
@@ -389,7 +387,7 @@ static const CGFloat kInputBarHeight = 50;
                                      options:NSStringDrawingUsesLineFragmentOrigin
                                   attributes:attrs
                                      context:nil];
-    return ceil(rect.size.height) + 16; // Padding trên dưới an toàn
+    return ceil(rect.size.height) + 16;
 }
 
 - (void)reload { [self.tableView reloadData]; }
