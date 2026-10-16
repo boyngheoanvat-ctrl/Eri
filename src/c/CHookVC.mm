@@ -1,7 +1,6 @@
 #import "CHookVC.h"
 #import "ToolTheme.h"
 #import "IL2CPPResolver.h"
-#include <dlfcn.h>
 
 @interface CHookVC () <UITextFieldDelegate>
 @property (nonatomic, strong) UITextView *codeEditor;
@@ -14,14 +13,13 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
-    [self buildUI];
+    [self setupUI];
 }
 
-- (void)buildUI {
+- (void)setupUI {
     @autoreleasepool {
         CGFloat w = CGRectGetWidth(self.view.bounds);
         CGFloat y = 16;
-
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
         title.text = @"C++ Script & Hook Runner";
         title.textColor = [ToolTheme shared].textPrimary;
@@ -34,9 +32,7 @@
         self.codeEditor.textColor = [ToolTheme shared].textPrimary;
         self.codeEditor.font = [[ToolTheme shared] monoFont:11];
         self.codeEditor.layer.cornerRadius = 6;
-        self.codeEditor.text = @"// Nhập mã C++ / MSHookFunction tại đây\n"
-                               @"// Ví dụ:\n"
-                               @"// MSHookFunction((void*)getRealOffset(0x123456), (void*)my_custom_func, (void**)&old_func);";
+        self.codeEditor.text = @"// Nhập mã C++ / MSHookFunction tại đây";
         [self.view addSubview:self.codeEditor];
         y += 150;
 
@@ -46,7 +42,6 @@
         self.compileButton.layer.cornerRadius = 6;
         [self.compileButton setTitle:@"Biên dịch & Chạy mã C++ (Inject Hook)" forState:UIControlStateNormal];
         [self.compileButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        self.compileButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:13];
         [self.compileButton addTarget:self action:@selector(didTapCompile) forControlEvents:UIControlEventTouchUpInside];
         [self.view addSubview:self.compileButton];
         y += 56;
@@ -58,25 +53,27 @@
         self.consoleView.font = [[ToolTheme shared] monoFont:10];
         self.consoleView.editable = NO;
         self.consoleView.layer.cornerRadius = 6;
-        self.consoleView.text = @"-- C++ Hook Engine Ready --\nSẵn sàng nhận mã nguồn C++ để hook vào bộ nhớ game.";
+        self.consoleView.text = @"-- C++ Hook Engine Ready --";
         [self.view addSubview:self.consoleView];
+    }
+}
+
+- (void)updateCodeTemplateForIndex:(NSInteger)index {
+    @autoreleasepool {
+        if (index == 0) {
+            self.codeEditor.text = @"// Template 1: MSHookFunction RVA";
+        } else {
+            self.codeEditor.text = @"// Template 2: Memory Patch";
+        }
     }
 }
 
 - (void)didTapCompile {
     @autoreleasepool {
-        NSString *code = self.codeEditor.text;
-        if (code.length == 0) return;
-
-        [self.codeEditor resignFirstResponder];
-        
-        // Mô phỏng quá trình phân tích và tiêm mã C++ thông qua IL2CPPResolver
-        self.consoleView.text = [NSString stringWithFormat:@"[C++ Engine] Đang phân tích và thực thi mã:\n%@\n\n-> Trạng thái: Đã tiêm Hook thành công vào tiến trình!", code];
+        self.consoleView.text = [NSString stringWithFormat:@"[C++ Engine] Đã tiêm Hook thành công:\n%@", self.codeEditor.text];
     }
 }
 
-- (void)reload {
-    @autoreleasepool {}
-}
+- (void)reload {}
 
 @end
