@@ -4,7 +4,7 @@
 @interface CHookVC ()
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UITextView *codeTextView;
-@property (nonatomic, strong) UIButton *copyButton;
+@property (nonatomic, strong) UIButton *clipboardButton;
 @property (nonatomic, strong) UISegmentedControl *templateSelector;
 @end
 
@@ -67,16 +67,16 @@
     [self updateCodeTemplateForIndex:0];
     y += editorH + 12;
 
-    self.copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.copyButton.frame = CGRectMake(pad, y, availableW, 38);
-    self.copyButton.backgroundColor = [ToolTheme shared].accent;
-    [self.copyButton setTitle:@"📋 COPY C++ CODE TO CLIPBOARD" forState:UIControlStateNormal];
-    [self.copyButton setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
-    self.copyButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
-    self.copyButton.layer.cornerRadius = 6;
-    self.copyButton.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
-    [self.copyButton addTarget:self action:@selector(didTapCopy) forControlEvents:UIControlEventTouchUpInside];
-    [self.scrollView addSubview:self.copyButton];
+    self.clipboardButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.clipboardButton.frame = CGRectMake(pad, y, availableW, 38);
+    self.clipboardButton.backgroundColor = [ToolTheme shared].accent;
+    [self.clipboardButton setTitle:@"📋 COPY C++ CODE TO CLIPBOARD" forState:UIControlStateNormal];
+    [self.clipboardButton setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+    self.clipboardButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
+    self.clipboardButton.layer.cornerRadius = 6;
+    self.clipboardButton.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
+    [self.clipboardButton addTarget:self action:@selector(didTapCopy) forControlEvents:UIControlEventTouchUpInside];
+    [self.scrollView addSubview:self.clipboardButton];
 
     self.scrollView.contentSize = CGSizeMake(w, y + 60);
 }
