@@ -3,6 +3,8 @@
 #import <mach-o/getsect.h>
 #import <mach-o/loader.h>
 #import <dlfcn.h>
+#import <mach/mach.h>
+#import <unistd.h>
 
 @implementation MemoryEditor
 
@@ -159,9 +161,22 @@
     NSData *data = [self dataForValue:value type:type];
     if (!data) return NO;
 
-    kern_return_t kr = vm_write(mach_task_self(), addr,
-                                 (vm_offset_t)data.bytes,
-                                 (mach_msg_type_number_t)data.length);
+    mach_port_t task = mach_task_self();
+    vm_address_t pageAddr = addr & ~(vm_page_size - 1);
+    vm_size_t pageSize = vm_page_size;
+    
+    vm_prot_t oldProt = 0;
+    boolean_t get_old = FALSE;
+    
+    // Cấp quyền Read/Write/Copy tạm thời để ghi đè an toàn
+    kern_return_t kr = vm_protect(task, pageAddr, pageSize, get_old, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+    if (kr != KERN_SUCCESS) {
+        kr = vm_write(task, addr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
+        return kr == KERN_SUCCESS;
+    }
+
+    kr = vm_write(task, addr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
+    vm_protect(task, pageAddr, pageSize, get_old, oldProt);
 
     return kr == KERN_SUCCESS;
 }
@@ -202,6 +217,54 @@
 
     return [NSString stringWithFormat:@"0x%llX - 0x%llX (%@)",
             (uint64_t)region, (uint64_t)(region + size), prot];
+}
+
+#pragma mark - Memory Freeze Engine (Đóng băng giá trị)
+
+static NSMutableDictionary<NSNumber *, NSDictionary *> *g_frozenMemory = nil;
+static dispatch_queue_t g_freezeQueue = nil;
+static BOOL g_isFreezeThreadRunning = NO;
+
++ (void)startFreezeEngineIfNeeded {
+    @synchronized([MemoryEditor class]) {
+        if (g_isFreezeThreadRunning) return;
+        g_isFreezeThreadRunning = YES;
+        g_frozenMemory = [NSMutableDictionary dictionary];
+        g_freezeQueue = dispatch_queue_create("com.eri.memoryfreeze", DISPATCH_QUEUE_SERIAL);
+        
+        dispatch_async(g_freezeQueue, ^{
+            while (g_isFreezeThreadRunning) {
+                @autoreleasepool {
+                    @synchronized (g_frozenMemory) {
+                        for (NSNumber *addrNum in g_frozenMemory.allKeys) {
+                            uintptr_t address = addrNum.unsignedLongValue;
+                            NSDictionary *dict = g_frozenMemory[addrNum];
+                            MemValueType type = (MemValueType)[dict[@"type"] integerValue];
+                            NSString *valueStr = dict[@"value"];
+                            
+                            [[MemoryEditor shared] writeValue:valueStr at:address type:type];
+                        }
+                    }
+                    usleep(50000); // Lặp lại việc ghi đè mỗi 50ms
+                }
+            }
+        });
+    }
+}
+
+- (void)freezeAddress:(vm_address_t)addr value:(NSString *)value type:(MemValueType)type shouldFreeze:(BOOL)freeze {
+    [MemoryEditor startFreezeEngineIfNeeded];
+    @synchronized (g_frozenMemory) {
+        NSNumber *key = @(addr);
+        if (freeze) {
+            g_frozenMemory[key] = @{
+                @"value": value,
+                @"type": @(type)
+            };
+        } else {
+            [g_frozenMemory removeObjectForKey:key];
+        }
+    }
 }
 
 @end
