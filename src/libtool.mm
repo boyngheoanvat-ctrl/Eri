@@ -1,7 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import "ToolWindow.h"
-#import "ToolGestureManager.h"
 
 __attribute__((constructor))
 static void libtool_init(void) {
