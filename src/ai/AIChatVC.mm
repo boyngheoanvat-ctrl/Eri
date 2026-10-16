@@ -39,7 +39,7 @@ static const CGFloat kInputBarHeight = 50;
     [self buildUI];
     [self setupKeyboardObservers];
 
-    NSString *welcome = @"AI Agent ready.\nHoi: hack map, hack speed, tim class...";
+    NSString *welcome = @"AI Agent ready.\nHoi: hack map, hack speed, tim class, hoac viet code C++...";
     [self.items addObject:@{@"type": @"ai", @"text": welcome}];
     [self.tableView reloadData];
 
@@ -63,7 +63,7 @@ static const CGFloat kInputBarHeight = 50;
     self.tableView.backgroundColor = [ToolTheme shared].background;
     self.tableView.separatorColor = [UIColor clearColor];
     self.tableView.rowHeight = UITableViewAutomaticDimension;
-    self.tableView.estimatedRowHeight = 40;
+    self.tableView.estimatedRowHeight = 50;
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     self.tableView.alwaysBounceVertical = YES;
     self.tableView.showsVerticalScrollIndicator = YES;
@@ -71,7 +71,11 @@ static const CGFloat kInputBarHeight = 50;
     self.tableView.delaysContentTouches = NO;
     self.tableView.canCancelContentTouches = YES;
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.tableView.contentInset = UIEdgeInsetsMake(8, 0, 8, 0);
+    
+    // Fix padding top & bottom để không bị che khuất đoạn chat cuối và đầu
+    self.tableView.contentInset = UIEdgeInsetsMake(12, 0, 24, 0);
+    self.tableView.scrollIndicatorInsets = UIEdgeInsetsMake(12, 0, 24, 0);
+    
     [self.view addSubview:self.tableView];
 
     self.inputArea = [[UIView alloc] initWithFrame:CGRectMake(0, h - kInputBarHeight, w, kInputBarHeight)];
@@ -94,7 +98,7 @@ static const CGFloat kInputBarHeight = 50;
     self.inputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
     self.inputField.leftViewMode = UITextFieldViewModeAlways;
     self.inputField.attributedPlaceholder = [[NSAttributedString alloc]
-        initWithString:@"input here..."
+        initWithString:@"Hỏi hoặc yêu cầu viết code C++..."
             attributes:@{NSForegroundColorAttributeName: [ToolTheme shared].textMuted}];
     self.inputField.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.inputField addTarget:self action:@selector(sendTapped)
@@ -205,31 +209,13 @@ static const CGFloat kInputBarHeight = 50;
         @try {
             game = [[GameFingerprint shared] detectedGame];
         } @catch (NSException *e) {
-            NSLog(@"[AI] GameFingerprint crash: %@", e);
             game = @"Unknown";
         }
 
         NSString *sysPrompt = [NSString stringWithFormat:
-            @"Ban la AI agent hack game IL2CPP iOS. Tra loi tieng Viet ngan gon, chinh xac.\n"
-            @"Game hien tai: %@\n"
-            @"\n"
-            @"=== TOOL ===\n"
-            @"1. find_concept(concept) — DUNG DAU TIEN\n"
-            @"   concept: map, speed, damage, health, mana, money, cooldown, ammo, level\n"
-            @"2. find_method_global(keyword) — tim method toan bo\n"
-            @"3. dump_class_runtime(class_name) — xem chi tiet class\n"
-            @"4. search_classes(keyword) — tim class\n"
-            @"5. find_classes_by_method(method_name)\n"
-            @"6. find_method_in_class(class_name, keyword)\n"
-            @"7. find_field_in_class(class_name, keyword)\n"
-            @"8. read_file(filename, keyword)\n"
-            @"\n"
-            @"=== QUY TAC ===\n"
-            @"1. Cau hoi 'hack X' → find_concept('X')\n"
-            @"2. Neu 0 ket qua → find_method_global voi tu khoa tuong tu\n"
-            @"3. Cau hoi ve class cu thể → dump_class_runtime\n"
-            @"4. Trả lời RÕ: game + class + method + RVA\n"
-            @"5. Không bịa RVA. Không lặp tool quá 3 lần.", game];
+            @"Bạn là AI agent hack game IL2CPP iOS. Trả lời tiếng Việt ngắn gọn, chính xác.\n"
+            @"Hỗ trợ viết mã C++ / Objective-C++ hook, patch bộ nhớ, đóng băng giá trị khi được yêu cầu.\n"
+            @"Game hiện tại: %@\n", game];
 
         NSMutableArray *messages = [NSMutableArray array];
         [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
@@ -273,7 +259,7 @@ static const CGFloat kInputBarHeight = 50;
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.currentAIResponse appendString:text ?: @""];
         NSInteger lastIdx = (NSInteger)self.items.count - 1;
-        if (lastIdx >= 0 && [self.items[lastIdx][@"type"] isEqualToString:@"ai"]) {
+        if (lastIdx >= 0 && [self.items[lastIdx][^"type"] isEqualToString:@"ai"]) {
             self.items[lastIdx] = @{@"type": @"ai", @"text": [self.currentAIResponse copy]};
         } else {
             [self.items addObject:@{@"type": @"ai", @"text": [self.currentAIResponse copy]}];
@@ -290,7 +276,7 @@ static const CGFloat kInputBarHeight = 50;
         self.sendButton.enabled = YES;
         self.sendButton.alpha = 1.0;
         [self.items addObject:@{@"type": @"error",
-            @"text": error.localizedDescription ?: @"Loi"}];
+            @"text": error.localizedDescription ?: @"Lỗi kết nối"}];
         [self.tableView reloadData];
         [self scrollToBottomAnimated:YES];
     });
@@ -311,7 +297,7 @@ static const CGFloat kInputBarHeight = 50;
         if ([result isKindOfClass:[NSDictionary class]]) {
             NSDictionary *d = (NSDictionary *)result;
             if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
-            else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ ket qua", d[@"count"]];
+            else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ kết quả", d[@"count"]];
         }
         [self.items addObject:@{@"type": @"tool",
             @"text": [NSString stringWithFormat:@"%@ → %@", toolName, summary]}];
@@ -320,56 +306,90 @@ static const CGFloat kInputBarHeight = 50;
     });
 }
 
-#pragma mark - Table
+#pragma mark - Table & C++ Syntax Highlighting Helpers
 
 - (NSInteger)tableView:(UITableView *)tv numberOfRowsInSection:(NSInteger)s {
     return self.items.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip {
-    UITableViewCell *cell = [tv dequeueReusableCellWithIdentifier:@"cell"];
-    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
-                                             reuseIdentifier:@"cell"];
+    static NSString *CellID = @"AIChatCell";
+    UITableViewCell *cell = [tv dequeueReusableCellWithIdentifier:CellID];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:CellID];
+        cell.backgroundColor = [UIColor clearColor];
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    }
+    
     for (UIView *v in cell.contentView.subviews) [v removeFromSuperview];
 
     NSDictionary *item = self.items[ip.row];
     NSString *type = item[@"type"];
-    NSString *text = item[@"text"];
+    NSString *text = item[@"text"] ?: @"";
     BOOL isUser = [type isEqualToString:@"user"];
     BOOL isTool = [type isEqualToString:@"tool"];
     BOOL isError = [type isEqualToString:@"error"];
 
-    NSString *prefix;
-    UIColor *prefixColor;
-    if (isUser) { prefix = @"> "; prefixColor = [ToolTheme shared].accent; }
-    else if (isTool) { prefix = @"[tool] "; prefixColor = [ToolTheme shared].warning; }
+    NSString *prefix = @"> ";
+    UIColor *prefixColor = [ToolTheme shared].accent;
+    if (isTool) { prefix = @"[tool] "; prefixColor = [ToolTheme shared].warning; }
     else if (isError) { prefix = @"[error] "; prefixColor = [ToolTheme shared].danger; }
-    else { prefix = @"[ai] "; prefixColor = [ToolTheme shared].success; }
+    else if (!isUser) { prefix = @"[ai] "; prefixColor = [ToolTheme shared].success; }
 
-    NSString *full = [NSString stringWithFormat:@"%@%@", prefix, text ?: @""];
+    NSString *full = [NSString stringWithFormat:@"%@%@", prefix, text];
     CGFloat cellW = CGRectGetWidth(tv.bounds);
 
-    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(10, 6, cellW - 20, 0)];
+    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, cellW - 24, 0)];
     label.numberOfLines = 0;
 
     NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] initWithString:full];
     [attr addAttribute:NSForegroundColorAttributeName value:prefixColor range:NSMakeRange(0, prefix.length)];
-    UIColor *tc = isError ? [ToolTheme shared].danger : [ToolTheme shared].textPrimary;
-    [attr addAttribute:NSForegroundColorAttributeName value:tc range:NSMakeRange(prefix.length, (text ?: @"").length)];
+    
+    UIColor *textColor = isError ? [ToolTheme shared].danger : [ToolTheme shared].textPrimary;
+    [attr addAttribute:NSForegroundColorAttributeName value:textColor range:NSMakeRange(prefix.length, text.length)];
     [attr addAttribute:NSFontAttributeName value:[[ToolTheme shared] monoFont:11] range:NSMakeRange(0, full.length)];
+
+    // Highlight cơ bản cú pháp C++ / mã nguồn nếu có trong nội dung text
+    if (!isUser && !isError) {
+        NSArray *keywords = @[@"void", @"bool", @"int", @"uint64_t", @"float", @"double", @"char", @"const", @"return", @"if", @"else", @"for", @"while", @"struct", @"class", @"#import", @"#include", @"auto", @"static", @"true", @"false", @"nullptr"];
+        NSString *lowerStr = full.lowercaseString;
+        for (NSString *kw in keywords) {
+            NSRange range = [lowerStr rangeOfString:kw];
+            while (range.location != NSNotFound) {
+                // Kiểm tra ranh giới từ đơn giản để tô màu từ khóa C++ (màu xanh dương nhạt / cyan)
+                [attr addAttribute:NSForegroundColorAttributeName value:[UIColor colorWithRed:0.40 green:0.80 blue:1.00 alpha:1.0] range:range];
+                
+                if (range.location + range.length >= lowerStr.length) break;
+                range = [lowerStr rangeOfString:kw options:0 range:NSMakeRange(range.location + range.length, lowerStr.length - (range.location + range.length))];
+            }
+        }
+    }
 
     label.attributedText = attr;
 
-    CGSize maxSize = CGSizeMake(cellW - 20, CGFLOAT_MAX);
+    CGSize maxSize = CGSizeMake(cellW - 24, CGFLOAT_MAX);
     CGRect rect = [attr boundingRectWithSize:maxSize
                                      options:NSStringDrawingUsesLineFragmentOrigin
                                      context:nil];
-    label.frame = CGRectMake(10, 6, cellW - 20, rect.size.height);
+    label.frame = CGRectMake(12, 8, cellW - 24, ceil(rect.size.height));
     [cell.contentView addSubview:label];
 
-    cell.backgroundColor = [UIColor clearColor];
-    cell.selectionStyle = UITableViewCellSelectionStyleNone;
     return cell;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    NSDictionary *item = self.items[indexPath.row];
+    NSString *text = item[@"text"] ?: @"";
+    NSString *full = [NSString stringWithFormat:@"> %@", text];
+    CGFloat cellW = CGRectGetWidth(tableView.bounds);
+    
+    UIFont *font = [[ToolTheme shared] monoFont:11];
+    NSDictionary *attrs = @{NSFontAttributeName: font};
+    CGRect rect = [full boundingRectWithSize:CGSizeMake(cellW - 24, CGFLOAT_MAX)
+                                     options:NSStringDrawingUsesLineFragmentOrigin
+                                  attributes:attrs
+                                     context:nil];
+    return ceil(rect.size.height) + 16; // Padding trên dưới an toàn
 }
 
 - (void)reload { [self.tableView reloadData]; }
