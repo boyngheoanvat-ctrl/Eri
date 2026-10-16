@@ -1,3 +1,4 @@
+
 ARCHS = arm64 arm64e
 TARGET = iphone:clang:latest:14.0
 
@@ -11,6 +12,7 @@ libtool_FILES = \
     src/core/ToolWindow.mm \
     src/core/ToolViewController.mm \
     src/core/ToolTheme.mm \
+    src/core/ToolGestureManager.mm \
     src/ui/ToolRailButton.mm \
     src/ai/AIChatVC.mm \
     src/ai/AIProvider.mm \
