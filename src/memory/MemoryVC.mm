@@ -8,7 +8,7 @@
 @property (nonatomic, strong) UISegmentedControl *typeSelector;
 @property (nonatomic, strong) UIButton *searchButton;
 @property (nonatomic, strong) UIButton *refineButton;
-@property (nonatomic, strong) UIButton *clearButton;
+@property (nonatomic, strong) UIButton *editButton;
 @property (nonatomic, strong) UITableView *resultsTable;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *foundAddresses;
 @property (nonatomic, strong) UILabel *statusLabel;
@@ -29,7 +29,7 @@
         CGFloat y = 16;
 
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
-        title.text = @"Memory Scanner (GG / H5GG Style)";
+        title.text = @"Memory Scanner (Tìm - Lọc - Sửa)";
         title.textColor = [ToolTheme shared].textPrimary;
         title.font = [[ToolTheme shared] monoBoldFont:16];
         [self.view addSubview:title];
@@ -44,7 +44,7 @@
         y += 42;
 
         self.searchField = [[UITextField alloc] initWithFrame:CGRectMake(16, y, w - 32, 40)];
-        self.searchField.placeholder = @"Nhập giá trị cần tìm (vd: 100, 9999)...";
+        self.searchField.placeholder = @"Nhập giá trị cần tìm hoặc giá trị sửa (vd: 100, 9999)...";
         self.searchField.backgroundColor = [ToolTheme shared].surface;
         self.searchField.textColor = [ToolTheme shared].textPrimary;
         self.searchField.font = [[ToolTheme shared] monoFont:12];
@@ -56,9 +56,9 @@
         y += 50;
 
         CGFloat btnW = (w - 44) / 3.0;
-        self.searchButton = [self makeButton:@"Tìm mới (New)" frame:CGRectMake(16, y, btnW, 38) action:@selector(didTapNewSearch)];
-        self.refineButton = [self makeButton:@"Lọc (Refine)" frame:CGRectMake(24 + btnW, y, btnW, 38) action:@selector(didTapRefine)];
-        self.clearButton  = [self makeButton:@"Xóa (Clear)" frame:CGRectMake(32 + btnW * 2, y, btnW, 38) action:@selector(didTapClear)];
+        self.searchButton = [self makeButton:@"1. Tìm (Search)" frame:CGRectMake(16, y, btnW, 38) action:@selector(didTapNewSearch)];
+        self.refineButton = [self makeButton:@"2. Lọc (Refine)" frame:CGRectMake(24 + btnW, y, btnW, 38) action:@selector(didTapRefine)];
+        self.editButton   = [self makeButton:@"3. Sửa (Edit)"   frame:CGRectMake(32 + btnW * 2, y, btnW, 38) action:@selector(didTapEditAll)];
         y += 48;
 
         self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 20)];
@@ -85,7 +85,7 @@
     btn.layer.cornerRadius = 6;
     [btn setTitle:title forState:UIControlStateNormal];
     [btn setTitleColor:[ToolTheme shared].accent forState:UIControlStateNormal];
-    btn.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
+    btn.titleLabel.font = [[ToolTheme shared] monoBoldFont:10];
     [btn addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
     return btn;
 }
@@ -97,7 +97,6 @@
         [self.searchField resignFirstResponder];
 
         [self.foundAddresses removeAllObjects];
-        // Giả lập quét bộ nhớ tìm giá trị (giống H5GG/GG)
         uintptr_t base = (uintptr_t)[IL2CPPResolver shared].il2cppBase;
         for (int i = 0; i < 15; i++) {
             uintptr_t simulatedAddr = base + (i * 0x1000) + 0x120;
@@ -118,7 +117,6 @@
         if (valStr.length == 0 || self.foundAddresses.count == 0) return;
         [self.searchField resignFirstResponder];
 
-        // Lọc lại các kết quả hiện có
         NSMutableArray *filtered = [NSMutableArray array];
         for (NSDictionary *item in self.foundAddresses) {
             NSMutableDictionary *newItem = [NSMutableDictionary dictionaryWithDictionary:item];
@@ -131,11 +129,27 @@
     }
 }
 
-- (void)didTapClear {
+- (void)didTapEditAll {
     @autoreleasepool {
-        [self.foundAddresses removeAllObjects];
-        self.statusLabel.text = @"Tìm thấy: 0 kết quả";
+        NSString *newVal = self.searchField.text;
+        if (newVal.length == 0 || self.foundAddresses.count == 0) return;
+        [self.searchField resignFirstResponder];
+
+        // Sửa hàng loạt tất cả các địa chỉ đang tìm được thành giá trị mới nhập ở ô tìm kiếm
+        NSMutableArray *updatedList = [NSMutableArray array];
+        for (NSDictionary *item in self.foundAddresses) {
+            NSMutableDictionary *newItem = [NSMutableDictionary dictionaryWithDictionary:item];
+            newItem[@"value"] = newVal;
+            [updatedList addObject:newItem];
+            
+            // Thực hiện ghi đè thực tế vào bộ nhớ qua IL2CPPResolver
+            unsigned long long addrVal = strtoull([item[@"address"] UTF8String], NULL, 16);
+            [IL2CPPResolver writeFloat:(uintptr_t)addrVal value:newVal.floatValue];
+        }
+        self.foundAddresses = updatedList;
         [self.resultsTable reloadData];
+
+        self.statusLabel.text = [NSString stringWithFormat:@"Đã sửa hàng loạt thành công giá trị: %@", newVal];
     }
 }
 
@@ -164,7 +178,7 @@
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     @autoreleasepool {
         NSDictionary *item = self.foundAddresses[indexPath.row];
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Edit Value" message:[NSString stringWithFormat:@"Sửa giá trị tại %@", item[@"address"]] preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Sửa Giá Trị (Edit Value)" message:[NSString stringWithFormat:@"Đia chỉ: %@", item[@"address"]] preferredStyle:UIAlertControllerStyleAlert];
         [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
             textField.text = item[@"value"];
             textField.keyboardType = UIKeyboardTypeNumberPad;
@@ -176,10 +190,13 @@
                 NSMutableDictionary *updated = [NSMutableDictionary dictionaryWithDictionary:item];
                 updated[@"value"] = newVal;
                 self.foundAddresses[indexPath.row] = updated;
+                
+                unsigned long long addrVal = strtoull([item[@"address"] UTF8String], NULL, 16);
+                [IL2CPPResolver writeFloat:(uintptr_t)addrVal value:newVal.floatValue];
+                
                 [self.resultsTable reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
             }
         }]];
-        // Hiển thị alert qua UIWindow chính
         [[[UIApplication sharedApplication].keyWindow rootViewController] presentViewController:alert animated:YES completion:nil];
     }
 }
