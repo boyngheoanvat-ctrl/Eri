@@ -25,11 +25,11 @@
 @property (nonatomic, assign) BOOL isScriptRunning;
 
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *activeModules;
+@end
 
-// Dùng biến static toàn cục để giữ cửa sổ ImGui độc lập vĩnh viễn, không bị mất khi tắt menu chính
+// Chuyển các biến static ra ngoài @interface
 static ImGuiWindow *sharedImGuiWindow = nil;
 static UIView *sharedImGuiContainerView = nil;
-@end
 
 @implementation LuaVC
 
@@ -147,7 +147,6 @@ static UIView *sharedImGuiContainerView = nil;
         [self.editorView resignFirstResponder];
         [self log:@"[Lua] Đang chạy script & hiển thị ImGui Menu..."];
 
-        // Hiển thị ImGui Floating Menu độc lập vĩnh viễn trên hệ thống
         [self showIndependentImGuiMenu];
 
         __weak typeof(self) ws = self;
@@ -174,7 +173,7 @@ static UIView *sharedImGuiContainerView = nil;
     });
 }
 
-#pragma mark - ImGui Floating Menu Độc Lập Vĩnh Viễn
+#pragma mark - ImGui Floating Menu Độc Lập
 
 - (void)showIndependentImGuiMenu {
     if (sharedImGuiWindow) {
@@ -183,7 +182,7 @@ static UIView *sharedImGuiContainerView = nil;
 
     UIScreen *screen = [UIScreen mainScreen];
     sharedImGuiWindow = [[ImGuiWindow alloc] initWithFrame:screen.bounds];
-    sharedImGuiWindow.windowLevel = UIWindowLevelAlert + 999; // Luôn nằm trên cùng hệ thống game
+    sharedImGuiWindow.windowLevel = UIWindowLevelAlert + 999;
     sharedImGuiWindow.backgroundColor = [UIColor clearColor];
     
     UIViewController *emptyVC = [[UIViewController alloc] init];
@@ -194,7 +193,6 @@ static UIView *sharedImGuiContainerView = nil;
     CGFloat headerH = 36;
     CGFloat rowH = 34;
     
-    // Nếu chưa chat gì thì hiển thị 1 nút trống, nếu đã chat thì hiển thị ĐÚNG số lượng nút đã yêu cầu
     NSUInteger count = self.activeModules.count > 0 ? self.activeModules.count : 1;
     CGFloat menuH = headerH + (count * rowH) + 12;
     
@@ -224,7 +222,7 @@ static UIView *sharedImGuiContainerView = nil;
     
     if (self.activeModules.count == 0) {
         UILabel *fLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, fy, menuW - 75, 28)];
-        fLbl.text = @"Tính năng Mod Mẫu";
+        fLbl.text = @"Bật Sáng Bản Đồ (Hack Map)";
         fLbl.textColor = [ToolTheme shared].textPrimary;
         fLbl.font = [[ToolTheme shared] monoFont:10];
         [sharedImGuiContainerView addSubview:fLbl];
