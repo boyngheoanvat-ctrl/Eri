@@ -5,12 +5,40 @@ include $(THEOS)/makefiles/common.mk
 
 LIBRARY_NAME = libtool
 
-# Tự động quét toàn bộ file .mm, .m, .cpp, .c trong thư mục src/ và các thư mục con
-libtool_FILES = $(shell find src -name '*.mm' -o -name '*.m' -o -name '*.cpp' -o -name '*.c')
+libtool_FILES = \
+    src/libtool.mm \
+    src/FloatingButton.mm \
+    src/core/ToolWindow.mm \
+    src/core/ToolViewController.mm \
+    src/core/ToolTheme.mm \
+    src/core/ToolGestureManager.mm \
+    src/ui/ToolRailButton.mm \
+    src/ai/AIChatVC.mm \
+    src/ai/AIProvider.mm \
+    src/ai/AITool.mm \
+    src/ai/AIMemoryTool.mm \
+    src/ai/AIESPTool.mm \
+    src/ai/GameFingerprint.mm \
+    src/ai/AICHookGenerator.mm \
+    src/memory/MemoryResult.mm \
+    src/memory/MemoryEditor.mm \
+    src/memory/MemoryVC.mm \
+    src/memory/MethodCaller.mm \
+    src/memory/MethodCallerVC.mm \
+    src/dump/IL2CPPResolver.mm \
+    src/dump/DumperVC.mm \
+    src/lua/LuaEngine.mm \
+    src/lua/LuaVC.mm \
+    src/esp/ESPOverlay.mm \
+    src/esp/ESPVC.mm \
+    src/esp/IL2CPPHeapWalker.mm \
+    src/esp/ESPClassFinder.mm \
+    src/c/CHookVC.mm
 
 libtool_CFLAGS = -fobjc-arc -std=c++17 \
-    -I. \
-    $(shell find src -type d -exec echo -I{} ;) \
+    -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
+    -Isrc/memory -Isrc/dump -Isrc/lua -Isrc/esp \
+    -Isrc/c \
     -Ilibs \
     -Wno-everything
 
