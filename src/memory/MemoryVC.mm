@@ -1,16 +1,19 @@
 #import "MemoryVC.h"
 #import "ToolTheme.h"
+#import "MemoryEditor.h"
 
 @interface MemoryVC () <UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate>
 @property (nonatomic, strong) UITextField *searchField;
 @property (nonatomic, strong) UIButton *searchButton;
 @property (nonatomic, strong) UIButton *refineButton;
 @property (nonatomic, strong) UIButton *editButton;
+@property (nonatomic, strong) UIButton *freezeButton;
 @property (nonatomic, strong) UIButton *clearButton;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *searchResults;
 @property (nonatomic, strong) UILabel *statusLabel;
 @property (nonatomic, assign) NSInteger selectedRowIndex;
+@property (nonatomic, assign) BOOL isCurrentAddressFrozen;
 @end
 
 @implementation MemoryVC
@@ -22,6 +25,7 @@
         self.searchResults = [NSMutableArray array];
     }
     self.selectedRowIndex = -1;
+    self.isCurrentAddressFrozen = NO;
     [self buildUI];
 }
 
@@ -37,7 +41,6 @@
     [self.view addSubview:title];
     y += 34;
 
-    // Ô nhập giá trị
     self.searchField = [[UITextField alloc] initWithFrame:CGRectMake(16, y, w - 32, 38)];
     self.searchField.placeholder = @"Nhập giá trị cần tìm (vd: 130)...";
     self.searchField.backgroundColor = [ToolTheme shared].surface;
@@ -51,14 +54,13 @@
     [self.view addSubview:self.searchField];
     y += 46;
 
-    // 4 nút: Tìm Mới, Lọc Tiếp, Edit, Xóa (căn khoảng cách gần, vừa khít màn hình)
-    CGFloat spacing = 6;
-    CGFloat totalPadding = 16 * 2 + spacing * 3;
-    CGFloat btnW = (w - totalPadding) / 4.0;
+    CGFloat spacing = 4;
+    CGFloat totalPadding = 16 * 2 + spacing * 4;
+    CGFloat btnW = (w - totalPadding) / 5.0;
     CGFloat btnH = 34;
     CGFloat bx = 16;
 
-    self.searchButton = [self makeButton:@"Tìm Mới" x:bx y:y w:btnW h:btnH color:[ToolTheme shared].accent];
+    self.searchButton = [self makeButton:@"Tìm" x:bx y:y w:btnW h:btnH color:[ToolTheme shared].accent];
     [self.searchButton addTarget:self action:@selector(didTapNewSearch) forControlEvents:UIControlEventTouchUpInside];
     bx += btnW + spacing;
 
@@ -68,6 +70,10 @@
 
     self.editButton = [self makeButton:@"Edit" x:bx y:y w:btnW h:btnH color:[UIColor colorWithRed:0.80 green:0.50 blue:0.10 alpha:1.0]];
     [self.editButton addTarget:self action:@selector(didTapEditValue) forControlEvents:UIControlEventTouchUpInside];
+    bx += btnW + spacing;
+
+    self.freezeButton = [self makeButton:@"Freeze" x:bx y:y w:btnW h:btnH color:[UIColor colorWithRed:0.30 green:0.40 blue:0.70 alpha:1.0]];
+    [self.freezeButton addTarget:self action:@selector(didTapToggleFreeze) forControlEvents:UIControlEventTouchUpInside];
     bx += btnW + spacing;
 
     self.clearButton = [self makeButton:@"Xóa" x:bx y:y w:btnW h:btnH color:[UIColor colorWithRed:0.60 green:0.30 blue:0.30 alpha:1.0]];
@@ -100,7 +106,7 @@
     b.layer.cornerRadius = 6;
     [b setTitle:title forState:UIControlStateNormal];
     [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    b.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
+    b.titleLabel.font = [[ToolTheme shared] monoBoldFont:10];
     b.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.view addSubview:b];
     return b;
@@ -111,12 +117,14 @@
     if (text.length == 0) return;
     [self.searchField resignFirstResponder];
 
+    NSArray *results = [[MemoryEditor shared] searchValue:text type:MemValueTypeInt32 limit:50];
     [self.searchResults removeAllObjects];
-    for (int i = 0; i < 15; i++) {
-        uint64_t fakeAddr = 0x100000000 + (i * 0x48) + (arc4random_uniform(0xFF) & 0xF);
+    
+    for (MemoryResult *res in results) {
         [self.searchResults addObject:@{
-            @"address": [NSString stringWithFormat:@"0x%llX", fakeAddr],
-            @"value": text
+            @"address": [NSString stringWithFormat:@"0x%llX", (uint64_t)res.address],
+            @"value": text,
+            @"rawAddr": @(res.address)
         }];
     }
 
@@ -131,11 +139,10 @@
 
     NSMutableArray *filtered = [NSMutableArray array];
     for (NSDictionary *item in self.searchResults) {
-        if (arc4random_uniform(2) == 0) {
-            [filtered addObject:@{
-                @"address": item[@"address"],
-                @"value": text
-            }];
+        vm_address_t addr = [item[@"rawAddr"] unsignedLongLongValue];
+        NSString *currentVal = [[MemoryEditor shared] readValueAt:addr type:MemValueTypeInt32];
+        if ([currentVal isEqualToString:text]) {
+            [filtered addObject:item];
         }
     }
     self.searchResults = filtered;
@@ -152,17 +159,50 @@
     [self.searchField resignFirstResponder];
     
     NSMutableDictionary *item = [self.searchResults[self.selectedRowIndex] mutableCopy];
-    item[@"value"] = text;
-    self.searchResults[self.selectedRowIndex] = item;
+    vm_address_t addr = [item[@"rawAddr"] unsignedLongLongValue];
     
-    [self.statusLabel setText:[NSString stringWithFormat:@"Đã đổi giá trị tại %@", item[@"address"]]];
+    BOOL success = [[MemoryEditor shared] writeValue:text at:addr type:MemValueTypeInt32];
+    if (success) {
+        item[@"value"] = text;
+        self.searchResults[self.selectedRowIndex] = item;
+        [self.statusLabel setText:[NSString stringWithFormat:@"Đã ghi giá trị tại %@", item[@"address"]]];
+    } else {
+        [self.statusLabel setText:@"[Lỗi] Không thể ghi bộ nhớ (Protected)"];
+    }
+    
     [self.tableView reloadData];
+}
+
+- (void)didTapToggleFreeze {
+    if (self.selectedRowIndex < 0 || self.selectedRowIndex >= self.searchResults.count) {
+        [self.statusLabel setText:@"[Lỗi] Vui lòng chọn 1 dòng để Freeze/Unfreeze!"];
+        return;
+    }
+    [self.searchField resignFirstResponder];
+    
+    NSDictionary *item = self.searchResults[self.selectedRowIndex];
+    vm_address_t addr = [item[@"rawAddr"] unsignedLongLongValue];
+    NSString *val = self.searchField.text.length > 0 ? self.searchField.text : item[@"value"];
+    
+    self.isCurrentAddressFrozen = !self.isCurrentAddressFrozen;
+    
+    [[MemoryEditor shared] freezeAddress:addr value:val type:MemValueTypeInt32 shouldFreeze:self.isCurrentAddressFrozen];
+    
+    if (self.isCurrentAddressFrozen) {
+        [self.freezeButton setBackgroundColor:[UIColor colorWithRed:0.80 green:0.20 blue:0.20 alpha:1.0]];
+        [self.statusLabel setText:[NSString stringWithFormat:@"Đã ĐÓNG BĂNG tại %@", item[@"address"]]];
+    } else {
+        [self.freezeButton setBackgroundColor:[UIColor colorWithRed:0.30 green:0.40 blue:0.70 alpha:1.0]];
+        [self.statusLabel setText:[NSString stringWithFormat:@"Đã HỦY ĐÓNG BĂNG tại %@", item[@"address"]]];
+    }
 }
 
 - (void)didTapClear {
     [self.searchResults removeAllObjects];
     self.searchField.text = @"";
     self.selectedRowIndex = -1;
+    self.isCurrentAddressFrozen = NO;
+    [self.freezeButton setBackgroundColor:[UIColor colorWithRed:0.30 green:0.40 blue:0.70 alpha:1.0]];
     [self.statusLabel setText:@"Đã xóa kết quả quét."];
     [self.tableView reloadData];
 }
