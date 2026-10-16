@@ -3,11 +3,12 @@
 #import "ToolTheme.h"
 
 @interface ESPVC ()
+@property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UISwitch *espSwitch;
 @property (nonatomic, strong) UISwitch *boxSwitch;
 @property (nonatomic, strong) UISwitch *lineSwitch;
 @property (nonatomic, strong) UISwitch *hpSwitch;
-@property (nonatomic, strong) UISwitch *nameDistSwitch; // Thêm property cho nút Tên/Khoảng cách
+@property (nonatomic, strong) UISwitch *nameDistSwitch;
 @end
 
 @implementation ESPVC
@@ -21,23 +22,35 @@
 - (void)buildUI {
     @autoreleasepool {
         CGFloat w = CGRectGetWidth(self.view.bounds);
+        CGFloat h = CGRectGetHeight(self.view.bounds);
+
+        // Đưa vào UIScrollView để cuộn xem đầy đủ các tùy chọn ESP
+        self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
+        self.scrollView.backgroundColor = [UIColor clearColor];
+        self.scrollView.showsVerticalScrollIndicator = YES;
+        [self.view addSubview:self.scrollView];
+
         CGFloat y = 16;
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
         title.text = @"ESP Overlay & Target Configuration";
         title.textColor = [ToolTheme shared].textPrimary;
         title.font = [[ToolTheme shared] monoBoldFont:16];
-        [self.view addSubview:title];
+        [self.scrollView addSubview:title];
         y += 40;
 
-        self.espSwitch = [self addRow:@"Kích Hoạt ESP" desc:@"Hiển thị trực tiếp lên màn hình game" y:y on:NO action:@selector(toggleESP:)];
+        self.espSwitch = [self addRow:@"Kích Hoạt ESP" desc:@"Hiển thị trực tiếp lên màn hình game" y:y on:YES action:@selector(toggleESP:)];
         y += 65;
-        self.boxSwitch = [self addRow:@"Bật/Tắt ESP Box" desc:@"Khung bao quanh mục tiêu" y:y on:NO action:nil];
+        self.boxSwitch = [self addRow:@"Bật/Tắt ESP Box" desc:@"Khung bao quanh mục tiêu" y:y on:YES action:nil];
         y += 65;
-        self.lineSwitch = [self addRow:@"Bật/Tắt ESP Line" desc:@"Đường chỉ hướng mục tiêu" y:y on:NO action:nil];
+        self.lineSwitch = [self addRow:@"Bật/Tắt ESP Line" desc:@"Đường chỉ hướng mục tiêu" y:y on:YES action:nil];
         y += 65;
-        self.hpSwitch = [self addRow:@"Bật/Tắt ESP HP" desc:@"Hiển thị HP thời gian thực" y:y on:NO action:nil];
+        self.hpSwitch = [self addRow:@"Bật/Tắt ESP HP" desc:@"Hiển thị HP thời gian thực" y:y on:YES action:nil];
         y += 65;
-        self.nameDistSwitch = [self addRow:@"Bật/Tắt ESP Tên/Khoảng cách" desc:@"Hiển thị tên và khoảng cách (CM)" y:y on:NO action:nil];
+        self.nameDistSwitch = [self addRow:@"Bật/Tắt ESP Tên/Khoảng cách" desc:@"Hiển thị tên và khoảng cách (CM)" y:y on:YES action:nil];
+        y += 80;
+
+        // Cập nhật contentSize để cuộn thoải mái
+        self.scrollView.contentSize = CGSizeMake(w, y);
     }
 }
 
@@ -47,7 +60,7 @@
         UIView *row = [[UIView alloc] initWithFrame:CGRectMake(16, y, w - 32, 54)];
         row.backgroundColor = [ToolTheme shared].surface;
         row.layer.cornerRadius = 6;
-        [self.view addSubview:row];
+        [self.scrollView addSubview:row];
 
         UILabel *t = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, w - 100, 18)];
         t.text = title;
