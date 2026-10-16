@@ -81,8 +81,8 @@ jobs:
       - name: Build dylib with Lua
         run: |
           SDK=$HOME/sdks/iPhoneOS16.5.sdk
-          # Tự động quét toàn bộ file nguồn .mm, .m, .cpp, .c trong src/
-          SRC=$(find src -name "*.mm" -o -name "*.m" -o -name "*.cpp" -o -name "*.c" | tr '\n' ' ')
+          # Quét đệ quy toàn bộ file nguồn trong mọi thư mục con của src/
+          SRC=$(find src -type f \( -name "*.mm" -o -name "*.m" -o -name "*.cpp" -o -name "*.c" \) | tr '\n' ' ')
           echo "Sources: $SRC"
           
           clang++ \
