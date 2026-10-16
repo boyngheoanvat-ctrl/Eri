@@ -22,83 +22,87 @@
 
 - (void)drawRect:(CGRect)rect {
     [super drawRect:rect];
-    if (!self.overlay || !self.overlay.enabled) return;
-    
-    CGContextRef context = UIGraphicsGetCurrentContext();
-    if (!context) return;
-    
-    CGFloat centerX = CGRectGetWidth(rect) / 2.0;
-    CGFloat centerY = CGRectGetHeight(rect) / 2.0;
-    
-    // 1. Vẽ vòng tròn Master Toggle ở tâm màn hình
-    CGContextSetStrokeColorWithColor(context, [ToolTheme shared].accent.CGColor);
-    CGContextSetLineWidth(context, 2.0);
-    CGFloat radius = 80.0;
-    CGRect circleRect = CGRectMake(centerX - radius, centerY - radius, radius * 2, radius * 2);
-    CGContextStrokeEllipseInRect(context, circleRect);
-    
-    CGFloat dotRadius = 3.0;
-    CGRect dotRect = CGRectMake(centerX - dotRadius, centerY - dotRadius, dotRadius * 2, dotRadius * 2);
-    CGContextSetFillColorWithColor(context, [UIColor redColor].CGColor);
-    CGContextFillEllipseInRect(context, dotRect);
-    
-    // 2. Render các tính năng con (Box, Line, Distance, Name, HP) nếu có target
-    NSArray<ESPTargetClass *> *targets = self.overlay.detectedTargets;
-    if (!targets || targets.count == 0) return;
-    
-    for (ESPTargetClass *target in targets) {
-        CGFloat tx = target.screenX;
-        CGFloat ty = target.screenY;
-        CGFloat tw = target.width > 0 ? target.width : 80.0;
-        CGFloat th = target.height > 0 ? target.height : 160.0;
+    @try {
+        if (!self.overlay || !self.overlay.enabled) return;
         
-        if (tx <= -200 || ty <= -200) continue;
+        CGContextRef context = UIGraphicsGetCurrentContext();
+        if (!context) return;
         
-        if (self.overlay.showBox) {
-            CGContextSetStrokeColorWithColor(context, [UIColor greenColor].CGColor);
-            CGContextSetLineWidth(context, 1.5);
-            CGContextStrokeRect(context, CGRectMake(tx - tw/2.0, ty, tw, th));
-        }
+        CGFloat centerX = CGRectGetWidth(rect) / 2.0;
+        CGFloat centerY = CGRectGetHeight(rect) / 2.0;
         
-        if (self.overlay.showLine) {
-            CGContextSetStrokeColorWithColor(context, [UIColor yellowColor].CGColor);
-            CGContextSetLineWidth(context, 1.0);
-            CGContextMoveToPoint(context, centerX, 0);
-            CGContextAddLineToPoint(context, tx, ty);
-            CGContextStrokePath(context);
-        }
+        // Vẽ tâm định vị Master Toggle
+        CGContextSetStrokeColorWithColor(context, [ToolTheme shared].accent.CGColor);
+        CGContextSetLineWidth(context, 2.0);
+        CGFloat radius = 80.0;
+        CGRect circleRect = CGRectMake(centerX - radius, centerY - radius, radius * 2, radius * 2);
+        CGContextStrokeEllipseInRect(context, circleRect);
         
-        if (self.overlay.showDistance) {
-            NSString *distText = [NSString stringWithFormat:@"[%.1fm]", target.distance];
-            NSDictionary *attrs = @{
-                NSFontAttributeName: [UIFont boldSystemFontOfSize:10],
-                NSForegroundColorAttributeName: [UIColor cyanColor]
-            };
-            [distText drawAtPoint:CGPointMake(tx - 20, ty - 16) withAttributes:attrs];
-        }
+        CGFloat dotRadius = 3.0;
+        CGRect dotRect = CGRectMake(centerX - dotRadius, centerY - dotRadius, dotRadius * 2, dotRadius * 2);
+        CGContextSetFillColorWithColor(context, [UIColor redColor].CGColor);
+        CGContextFillEllipseInRect(context, dotRect);
         
-        if (self.overlay.showName && target.name.length > 0) {
-            NSDictionary *nameAttrs = @{
-                NSFontAttributeName: [UIFont boldSystemFontOfSize:11],
-                NSForegroundColorAttributeName: [UIColor whiteColor]
-            };
-            [target.name drawAtPoint:CGPointMake(tx - 25, ty - 32) withAttributes:nameAttrs];
-        }
+        // Render thực thể từ class finder
+        NSArray<ESPTargetClass *> *targets = self.overlay.detectedTargets;
+        if (!targets || targets.count == 0) return;
         
-        if (self.overlay.showHP) {
-            CGFloat hpBarW = 4.0;
-            CGFloat hpBarH = th;
-            CGFloat healthRatio = target.health / 100.0;
-            if (healthRatio < 0.0) healthRatio = 0.0;
-            if (healthRatio > 1.0) healthRatio = 1.0;
+        for (ESPTargetClass *target in targets) {
+            CGFloat tx = target.screenX;
+            CGFloat ty = target.screenY;
+            CGFloat tw = target.width > 0 ? target.width : 80.0;
+            CGFloat th = target.height > 0 ? target.height : 160.0;
             
-            CGContextSetFillColorWithColor(context, [UIColor redColor].CGColor);
-            CGContextFillRect(context, CGRectMake(tx - tw/2.0 - 8, ty, hpBarW, hpBarH));
+            if (tx <= -200 || ty <= -200) continue;
             
-            CGFloat currentHpHeight = hpBarH * healthRatio;
-            CGContextSetFillColorWithColor(context, [UIColor greenColor].CGColor);
-            CGContextFillRect(context, CGRectMake(tx - tw/2.0 - 8, ty + (hpBarH - currentHpHeight), hpBarW, currentHpHeight));
+            if (self.overlay.showBox) {
+                CGContextSetStrokeColorWithColor(context, [UIColor greenColor].CGColor);
+                CGContextSetLineWidth(context, 1.5);
+                CGContextStrokeRect(context, CGRectMake(tx - tw/2.0, ty, tw, th));
+            }
+            
+            if (self.overlay.showLine) {
+                CGContextSetStrokeColorWithColor(context, [UIColor yellowColor].CGColor);
+                CGContextSetLineWidth(context, 1.0);
+                CGContextMoveToPoint(context, centerX, 0);
+                CGContextAddLineToPoint(context, tx, ty);
+                CGContextStrokePath(context);
+            }
+            
+            if (self.overlay.showDistance) {
+                NSString *distText = [NSString stringWithFormat:@"[%.1fm]", target.distance];
+                NSDictionary *attrs = @{
+                    NSFontAttributeName: [UIFont boldSystemFontOfSize:10],
+                    NSForegroundColorAttributeName: [UIColor cyanColor]
+                };
+                [distText drawAtPoint:CGPointMake(tx - 20, ty - 16) withAttributes:attrs];
+            }
+            
+            if (self.overlay.showName && target.name.length > 0) {
+                NSDictionary *nameAttrs = @{
+                    NSFontAttributeName: [UIFont boldSystemFontOfSize:11],
+                    NSForegroundColorAttributeName: [UIColor whiteColor]
+                };
+                [target.name drawAtPoint:CGPointMake(tx - 25, ty - 32) withAttributes:nameAttrs];
+            }
+            
+            if (self.overlay.showHP) {
+                CGFloat hpBarW = 4.0;
+                CGFloat hpBarH = th;
+                CGFloat healthRatio = target.health / 100.0;
+                if (healthRatio < 0.0) healthRatio = 0.0;
+                if (healthRatio > 1.0) healthRatio = 1.0;
+                
+                CGContextSetFillColorWithColor(context, [UIColor redColor].CGColor);
+                CGContextFillRect(context, CGRectMake(tx - tw/2.0 - 8, ty, hpBarW, hpBarH));
+                
+                CGFloat currentHpHeight = hpBarH * healthRatio;
+                CGContextSetFillColorWithColor(context, [UIColor greenColor].CGColor);
+                CGContextFillRect(context, CGRectMake(tx - tw/2.0 - 8, ty + (hpBarH - currentHpHeight), hpBarW, currentHpHeight));
+            }
         }
+    } @catch (NSException *e) {
+        NSLog(@"[ESPOverlayView] Draw error: %@", e);
     }
 }
 
@@ -141,7 +145,6 @@
         _showBox = YES;
         _showLine = YES;
         _mutableTargets = [NSMutableArray array];
-        
         [self setupWindow];
     }
     return self;
@@ -196,36 +199,22 @@
 }
 
 - (void)toggle {
-    if (self.enabled) {
-        [self hide];
-    } else {
-        [self show];
-    }
+    if (self.enabled) [self hide]; else [self show];
 }
 
 - (void)reload {
     [self.mutableTargets removeAllObjects];
     NSArray *found = [ESPClassFinder scanActiveTargets];
-    if (found) {
-        [self.mutableTargets addObjectsFromArray:found];
-    }
-    if (self.overlayView) {
-        [self.overlayView setNeedsDisplay];
-    }
+    if (found) [self.mutableTargets addObjectsFromArray:found];
+    if (self.overlayView) [self.overlayView setNeedsDisplay];
 }
 
 - (void)updateESP {
     if (!self.enabled) return;
-    
     [self.mutableTargets removeAllObjects];
     NSArray *targets = [ESPClassFinder scanActiveTargets];
-    if (targets) {
-        [self.mutableTargets addObjectsFromArray:targets];
-    }
-    
-    if (self.overlayView) {
-        [self.overlayView setNeedsDisplay];
-    }
+    if (targets) [self.mutableTargets addObjectsFromArray:targets];
+    if (self.overlayView) [self.overlayView setNeedsDisplay];
 }
 
 @end
