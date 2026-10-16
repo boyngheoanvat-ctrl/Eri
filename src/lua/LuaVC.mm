@@ -3,11 +3,20 @@
 #import "ToolTheme.h"
 #include <dlfcn.h>
 
+@interface ImGuiWindow : UIWindow
+@end
+
+@implementation ImGuiWindow
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    return [super pointInside:point withEvent:event];
+}
+@end
+
 @interface LuaVC () <UITextViewDelegate>
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UITextView *editorView;
 @property (nonatomic, strong) UITextView *consoleView;
-@property (nonatomic, strong) UIButton *runStopButton; // Dùng chung 1 nút duy nhất
+@property (nonatomic, strong) UIButton *runStopButton;
 @property (nonatomic, strong) UIButton *clearButton;
 @property (nonatomic, strong) UIButton *pasteButton;
 
@@ -15,8 +24,11 @@
 @property (nonatomic, strong) NSString *savedConsoleText;
 @property (nonatomic, assign) BOOL isScriptRunning;
 
-// Cửa sổ ImGui Floating Menu con khi script chạy
-@property (nonatomic, strong) UIView *imguiFloatingWindow;
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *activeModules;
+
+// Dùng biến static toàn cục để giữ cửa sổ ImGui độc lập vĩnh viễn, không bị mất khi tắt menu chính
+static ImGuiWindow *sharedImGuiWindow = nil;
+static UIView *sharedImGuiContainerView = nil;
 @end
 
 @implementation LuaVC
@@ -25,12 +37,13 @@
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.savedScriptContent) {
-        self.savedScriptContent = @"-- Lua Script with ImGui Menu\n"
-                                  @"print(\"Eri Lua & ImGui Ready!\")\n"
-                                  @"-- imgui.begin(\"Lua Mod Menu\")";
+        self.savedScriptContent = @"-- Lua Script with ImGui Menu\nprint(\"Eri Lua & ImGui Ready!\")";
     }
     if (!self.savedConsoleText) {
         self.savedConsoleText = @"-- Lua Console --\n";
+    }
+    if (!self.activeModules) {
+        self.activeModules = [NSMutableArray array];
     }
     [self buildUI];
 }
@@ -47,14 +60,11 @@
 
     CGFloat pad = 8;
     CGFloat y = 8;
-    
-    // Chia 3 nút hàng đầu: Run/Stop (chiếm nửa), Paste, Clear
     CGFloat availableW = w - (pad * 4);
     CGFloat runBtnW = availableW * 0.4;
     CGFloat otherBtnW = (availableW * 0.6) / 2.0;
     CGFloat btnH = 36;
 
-    // Nút Run/Stop dùng chung duy nhất
     self.runStopButton = [self makeButton:@"▶️ Chạy" x:pad y:y w:runBtnW h:btnH color:[UIColor colorWithRed:0.20 green:0.70 blue:0.40 alpha:1.0]];
     [self.runStopButton addTarget:self action:@selector(runStopTapped) forControlEvents:UIControlEventTouchUpInside];
 
@@ -119,11 +129,14 @@
     return b;
 }
 
-#pragma mark - Toggle Run / Stop Button Handler
+- (void)setActiveModules:(NSMutableArray<NSDictionary *> *)modules {
+    if (modules) {
+        self.activeModules = modules;
+    }
+}
 
 - (void)runStopTapped {
     if (!self.isScriptRunning) {
-        // Trạng thái chuẩn bị chạy -> Chuyển nút thành ĐỎ [🟥 Dừng]
         self.isScriptRunning = YES;
         [self.runStopButton setTitle:@"🟥 Dừng" forState:UIControlStateNormal];
         self.runStopButton.backgroundColor = [UIColor colorWithRed:0.80 green:0.20 blue:0.20 alpha:1.0];
@@ -132,10 +145,10 @@
         if (script.length == 0) return;
 
         [self.editorView resignFirstResponder];
-        [self log:@"[Lua] Đang thực thi script & khởi tạo ImGui Menu..."];
+        [self log:@"[Lua] Đang chạy script & hiển thị ImGui Menu..."];
 
-        // Hiển thị ImGui Floating Menu đè lên màn hình game
-        [self showImGuiFloatingMenu];
+        // Hiển thị ImGui Floating Menu độc lập vĩnh viễn trên hệ thống
+        [self showIndependentImGuiMenu];
 
         __weak typeof(self) ws = self;
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -145,7 +158,6 @@
             });
         });
     } else {
-        // Đang chạy mà bấm vào -> Thực hiện DỪNG -> Chuyển nút về XANH [▶️ Chạy]
         [self stopScriptExecution];
     }
 }
@@ -158,94 +170,108 @@
         [self.runStopButton setTitle:@"▶️ Chạy" forState:UIControlStateNormal];
         self.runStopButton.backgroundColor = [UIColor colorWithRed:0.20 green:0.70 blue:0.40 alpha:1.0];
         [self log:@"[Lua] Đã dừng script & ẩn ImGui Menu."];
-        [self hideImGuiFloatingMenu];
+        [self hideIndependentImGuiMenu];
     });
 }
 
-#pragma mark - ImGui Floating Menu (Menu nổi y như menu mod)
+#pragma mark - ImGui Floating Menu Độc Lập Vĩnh Viễn
 
-- (void)showImGuiFloatingMenu {
-    UIWindow *keyWindow = nil;
-    for (UIWindow *window in [UIApplication sharedApplication].windows) {
-        if (window.isKeyWindow) {
-            keyWindow = window;
-            break;
-        }
-    }
-    if (!keyWindow) return;
-
-    if (self.imguiFloatingWindow) {
-        [self.imguiFloatingWindow removeFromSuperview];
+- (void)showIndependentImGuiMenu {
+    if (sharedImGuiWindow) {
+        [self hideIndependentImGuiMenu];
     }
 
-    // Tạo cửa sổ ImGui Menu nổi trên màn hình game (có thể kéo thả / tuỳ chỉnh)
-    CGFloat menuW = 260;
-    CGFloat menuH = 220;
-    CGFloat screenW = CGRectGetWidth(keyWindow.bounds);
-    CGFloat screenH = CGRectGetHeight(keyWindow.bounds);
+    UIScreen *screen = [UIScreen mainScreen];
+    sharedImGuiWindow = [[ImGuiWindow alloc] initWithFrame:screen.bounds];
+    sharedImGuiWindow.windowLevel = UIWindowLevelAlert + 999; // Luôn nằm trên cùng hệ thống game
+    sharedImGuiWindow.backgroundColor = [UIColor clearColor];
     
-    self.imguiFloatingWindow = [[UIView alloc] initWithFrame:CGRectMake((screenW - menuW) / 2, (screenH - menuH) / 2, menuW, menuH)];
-    self.imguiFloatingWindow.backgroundColor = [UIColor colorWithRed:0.10 green:0.12 blue:0.16 alpha:0.92];
-    self.imguiFloatingWindow.layer.cornerRadius = 8;
-    self.imguiFloatingWindow.layer.borderWidth = 1.5;
-    self.imguiFloatingWindow.layer.borderColor = [ToolTheme shared].accent.CGColor;
+    UIViewController *emptyVC = [[UIViewController alloc] init];
+    emptyVC.view.backgroundColor = [UIColor clearColor];
+    sharedImGuiWindow.rootViewController = emptyVC;
+    
+    CGFloat menuW = 280;
+    CGFloat headerH = 36;
+    CGFloat rowH = 34;
+    
+    // Nếu chưa chat gì thì hiển thị 1 nút trống, nếu đã chat thì hiển thị ĐÚNG số lượng nút đã yêu cầu
+    NSUInteger count = self.activeModules.count > 0 ? self.activeModules.count : 1;
+    CGFloat menuH = headerH + (count * rowH) + 12;
+    
+    CGFloat screenW = CGRectGetWidth(screen.bounds);
+    CGFloat screenH = CGRectGetHeight(screen.bounds);
+    
+    sharedImGuiContainerView = [[UIView alloc] initWithFrame:CGRectMake((screenW - menuW) / 2, (screenH - menuH) / 2, menuW, menuH)];
+    sharedImGuiContainerView.backgroundColor = [UIColor colorWithRed:0.10 green:0.12 blue:0.16 alpha:0.95];
+    sharedImGuiContainerView.layer.cornerRadius = 8;
+    sharedImGuiContainerView.layer.borderWidth = 1.5;
+    sharedImGuiContainerView.layer.borderColor = [ToolTheme shared].accent.CGColor;
 
-    // Tiêu đề ImGui Menu
-    UILabel *headerLbl = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, menuW - 40, 24)];
-    headerLbl.text = @"⚙️ ImGui Lua Mod Menu";
+    UILabel *headerLbl = [[UILabel alloc] initWithFrame:CGRectMake(10, 6, menuW - 40, 24)];
+    headerLbl.text = @"⚙️ ImGui Mod Menu";
     headerLbl.textColor = [ToolTheme shared].textPrimary;
-    headerLbl.font = [[ToolTheme shared] monoBoldFont:12];
-    [self.imguiFloatingWindow addSubview:headerLbl];
+    headerLbl.font = [[ToolTheme shared] monoBoldFont:11];
+    [sharedImGuiContainerView addSubview:headerLbl];
 
-    // Nút đóng menu nổi
     UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeBtn.frame = CGRectMake(menuW - 32, 8, 24, 24);
+    closeBtn.frame = CGRectMake(menuW - 30, 6, 24, 24);
     [closeBtn setTitle:@"✕" forState:UIControlStateNormal];
     [closeBtn setTitleColor:[UIColor redColor] forState:UIControlStateNormal];
     [closeBtn addTarget:self action:@selector(stopScriptExecution) forControlEvents:UIControlEventTouchUpInside];
-    [self.imguiFloatingWindow addSubview:closeBtn];
+    [sharedImGuiContainerView addSubview:closeBtn];
 
-    // Thêm các tính năng giả lập trong ImGui Menu (Toggle switches)
-    NSArray *features = @[@"Bật Sáng Bản Đồ (Hack Map)", @"Bật Khoảng Cách (ESP)", @"Mod Skin Tướng", @"Bất Tử (God Mode)"];
-    CGFloat fy = 38;
-    for (int i = 0; i < features.count; i++) {
-        UILabel *fLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, fy, menuW - 70, 28)];
-        fLbl.text = features[i];
+    CGFloat fy = headerH;
+    
+    if (self.activeModules.count == 0) {
+        UILabel *fLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, fy, menuW - 75, 28)];
+        fLbl.text = @"Tính năng Mod Mẫu";
         fLbl.textColor = [ToolTheme shared].textPrimary;
         fLbl.font = [[ToolTheme shared] monoFont:10];
-        [self.imguiFloatingWindow addSubview:fLbl];
+        [sharedImGuiContainerView addSubview:fLbl];
 
-        UISwitch *fSw = [[UISwitch alloc] initWithFrame:CGRectMake(menuW - 60, fy - 2, 40, 24)];
+        UISwitch *fSw = [[UISwitch alloc] initWithFrame:CGRectMake(menuW - 65, fy + 2, 40, 24)];
         fSw.onTintColor = [ToolTheme shared].accent;
         [fSw addTarget:self action:@selector(imguiSwitchChanged:) forControlEvents:UIControlEventValueChanged];
-        [self.imguiFloatingWindow addSubview:fSw];
+        [sharedImGuiContainerView addSubview:fSw];
+    } else {
+        for (NSDictionary *mod in self.activeModules) {
+            UILabel *fLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, fy, menuW - 75, 28)];
+            fLbl.text = mod[@"title"] ?: @"Tính năng Mod";
+            fLbl.textColor = [ToolTheme shared].textPrimary;
+            fLbl.font = [[ToolTheme shared] monoFont:10];
+            [sharedImGuiContainerView addSubview:fLbl];
 
-        fy += 34;
+            UISwitch *fSw = [[UISwitch alloc] initWithFrame:CGRectMake(menuW - 65, fy + 2, 40, 24)];
+            fSw.onTintColor = [ToolTheme shared].accent;
+            [fSw addTarget:self action:@selector(imguiSwitchChanged:) forControlEvents:UIControlEventValueChanged];
+            [sharedImGuiContainerView addSubview:fSw];
+
+            fy += rowH;
+        }
     }
 
-    [keyWindow addSubview:self.imguiFloatingWindow];
+    [emptyVC.view addSubview:sharedImGuiContainerView];
+    sharedImGuiWindow.hidden = NO;
 }
 
-- (void)hideImGuiFloatingMenu {
-    if (self.imguiFloatingWindow) {
-        [self.imguiFloatingWindow removeFromSuperview];
-        self.imguiFloatingWindow = nil;
+- (void)hideIndependentImGuiMenu {
+    if (sharedImGuiWindow) {
+        sharedImGuiWindow.hidden = YES;
+        sharedImGuiWindow.rootViewController = nil;
+        sharedImGuiWindow = nil;
+        sharedImGuiContainerView = nil;
     }
 }
 
 - (void)imguiSwitchChanged:(UISwitch *)sender {
-    [self log:[NSString stringWithFormat:@"[ImGui] Tính năng trạng thái: %@", sender.isOn ? @"ON" : @"OFF"]];
+    [self log:[NSString stringWithFormat:@"[ImGui Mod] Trạng thái: %@", sender.isOn ? @"ON" : @"OFF"]];
 }
-
-#pragma mark - UITextViewDelegate
 
 - (void)textViewDidChange:(UITextView *)textView {
     if (textView == self.editorView) {
         self.savedScriptContent = textView.text;
     }
 }
-
-#pragma mark - Actions
 
 - (void)pasteTapped {
     NSString *clip = [UIPasteboard generalPasteboard].string;
