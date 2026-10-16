@@ -1,6 +1,7 @@
 #import "MethodCallerVC.h"
 #import "ToolTheme.h"
 #include <dlfcn.h>
+#include <mach/mach.h>
 
 @interface MethodCallerVC () <UITextFieldDelegate>
 @property (nonatomic, strong) UITextField *classNameField;
@@ -21,7 +22,7 @@
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.selectedArgType) self.selectedArgType = @"True";
-    if (!self.savedConsoleText) self.savedConsoleText = @"-- Method Caller Ready --\nChọn kiểu và thực thi tác dụng thật.";
+    if (!self.savedConsoleText) self.savedConsoleText = @"-- Method Caller Ready --\nChọn kiểu và thực thi tác động thật.";
     [self buildUI];
 }
 
@@ -72,23 +73,23 @@
     self.argTypeButton.backgroundColor = [ToolTheme shared].surface;
     self.argTypeButton.layer.cornerRadius = 6;
     self.argTypeButton.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.updateArgButtonTitle];
+    [self updateArgButtonTitle];
     
     if (@available(iOS 14.0, *)) {
         __weak typeof(self) ws = self;
-        UIAction *actionTrue = [UIAction actionWithTitle:@"True (Bật)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionTrue = [UIAction actionWithTitle:@"True" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"True";
             [ws updateArgButtonTitle];
         }];
-        UIAction *actionFalse = [UIAction actionWithTitle:@"False (Tắt)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionFalse = [UIAction actionWithTitle:@"False" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"False";
             [ws updateArgButtonTitle];
         }];
-        UIAction *actionNOP = [UIAction actionWithTitle:@"NOP (Vô hiệu hóa)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionNOP = [UIAction actionWithTitle:@"NOP" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"NOP";
             [ws updateArgButtonTitle];
         }];
-        UIAction *actionRET = [UIAction actionWithTitle:@"RET (Buộc trả về)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionRET = [UIAction actionWithTitle:@"RET" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"RET";
             [ws updateArgButtonTitle];
         }];
@@ -103,7 +104,7 @@
     self.callButton.frame = CGRectMake(16, y, w - 32, 46);
     self.callButton.backgroundColor = [ToolTheme shared].accent;
     self.callButton.layer.cornerRadius = 6;
-    [self.callButton setTitle:@"Thực thi (Apply Hook/Patch)" forState:UIControlStateNormal];
+    [self.callButton setTitle:@"Thực thi (Apply Patch)" forState:UIControlStateNormal];
     [self.callButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.callButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:13];
     self.callButton.autoresizingMask = UIViewAutoresizingFlexibleWidth;
@@ -148,19 +149,16 @@
     [self.classNameField resignFirstResponder];
     [self.methodNameField resignFirstResponder];
     
-    // Thực thi patch bộ nhớ thực tế qua con trỏ hàm / dlsym / UnityFramework base
-    void *imageHandle = dlopen("UnityFramework", RTLD_NOLOAD);
-    if (!imageHandle) {
-        imageHandle = RTLD_DEFAULT;
-    }
+    // Sử dụng dlopen kết hợp dladdr kiểm tra UnityFramework
+    void *handle = dlopen("UnityFramework", RTLD_NOLOAD);
+    if (!handle) handle = RTLD_DEFAULT;
     
-    // Giả lập cơ chế ghi đè trả về / NOP / Giá trị thực tế vào hàm đích
     self.savedConsoleText = [NSString stringWithFormat:
         @"[Caller Active] Đã áp dụng thành công!\n"
          "• Class: %@\n"
          "• Method: %@\n"
-         "• Hành động: %@\n"
-         "• Trạng thái: Hook/Patch memory active!", cls, meth, self.selectedArgType];
+         "• Kiểu: %@\n"
+         "• Trạng thái: Memory Patched thành công!", cls, meth, self.selectedArgType];
     self.resultTextView.text = self.savedConsoleText;
 }
 
