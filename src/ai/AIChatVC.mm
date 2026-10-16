@@ -23,7 +23,7 @@
     
     [self.messages addObject:@{
         @"sender": @"ai",
-        @"text": @"Hello người ae! AI Eri đã sẵn sàng. Bạn chat tính năng nào, hệ thống sẽ trích xuất đúng RVA (0x...) và tạo đúng 1 nút đó an toàn."
+        @"text": @"Hello người ae! AI Eri đã sẵn sàng. Bạn chat tính năng nào, hệ thống sẽ trích xuất đúng RVA (0x...) và thêm vào menu an toàn."
     }];
     
     CGFloat w = CGRectGetWidth(self.view.bounds);
@@ -143,6 +143,9 @@
         rvaAddr = @"0x10533C880";
         className = @"PlayerHealth";
         methodName = @"TakeDamage";
+    } else {
+        modKey = @"hi_chat";
+        modTitle = text;
     }
     
     BOOL exists = NO;
@@ -154,7 +157,9 @@
     }
     
     NSString *aiResponseText = @"";
-    if (exists) {
+    if ([modKey isEqualToString:@"hi_chat"]) {
+        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Chào người ae! Bạn cần mod chức năng gì trong game (vd: hack map, camera xa, mod skin)?"];
+    } else if (exists) {
         aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Tính năng '%@' đã có sẵn trong ImGui menu.", modTitle];
     } else {
         [self.activeModules addObject:@{
@@ -173,64 +178,21 @@
                                                     modTitle, className, methodName, rvaAddr, (unsigned long)self.activeModules.count];
     }
     
-    NSMutableString *luaPayload = [NSMutableString stringWithFormat:
-        @"-- [Ai Eri] Dynamic Script (Active items: %lu)\n"
-         "local ok, err = pcall(function()\n"
-         "    local base = il2cpp.get_image_base('UnityFramework')\n"
-         "    if base then\n", (unsigned long)self.activeModules.count];
-         
-    for (NSDictionary *m in self.activeModules) {
-        [luaPayload appendFormat:@"        print('[Mod] %@ -> RVA: %@')\n", m[@"title"], m[@"rva"]];
-    }
-    [luaPayload appendString:@"    end\nend)\nif not ok then print('[Lua Error] ' .. tostring(err)) end\n"];
-    
     [self.messages addObject:@{@"sender": @"ai", @"text": aiResponseText}];
     if ([self isViewLoaded]) {
         [self.tableView reloadData];
-        if (self.messages.count > 0) {
-            [self.tableView scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:self.messages.count - 1 inSection:0]
-                                  atScrollPosition:UITableViewScrollPositionBottom animated:YES];
-        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (self.tableView && self.messages.count > 0) {
+                CGFloat contentH = self.tableView.contentSize.height;
+                CGFloat boundsH = self.tableView.bounds.size.height;
+                if (contentH > boundsH) {
+                    [self.tableView setContentOffset:CGPointMake(0, contentH - boundsH) animated:YES];
+                }
+            }
+        });
     }
     
-    // Truyền dữ liệu sang Lua an toàn tuyệt đối, tránh crash
-    __weak typeof(self) weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (!weakSelf || !weakSelf.view.window) return;
-        
-        UIResponder *responder = weakSelf.view.window.rootViewController;
-        ToolViewController *targetToolVC = nil;
-        
-        if ([responder isKindOfClass:[ToolViewController class]]) {
-            targetToolVC = (ToolViewController *)responder;
-        } else if ([responder isKindOfClass:[UIViewController class]]) {
-            for (UIViewController *child in ((UIViewController *)responder).childViewControllers) {
-                if ([child isKindOfClass:[ToolViewController class]]) {
-                    targetToolVC = (ToolViewController *)child;
-                    break;
-                }
-            }
-        }
-        
-        if (targetToolVC && [targetToolVC respondsToSelector:@selector(selectTab:)]) {
-            [targetToolVC selectTab:4];
-            id luaVC = nil;
-            if ([targetToolVC respondsToSelector:@selector(luaVC)]) {
-                luaVC = [targetToolVC valueForKey:@"luaVC"];
-            }
-            if (luaVC) {
-                if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) {
-                    [luaVC loadViewIfNeeded];
-                }
-                if ([luaVC respondsToSelector:@selector(setActiveModules:)]) {
-                    [luaVC setActiveModules:weakSelf.activeModules];
-                }
-                if ([luaVC respondsToSelector:@selector(setScriptContent:)]) {
-                    [luaVC setScriptContent:luaPayload];
-                }
-            }
-        }
-    });
+    // Đã loại bỏ hoàn toàn việc tự động chuyển tab gây văng. AI chỉ trả lời tại chỗ an toàn tuyệt đối!
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
