@@ -1,342 +1,116 @@
 #import "LuaVC.h"
-#import "LuaEngine.h"
 #import "ToolTheme.h"
-#include <dlfcn.h>
-
-@interface ImGuiWindow : UIWindow
-@end
-
-@implementation ImGuiWindow
-- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
-    return [super pointInside:point withEvent:event];
-}
-@end
 
 @interface LuaVC () <UITextViewDelegate>
-@property (nonatomic, strong) UIScrollView *scrollView;
-@property (nonatomic, strong) UITextView *editorView;
-@property (nonatomic, strong) UITextView *consoleView;
-@property (nonatomic, strong) UIButton *runStopButton;
-@property (nonatomic, strong) UIButton *clearButton;
-@property (nonatomic, strong) UIButton *pasteButton;
-
-@property (nonatomic, strong) NSString *savedScriptContent;
-@property (nonatomic, strong) NSString *savedConsoleText;
-@property (nonatomic, assign) BOOL isScriptRunning;
-
-@property (nonatomic, strong) NSMutableArray<NSDictionary *> *activeModules;
+@property (nonatomic, strong) UIView *headerView;
+@property (nonatomic, strong) UIView *statusBar;
+@property (nonatomic, UIButton *clearButton;
+@property (nonatomic, strong) UITextView *editorTextView;
+@property (nonatomic, strong) UITextView *outputTextView;
 @end
-
-static ImGuiWindow *sharedImGuiWindow = nil;
-static UIView *sharedImGuiContainerView = nil;
 
 @implementation LuaVC
 
-- (instancetype)init {
-    self = [super init];
-    if (self) {
-        _activeModules = [NSMutableArray array];
-        _savedScriptContent = @"-- Lua Script with ImGui Menu\nprint(\"Eri Lua & ImGui Ready!\")";
-        _savedConsoleText = @"-- Lua Console --\n";
-    }
-    return self;
-}
-
-- (void)loadView {
-    CGRect screenRect = [UIScreen mainScreen].bounds;
-    CGFloat defaultW = MIN(CGRectGetWidth(screenRect), CGRectGetHeight(screenRect)) - 100;
-    CGFloat defaultH = MIN(CGRectGetWidth(screenRect), CGRectGetHeight(screenRect)) - 120;
-    if (defaultW <= 0) defaultW = 400;
-    if (defaultH <= 0) defaultH = 300;
-    
-    self.view = [[UIView alloc] initWithFrame:CGRectMake(0, 0, defaultW, defaultH)];
-    self.view.backgroundColor = [ToolTheme shared].background;
-}
-
 - (void)viewDidLoad {
     [super viewDidLoad];
-    [self buildUI];
+    self.view.backgroundColor = [UIColor clearColor];
+    [self setupLayout];
 }
 
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
-    if (self.scrollView) {
-        self.scrollView.frame = self.view.bounds;
-        CGFloat contentW = CGRectGetWidth(self.view.bounds);
-        self.scrollView.contentSize = CGSizeMake(contentW, CGRectGetHeight(self.view.bounds) + 60);
-    }
-}
-
-- (void)buildUI {
-    CGFloat w = CGRectGetWidth(self.view.bounds);
-    CGFloat h = CGRectGetHeight(self.view.bounds);
-    if (w <= 50) w = 450;
-    if (h <= 50) h = 300;
+- (void)setupLayout {
+    CGFloat totalW = CGRectGetWidth(self.view.bounds);
+    CGFloat totalH = CGRectGetHeight(self.view.bounds);
+    if (totalW <= 50) totalW = 450;
+    if (totalH <= 50) totalH = 300;
     
-    self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
-    self.scrollView.backgroundColor = [UIColor clearColor];
-    self.scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:self.scrollView];
-
-    CGFloat pad = 12;
-    CGFloat y = 10;
-    
-    // Tính toán chuẩn xác chiều rộng cho 3 nút: Chạy/Dừng (40%), Paste (30%), Clear (30%) trừ lề an toàn
-    CGFloat availableW = w - (pad * 2);
-    CGFloat runBtnW = availableW * 0.38;
-    CGFloat pasteBtnW = availableW * 0.30;
-    CGFloat clearBtnW = availableW - runBtnW - pasteBtnW - 8; // Trừ khoảng cách spacing giữa các nút
-    CGFloat btnH = 36;
-
-    CGFloat bx = pad;
-    self.runStopButton = [self makeButton:@"▶️ Chạy" x:bx y:y w:runBtnW h:btnH color:[UIColor colorWithRed:0.20 green:0.70 blue:0.40 alpha:1.0]];
-    [self.runStopButton addTarget:self action:@selector(runStopTapped) forControlEvents:UIControlEventTouchUpInside];
-
-    bx += runBtnW + 4;
-    self.pasteButton = [self makeButton:@"Paste" x:bx y:y w:pasteBtnW h:btnH color:[UIColor colorWithRed:0.30 green:0.50 blue:0.70 alpha:1.0]];
-    [self.pasteButton addTarget:self action:@selector(pasteTapped) forControlEvents:UIControlEventTouchUpInside];
-
-    bx += pasteBtnW + 4;
-    self.clearButton = [self makeButton:@"Clear" x:bx y:y w:clearBtnW h:btnH color:[UIColor colorWithRed:0.40 green:0.40 blue:0.40 alpha:1.0]];
-    [self.clearButton addTarget:self action:@selector(clearTapped) forControlEvents:UIControlEventTouchUpInside];
-
-    y += btnH + 10;
-
-    UILabel *editorLabel = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, availableW, 16)];
-    editorLabel.text = @"EDITOR (LUA & IMGUI SCRIPT)";
-    editorLabel.textColor = [ToolTheme shared].textMuted;
-    editorLabel.font = [[ToolTheme shared] monoFont:10];
-    editorLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.scrollView addSubview:editorLabel];
-    y += 18;
-
-    CGFloat editorH = 150;
-    self.editorView = [[UITextView alloc] initWithFrame:CGRectMake(pad, y, availableW, editorH)];
-    self.editorView.backgroundColor = [ToolTheme shared].surface;
-    self.editorView.textColor = [ToolTheme shared].textPrimary;
-    self.editorView.font = [UIFont fontWithName:@"Menlo" size:11] ?: [UIFont systemFontOfSize:11];
-    self.editorView.layer.cornerRadius = 4;
-    self.editorView.text = self.savedScriptContent;
-    self.editorView.delegate = self;
-    self.editorView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.scrollView addSubview:self.editorView];
-    y += editorH + 10;
-
-    UILabel *consoleLabel = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, availableW, 16)];
-    consoleLabel.text = @"CONSOLE OUTPUT";
-    consoleLabel.textColor = [ToolTheme shared].textMuted;
-    consoleLabel.font = [[ToolTheme shared] monoFont:10];
-    consoleLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.scrollView addSubview:consoleLabel];
-    y += 18;
-
-    CGFloat consoleH = MAX(90, h - y - pad - 10);
-    self.consoleView = [[UITextView alloc] initWithFrame:CGRectMake(pad, y, availableW, consoleH)];
-    self.consoleView.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.05 alpha:1.0];
-    self.consoleView.textColor = [ToolTheme shared].success;
-    self.consoleView.font = [UIFont fontWithName:@"Menlo" size:10] ?: [UIFont systemFontOfSize:10];
-    self.consoleView.editable = NO;
-    self.consoleView.layer.cornerRadius = 4;
-    self.consoleView.text = self.savedConsoleText;
-    self.consoleView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.scrollView addSubview:self.consoleView];
-}
-
-- (UIButton *)makeButton:(NSString *)title x:(CGFloat)x y:(CGFloat)y w:(CGFloat)w h:(CGFloat)h color:(UIColor *)color {
-    UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
-    b.frame = CGRectMake(x, y, w, h);
-    b.backgroundColor = color;
-    b.layer.cornerRadius = 4;
-    [b setTitle:title forState:UIControlStateNormal];
-    [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    b.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
-    b.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.scrollView addSubview:b];
-    return b;
-}
-
-- (void)setActiveModules:(NSMutableArray<NSDictionary *> *)modules {
-    if (modules) {
-        self.activeModules = modules;
-    }
-}
-
-- (void)runStopTapped {
-    if (!self.isScriptRunning) {
-        self.isScriptRunning = YES;
-        [self.runStopButton setTitle:@"🟥 Dừng" forState:UIControlStateNormal];
-        self.runStopButton.backgroundColor = [UIColor colorWithRed:0.80 green:0.20 blue:0.20 alpha:1.0];
-        
-        NSString *script = self.editorView.text;
-        if (script.length == 0) return;
-
-        [self.editorView resignFirstResponder];
-        [self log:@"[Lua] Đang chạy script & hiển thị ImGui Menu..."];
-
-        [self showIndependentImGuiMenu];
-
-        __weak typeof(self) ws = self;
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            NSString *result = [[LuaEngine shared] runScript:script];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [ws log:result];
-            });
-        });
-    } else {
-        [self stopScriptExecution];
-    }
-}
-
-- (void)stopScriptExecution {
-    self.isScriptRunning = NO;
-    [[LuaEngine shared] stop];
-    
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self.runStopButton setTitle:@"▶️ Chạy" forState:UIControlStateNormal];
-        self.runStopButton.backgroundColor = [UIColor colorWithRed:0.20 green:0.70 blue:0.40 alpha:1.0];
-        [self log:@"[Lua] Đã dừng script & ẩn ImGui Menu."];
-        [self hideIndependentImGuiMenu];
-    });
-}
-
-#pragma mark - ImGui Floating Menu Độc Lập
-
-- (void)showIndependentImGuiMenu {
-    if (sharedImGuiWindow) {
-        [self hideIndependentImGuiMenu];
-    }
-
-    UIScreen *screen = [UIScreen mainScreen];
-    sharedImGuiWindow = [[ImGuiWindow alloc] initWithFrame:screen.bounds];
-    sharedImGuiWindow.windowLevel = UIWindowLevelAlert + 999;
-    sharedImGuiWindow.backgroundColor = [UIColor clearColor];
-    
-    UIViewController *emptyVC = [[UIViewController alloc] init];
-    emptyVC.view.backgroundColor = [UIColor clearColor];
-    sharedImGuiWindow.rootViewController = emptyVC;
-    
-    CGFloat menuW = 280;
+    // 1. Header View chứa thanh trạng thái và nút Clear (Cố định chiều cao 36px)
     CGFloat headerH = 36;
-    CGFloat rowH = 34;
+    self.headerView = [[UIView alloc] initWithFrame:CGRectMake(12, 10, totalW - 24, headerH)];
+    self.headerView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
+    [self.view addSubview:self.headerView];
     
-    NSUInteger count = self.activeModules.count > 0 ? self.activeModules.count : 1;
-    CGFloat menuH = headerH + (count * rowH) + 12;
+    CGFloat headerW = CGRectGetWidth(self.headerView.bounds);
+    CGFloat rightButtonW = 84;
+    CGFloat spacing = 8;
+    CGFloat barW = headerW - rightButtonW - spacing;
     
-    CGFloat screenW = CGRectGetWidth(screen.bounds);
-    CGFloat screenH = CGRectGetHeight(screen.bounds);
+    // Thanh trạng thái / Progress bar bên trái
+    self.statusBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, barW, headerH)];
+    self.statusBar.backgroundColor = [UIColor colorWithRed:0.20 green:0.60 blue:0.40 alpha:1.0];
+    self.statusBar.layer.cornerRadius = 6;
+    self.statusBar.clipsToBounds = YES;
+    self.statusBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleRightMargin;
+    [self.headerView addSubview:self.statusBar];
     
-    sharedImGuiContainerView = [[UIView alloc] initWithFrame:CGRectMake((screenW - menuW) / 2, (screenH - menuH) / 2, menuW, menuH)];
-    sharedImGuiContainerView.backgroundColor = [UIColor colorWithRed:0.10 green:0.12 blue:0.16 alpha:0.95];
-    sharedImGuiContainerView.layer.cornerRadius = 8;
-    sharedImGuiContainerView.layer.borderWidth = 1.5;
-    sharedImGuiContainerView.layer.borderColor = [ToolTheme shared].accent.CGColor;
-
-    UILabel *headerLbl = [[UILabel alloc] initWithFrame:CGRectMake(10, 6, menuW - 40, 24)];
-    headerLbl.text = @"⚙️ ImGui Mod Menu";
-    headerLbl.textColor = [ToolTheme shared].textPrimary;
-    headerLbl.font = [[ToolTheme shared] monoBoldFont:11];
-    [sharedImGuiContainerView addSubview:headerLbl];
-
-    UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeBtn.frame = CGRectMake(menuW - 30, 6, 24, 24);
-    [closeBtn setTitle:@"✕" forState:UIControlStateNormal];
-    [closeBtn setTitleColor:[UIColor redColor] forState:UIControlStateNormal];
-    [closeBtn addTarget:self action:@selector(stopScriptExecution) forControlEvents:UIControlEventTouchUpInside];
-    [sharedImGuiContainerView addSubview:closeBtn];
-
-    CGFloat fy = headerH;
+    // Nút Clear nằm gọn bên phải, KHÔNG BAO GIỜ bị tràn
+    UIButton *clearBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    clearBtn.frame = CGRectMake(headerW - rightButtonW, 0, rightButtonW, headerH);
+    clearBtn.backgroundColor = [ToolTheme shared].surfaceAlt;
+    [clearBtn setTitle:@"Clear" forState:UIControlStateNormal];
+    [clearBtn setTitleColor:[ToolTheme shared].textPrimary forState:UIControlStateNormal];
+    clearBtn.titleLabel.font = [[ToolTheme shared] monoBoldFont:12];
+    clearBtn.layer.cornerRadius = 6;
+    clearBtn.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+    [clearBtn addTarget:self action:@selector(didTapClear) forControlEvents:UIControlEventTouchUpInside];
+    [self.headerView addSubview:clearBtn];
     
-    if (self.activeModules.count == 0) {
-        UILabel *fLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, fy, menuW - 75, 28)];
-        fLbl.text = @"Bật Sáng Bản Đồ (Hack Map)";
-        fLbl.textColor = [ToolTheme shared].textPrimary;
-        fLbl.font = [[ToolTheme shared] monoFont:10];
-        [sharedImGuiContainerView addSubview:fLbl];
-
-        UISwitch *fSw = [[UISwitch alloc] initWithFrame:CGRectMake(menuW - 65, fy + 2, 40, 24)];
-        fSw.onTintColor = [ToolTheme shared].accent;
-        [fSw addTarget:self action:@selector(imguiSwitchChanged:) forControlEvents:UIControlEventValueChanged];
-        [sharedImGuiContainerView addSubview:fSw];
-    } else {
-        for (NSDictionary *mod in self.activeModules) {
-            UILabel *fLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, fy, menuW - 75, 28)];
-            fLbl.text = mod[@"title"] ?: @"Tính năng Mod";
-            fLbl.textColor = [ToolTheme shared].textPrimary;
-            fLbl.font = [[ToolTheme shared] monoFont:10];
-            [sharedImGuiContainerView addSubview:fLbl];
-
-            UISwitch *fSw = [[UISwitch alloc] initWithFrame:CGRectMake(menuW - 65, fy + 2, 40, 24)];
-            fSw.onTintColor = [ToolTheme shared].accent;
-            [fSw addTarget:self action:@selector(imguiSwitchChanged:) forControlEvents:UIControlEventValueChanged];
-            [sharedImGuiContainerView addSubview:fSw];
-
-            fy += rowH;
-        }
-    }
-
-    [emptyVC.view addSubview:sharedImGuiContainerView];
-    sharedImGuiWindow.hidden = NO;
+    // 2. Editor TextView (Nhập script Lua & ImGui)
+    CGFloat editorY = 10 + headerH + 10;
+    CGFloat editorH = (totalH - editorY - 140) / 2;
+    if (editorH < 80) editorH = 80;
+    
+    UILabel *editorTitle = [[UILabel alloc] initWithFrame:CGRectMake(12, editorY - 18, totalW - 24, 16)];
+    editorTitle.text = @"EDITOR (LUA & IMGUI SCRIPT)";
+    editorTitle.textColor = [ToolTheme shared].textMuted;
+    editorTitle.font = [[ToolTheme shared] monoBoldFont:10];
+    editorTitle.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.view addSubview:editorTitle];
+    
+    self.editorTextView = [[UITextView alloc] initWithFrame:CGRectMake(12, editorY, totalW - 24, editorH)];
+    self.editorTextView.backgroundColor = [ToolTheme shared].surface;
+    self.editorTextView.textColor = [ToolTheme shared].textPrimary;
+    self.editorTextView.font = [[ToolTheme shared] monoFont:12];
+    self.editorTextView.layer.cornerRadius = 6;
+    self.editorTextView.layer.borderWidth = 1;
+    self.editorTextView.layer.borderColor = [ToolTheme shared].border.CGColor;
+    self.editorTextView.text = @"-- Lua Script with ImGui Menu\nprint(\"Eri Lua & ImGui Ready!\")";
+    self.editorTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
+    [self.view addSubview:self.editorTextView];
+    
+    // 3. Console Output TextView
+    CGFloat outputY = editorY + editorH + 24;
+    CGFloat outputH = totalH - outputY - 12;
+    if (outputH < 60) outputH = 60;
+    
+    UILabel *outputTitle = [[UILabel alloc] initWithFrame:CGRectMake(12, outputY - 18, totalW - 24, 16)];
+    outputTitle.text = @"CONSOLE OUTPUT";
+    outputTitle.textColor = [ToolTheme shared].textMuted;
+    outputTitle.font = [[ToolTheme shared] monoBoldFont:10];
+    outputTitle.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.view addSubview:outputTitle];
+    
+    self.outputTextView = [[UITextView alloc] initWithFrame:CGRectMake(12, outputY, totalW - 24, outputH)];
+    self.outputTextView.backgroundColor = [UIColor colorWithRed:0.04 green:0.05 blue:0.07 alpha:1.0];
+    self.outputTextView.textColor = [UIColor greenColor];
+    self.outputTextView.font = [[ToolTheme shared] monoFont:11];
+    self.outputTextView.editable = NO;
+    self.outputTextView.layer.cornerRadius = 6;
+    self.outputTextView.layer.borderWidth = 1;
+    self.outputTextView.layer.borderColor = [ToolTheme shared].border.CGColor;
+    self.outputTextView.text = @"-- Lua Console --";
+    self.outputTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.view addSubview:self.outputTextView];
 }
 
-- (void)hideIndependentImGuiMenu {
-    if (sharedImGuiWindow) {
-        sharedImGuiWindow.hidden = YES;
-        sharedImGuiWindow.rootViewController = nil;
-        sharedImGuiWindow = nil;
-        sharedImGuiContainerView = nil;
-    }
-}
-
-- (void)imguiSwitchChanged:(UISwitch *)sender {
-    [self log:[NSString stringWithFormat:@"[ImGui Mod] Trạng thái: %@", sender.isOn ? @"ON" : @"OFF"]];
-}
-
-- (void)textViewDidChange:(UITextView *)textView {
-    if (textView == self.editorView) {
-        self.savedScriptContent = textView.text;
-    }
-}
-
-- (void)pasteTapped {
-    NSString *clip = [UIPasteboard generalPasteboard].string;
-    if (clip.length > 0) {
-        self.editorView.text = clip;
-        self.savedScriptContent = clip;
-        [self log:@"[Lua] Pasted from clipboard"];
-    }
-}
-
-- (void)clearTapped {
-    self.savedConsoleText = @"-- Lua Console --\n";
-    self.consoleView.text = self.savedConsoleText;
-}
-
-- (void)setScriptContent:(NSString *)content {
-    if (content && content.length > 0) {
-        self.savedScriptContent = content;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if ([self isViewLoaded] && self.editorView) {
-                self.editorView.text = content;
-            }
-            [self log:@"[Lua AI] Đã nhận script mới từ AI Chat!"];
-        });
-    }
-}
-
-- (void)log:(NSString *)text {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (![self isViewLoaded] || !self.consoleView) return;
-        NSString *current = self.consoleView.text ?: @"-- Lua Console --\n";
-        self.savedConsoleText = [current stringByAppendingFormat:@"%@\n", text];
-        self.consoleView.text = self.savedConsoleText;
-        [self.consoleView scrollRangeToVisible:NSMakeRange(self.consoleView.text.length - 1, 1)];
-    });
+- (void)didTapClear {
+    self.editorTextView.text = @"";
+    self.outputTextView.text = @"-- Cleared --";
 }
 
 - (void)reload {
-    if (![self isViewLoaded]) return;
-    if (self.editorView && self.savedScriptContent) self.editorView.text = self.savedScriptContent;
-    if (self.consoleView && self.savedConsoleText) self.consoleView.text = self.savedConsoleText;
+    if ([self isViewLoaded]) {
+        // Đồng bộ khi chuyển tab
+    }
 }
 
 @end
