@@ -23,11 +23,13 @@
     
     [self.messages addObject:@{
         @"sender": @"ai",
-        @"text": @"Hello người ae! AI Eri đã sẵn sàng. Bạn chat tính năng nào, hệ thống sẽ trích xuất đúng RVA (0x...) và tạo đúng 1 nút đó."
+        @"text": @"Hello người ae! AI Eri đã sẵn sàng. Bạn chat tính năng nào, hệ thống sẽ trích xuất đúng RVA (0x...) và tạo đúng 1 nút đó an toàn."
     }];
     
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
+    if (w <= 0) w = 400;
+    if (h <= 0) h = 300;
     
     self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, w, h - 56) style:UITableViewStylePlain];
     self.tableView.backgroundColor = [UIColor clearColor];
@@ -97,7 +99,9 @@
 }
 
 - (void)reload {
-    [self.tableView reloadData];
+    if ([self isViewLoaded] && self.tableView) {
+        [self.tableView reloadData];
+    }
 }
 
 - (void)didTapSend {
@@ -106,7 +110,7 @@
     
     [self.messages addObject:@{@"sender": @"user", @"text": text}];
     self.inputField.text = @"";
-    [self.tableView reloadData];
+    if ([self isViewLoaded]) [self.tableView reloadData];
     
     NSString *lower = [text lowercaseString];
     NSString *modKey = @"custom_mod";
@@ -160,7 +164,6 @@
             @"class": className,
             @"method": methodName
         }];
-        // Hiển thị cực kỳ rõ ràng RVA 0x... trong khung chat
         aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Phân tích thành công!\n"
                                                     @"• Tính năng: %@\n"
                                                     @"• Class: %@\n"
@@ -182,15 +185,20 @@
     [luaPayload appendString:@"    end\nend)\nif not ok then print('[Lua Error] ' .. tostring(err)) end\n"];
     
     [self.messages addObject:@{@"sender": @"ai", @"text": aiResponseText}];
-    [self.tableView reloadData];
-    
-    if (self.messages.count > 0) {
-        [self.tableView scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:self.messages.count - 1 inSection:0]
-                              atScrollPosition:UITableViewScrollPositionBottom animated:YES];
+    if ([self isViewLoaded]) {
+        [self.tableView reloadData];
+        if (self.messages.count > 0) {
+            [self.tableView scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:self.messages.count - 1 inSection:0]
+                                  atScrollPosition:UITableViewScrollPositionBottom animated:YES];
+        }
     }
     
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIResponder *responder = self.view.window.rootViewController;
+    // Truyền dữ liệu sang Lua an toàn tuyệt đối, tránh crash
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (!weakSelf || !weakSelf.view.window) return;
+        
+        UIResponder *responder = weakSelf.view.window.rootViewController;
         ToolViewController *targetToolVC = nil;
         
         if ([responder isKindOfClass:[ToolViewController class]]) {
@@ -204,18 +212,21 @@
             }
         }
         
-        if (targetToolVC) {
+        if (targetToolVC && [targetToolVC respondsToSelector:@selector(selectTab:)]) {
             [targetToolVC selectTab:4];
+            id luaVC = nil;
             if ([targetToolVC respondsToSelector:@selector(luaVC)]) {
-                id luaVC = [targetToolVC valueForKey:@"luaVC"];
-                if (luaVC) {
-                    if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) [luaVC loadViewIfNeeded];
-                    if ([luaVC respondsToSelector:@selector(setScriptContent:)]) {
-                        [luaVC performSelector:@selector(setScriptContent:) withObject:luaPayload];
-                    }
-                    if ([luaVC respondsToSelector:@selector(setActiveModules:)]) {
-                        [luaVC performSelector:@selector(setActiveModules:) withObject:self.activeModules];
-                    }
+                luaVC = [targetToolVC valueForKey:@"luaVC"];
+            }
+            if (luaVC) {
+                if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) {
+                    [luaVC loadViewIfNeeded];
+                }
+                if ([luaVC respondsToSelector:@selector(setActiveModules:)]) {
+                    [luaVC setActiveModules:weakSelf.activeModules];
+                }
+                if ([luaVC respondsToSelector:@selector(setScriptContent:)]) {
+                    [luaVC setScriptContent:luaPayload];
                 }
             }
         }
