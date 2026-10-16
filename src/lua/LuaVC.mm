@@ -27,38 +27,54 @@
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *activeModules;
 @end
 
-// Biến static quản lý cửa sổ ImGui độc lập vĩnh viễn trên hệ thống
 static ImGuiWindow *sharedImGuiWindow = nil;
 static UIView *sharedImGuiContainerView = nil;
 
 @implementation LuaVC
 
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _activeModules = [NSMutableArray array];
+        _savedScriptContent = @"-- Lua Script with ImGui Menu\nprint(\"Eri Lua & ImGui Ready!\")";
+        _savedConsoleText = @"-- Lua Console --\n";
+    }
+    return self;
+}
+
+- (void)loadView {
+    // Chủ động định nghĩa view với kích thước an toàn tránh frame zero gây crash
+    CGRect screenRect = [UIScreen mainScreen].bounds;
+    CGFloat defaultW = MIN(CGRectGetWidth(screenRect), CGRectGetHeight(screenRect)) - 100;
+    CGFloat defaultH = MIN(CGRectGetWidth(screenRect), CGRectGetHeight(screenRect)) - 120;
+    if (defaultW <= 0) defaultW = 400;
+    if (defaultH <= 0) defaultH = 300;
+    
+    self.view = [[UIView alloc] initWithFrame:CGRectMake(0, 0, defaultW, defaultH)];
+    self.view.backgroundColor = [ToolTheme shared].background;
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [ToolTheme shared].background;
-    if (!self.savedScriptContent) {
-        self.savedScriptContent = @"-- Lua Script with ImGui Menu\nprint(\"Eri Lua & ImGui Ready!\")";
-    }
-    if (!self.savedConsoleText) {
-        self.savedConsoleText = @"-- Lua Console --\n";
-    }
-    if (!self.activeModules) {
-        self.activeModules = [NSMutableArray array];
-    }
     [self buildUI];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    if (self.scrollView) {
+        self.scrollView.frame = self.view.bounds;
+        self.scrollView.contentSize = CGSizeMake(CGRectGetWidth(self.view.bounds), CGRectGetHeight(self.view.bounds) + 60);
+    }
 }
 
 - (void)buildUI {
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
-    if (w <= 0 || h <= 0) {
-        w = 400; // Giá trị phòng ngừa an toàn tránh khung 0
-        h = 300;
-    }
+    if (w <= 50) w = 400;
+    if (h <= 50) h = 300;
     
     self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
     self.scrollView.backgroundColor = [UIColor clearColor];
-    self.scrollView.contentSize = CGSizeMake(w, h + 50);
     self.scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.scrollView];
 
@@ -88,7 +104,7 @@ static UIView *sharedImGuiContainerView = nil;
     [self.scrollView addSubview:editorLabel];
     y += 20;
 
-    CGFloat editorH = 180;
+    CGFloat editorH = 160;
     self.editorView = [[UITextView alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, editorH)];
     self.editorView.backgroundColor = [ToolTheme shared].surface;
     self.editorView.textColor = [ToolTheme shared].textPrimary;
@@ -108,7 +124,7 @@ static UIView *sharedImGuiContainerView = nil;
     [self.scrollView addSubview:consoleLabel];
     y += 20;
 
-    CGFloat consoleH = MAX(120, h - y - pad - 40);
+    CGFloat consoleH = MAX(100, h - y - pad - 20);
     self.consoleView = [[UITextView alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, consoleH)];
     self.consoleView.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.05 alpha:1.0];
     self.consoleView.textColor = [ToolTheme shared].success;
