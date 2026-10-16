@@ -1,6 +1,5 @@
 #import "ToolViewController.h"
 #import "ToolTheme.h"
-#import "ToolRailButton.h"
 #import "ESPVC.h"
 #import "DumperVC.h"
 #import "MemoryVC.h"
@@ -11,9 +10,9 @@
 
 @interface ToolViewController ()
 @property (nonatomic, strong) UIView *contentArea;
-@property (nonatomic, strong) UIView *railView;
+@property (nonatomic, strong) UIView *topTabBar;
 @property (nonatomic, strong) UILabel *titleLabel;
-@property (nonatomic, strong) NSMutableArray<ToolRailButton *> *railButtons;
+@property (nonatomic, strong) NSMutableArray<UIButton *> *tabButtons;
 @property (nonatomic, strong) NSArray<UIViewController *> *childViewControllersList;
 @property (nonatomic, assign) NSInteger currentIndex;
 @end
@@ -23,7 +22,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    // Thiết kế khung cửa sổ chính mang phong cách ImGui Window
+    // Thiết kế khung cửa sổ chính mang phong cách ImGui Window chuẩn mod menu
     self.view.backgroundColor = [ToolTheme shared].background;
     self.view.layer.cornerRadius = 4.0;
     self.view.layer.borderWidth = 1.0;
@@ -36,17 +35,17 @@
 - (void)setupImGuiLayout {
     CGFloat totalW = CGRectGetWidth(self.view.bounds);
     CGFloat totalH = CGRectGetHeight(self.view.bounds);
-    if (totalW <= 50) totalW = 550;
-    if (totalH <= 50) totalH = 340;
+    if (totalW <= 50) totalW = 600;
+    if (totalH <= 50) totalH = 360;
     
-    // 1. ImGui Title Bar
+    // 1. ImGui Title Bar (Thanh tiêu đề trên cùng)
     UIView *titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, 26)];
     titleBar.backgroundColor = [ToolTheme shared].surfaceAlt;
     titleBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:titleBar];
     
     self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 0, totalW - 20, 26)];
-    self.titleLabel.text = @"  Eri Nguyễn & Team - ImGui Mod Menu v2.0";
+    self.titleLabel.text = @"  IL2CPP Tool v1.1.23 [ BY @Eri Nguyễn, F4CK CHEAT ]";
     self.titleLabel.textColor = [ToolTheme shared].accent;
     self.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
     self.titleLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
@@ -57,79 +56,80 @@
     titleSep.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [titleBar addSubview:titleSep];
     
-    // 2. Navigation Rail (Tab bên trái)
-    CGFloat railW = 90;
-    CGFloat railY = 26;
-    CGFloat railH = totalH - railY;
+    // 2. Horizontal Top Tab Bar (Thanh tab ngang bên dưới thanh tiêu đề - Giống mẫu yêu cầu)
+    CGFloat tabBarH = 32;
+    CGFloat tabBarY = 26;
     
-    self.railView = [[UIView alloc] initWithFrame:CGRectMake(0, railY, railW, railH)];
-    self.railView.backgroundColor = [ToolTheme shared].surface;
-    // Cho phép co giãn chiều cao linh hoạt theo cửa sổ và tự động giữ nguyên vị trí
-    self.railView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleRightMargin;
-    [self.view addSubview:self.railView];
+    self.topTabBar = [[UIView alloc] initWithFrame:CGRectMake(0, tabBarY, totalW, tabBarH)];
+    self.topTabBar.backgroundColor = [ToolTheme shared].surface;
+    self.topTabBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
+    [self.view addSubview:self.topTabBar];
     
-    UIView *railSep = [[UIView alloc] initWithFrame:CGRectMake(railW - 1, 0, 1, railH)];
-    railSep.backgroundColor = [ToolTheme shared].border;
-    railSep.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleLeftMargin;
-    [self.railView addSubview:railSep];
+    UIView *tabSep = [[UIView alloc] initWithFrame:CGRectMake(0, tabBarH - 1, totalW, 1)];
+    tabSep.backgroundColor = [ToolTheme shared].border;
+    tabSep.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.topTabBar addSubview:tabSep];
     
-    // 3. Content Area
-    CGFloat contentX = railW;
-    CGFloat contentY = railY;
-    CGFloat contentW = totalW - railW;
-    CGFloat contentH = railH;
+    // 3. Content Area (Vùng hiển thị nội dung các tab chiếm trọn phần bên dưới)
+    CGFloat contentY = tabBarY + tabBarH;
+    CGFloat contentH = totalH - contentY;
     
-    self.contentArea = [[UIView alloc] initWithFrame:CGRectMake(contentX, contentY, contentW, contentH)];
+    self.contentArea = [[UIView alloc] initWithFrame:CGRectMake(0, contentY, totalW, contentH)];
     self.contentArea.backgroundColor = [UIColor clearColor];
     self.contentArea.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.contentArea];
     
-    // 4. Khởi tạo danh sách các Tab VC
+    // 4. Khởi tạo danh sách các Tab VC tương ứng
     self.childViewControllersList = @[
-        [[ESPVC alloc] init],
-        [[DumperVC alloc] init],
-        [[MemoryVC alloc] init],
-        [[MethodCallerVC alloc] init],
-        [[LuaVC alloc] init],
-        [[AIChatVC alloc] init],
-        [[CHookVC alloc] init]
+        [[ESPVC alloc] init],        // Tools / ESP
+        [[DumperVC alloc] init],     // Dumper
+        [[MemoryVC alloc] init],     // Memory
+        [[MethodCallerVC alloc] init], // Call
+        [[LuaVC alloc] init],        // Scripting (Lua)
+        [[AIChatVC alloc] init],     // AI Chat
+        [[CHookVC alloc] init]       // C++ Script & Hook
     ];
     
-    NSArray *titles = @[@"ESP", @"Dump", @"Mem", @"Call", @"Lua", @"AI", @"C++"];
-    self.railButtons = [NSMutableArray array];
+    // Danh sách tiêu đề các tab ngang nằm ở đỉnh giống hệt ảnh mẫu
+    NSArray *titles = @[@"Tools", @"Dumper", @"Memory", @"Call", @"Scripting", @"AI", @"C++"];
+    self.tabButtons = [NSMutableArray array];
     
-    // Tự động tính toán chiều cao nút dựa vào tổng số lượng tab để không bao giờ bị tràn khung
-    NSInteger count = titles.count;
-    CGFloat topMargin = 8;
-    CGFloat spacing = 4;
-    CGFloat availableH = railH - (topMargin * 2) - (spacing * (count - 1));
-    CGFloat btnH = availableH / count;
-    if (btnH > 34) btnH = 34; // Giới hạn chiều cao tối đa cho đẹp mắt
-    if (btnH < 24) btnH = 24; // Đảm bảo chiều cao tối thiểu dễ bấm
+    CGFloat startX = 8;
+    CGFloat btnH = 24;
+    CGFloat btnY = 4;
     
-    CGFloat btnY = topMargin;
-    
-    for (NSInteger i = 0; i < count; i++) {
-        ToolRailButton *btn = [[ToolRailButton alloc] initWithFrame:CGRectMake(6, btnY, railW - 12, btnH)];
+    for (NSInteger i = 0; i < titles.count; i++) {
+        // Tính toán chiều rộng tự động dựa vào độ dài chữ của tiêu đề tab
+        NSString *title = titles[i];
+        CGFloat btnW = [title sizeWithAttributes:@{NSFontAttributeName: [[ToolTheme shared] monoBoldFont:11]}].width + 20;
+        if (btnW < 60) btnW = 60; // Đảm bảo chiều rộng tối thiểu
         
-        if ([btn respondsToSelector:@selector(setTitle:forState:)]) {
-            [(UIButton *)btn setTitle:titles[i] forState:UIControlStateNormal];
-        } else if ([btn respondsToSelector:@selector(setTitle:)]) {
-            [(id)btn setTitle:titles[i]];
-        }
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+        btn.frame = CGRectMake(startX, btnY, btnW, btnH);
+        [btn setTitle:title forState:UIControlStateNormal];
+        btn.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
+        [btn setTitleColor:[ToolTheme shared].textSecondary forState:UIControlStateNormal];
+        [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateSelected];
+        
+        // Hiệu ứng màu nền dạng ImGui button cho tab
+        btn.backgroundColor = [ToolTheme shared].surfaceAlt;
+        btn.layer.cornerRadius = 3;
+        btn.layer.borderWidth = 1;
+        btn.layer.borderColor = [ToolTheme shared].border.CGColor;
         
         btn.tag = i;
         [btn addTarget:self action:@selector(didSelectTab:) forControlEvents:UIControlEventTouchUpInside];
-        [self.railView addSubview:btn];
-        [self.railButtons addObject:btn];
+        [self.topTabBar addSubview:btn];
+        [self.tabButtons addObject:btn];
         
-        btnY += btnH + spacing;
+        startX += btnW + 6;
     }
     
+    // Mặc định chọn tab đầu tiên
     [self selectTab:0];
 }
 
-- (void)didSelectTab:(ToolRailButton *)sender {
+- (void)didSelectTab:(UIButton *)sender {
     [self selectTab:sender.tag];
 }
 
@@ -137,10 +137,23 @@
     if (index < 0 || index >= self.childViewControllersList.count) return;
     self.currentIndex = index;
     
-    for (NSInteger i = 0; i < self.railButtons.count; i++) {
-        self.railButtons[i].selected = (i == index);
+    // Cập nhật trạng thái Active/Selected cho các nút tab ngang
+    for (NSInteger i = 0; i < self.tabButtons.count; i++) {
+        UIButton *btn = self.tabButtons[i];
+        BOOL isSelected = (i == index);
+        btn.selected = isSelected;
+        if (isSelected) {
+            btn.backgroundColor = [ToolTheme shared].accent;
+            [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            btn.layer.borderColor = [ToolTheme shared].accent.CGColor;
+        } else {
+            btn.backgroundColor = [ToolTheme shared].surfaceAlt;
+            [btn setTitleColor:[ToolTheme shared].textSecondary forState:UIControlStateNormal];
+            btn.layer.borderColor = [ToolTheme shared].border.CGColor;
+        }
     }
     
+    // Xóa view cũ và gắn view của tab được chọn vào contentArea
     for (UIView *subview in self.contentArea.subviews) {
         [subview removeFromSuperview];
     }
