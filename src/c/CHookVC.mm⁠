@@ -21,25 +21,23 @@
     CGFloat h = CGRectGetHeight(self.view.bounds);
     if (w <= 50) w = 450;
     if (h <= 50) h = 300;
-    
+
     self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
     self.scrollView.backgroundColor = [UIColor clearColor];
     self.scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.scrollView];
-    
+
     CGFloat pad = 12;
     CGFloat y = 12;
     CGFloat availableW = w - (pad * 2);
-    
-    // 1. Tiêu đề mục
+
     UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, availableW, 20)];
     titleLbl.text = @"[ C++ HOOK TEMPLATES & EXPLOITS ]";
     titleLbl.textColor = [ToolTheme shared].accent;
     titleLbl.font = [[ToolTheme shared] monoBoldFont:11];
     [self.scrollView addSubview:titleLbl];
     y += 28;
-    
-    // 2. Thanh chọn loại template (Segmented Control phong cách ImGui)
+
     NSArray *items = @[@"Position / ESP", @"Health / HP", @"Bypass Check", @"List<T> Parse"];
     self.templateSelector = [[UISegmentedControl alloc] initWithItems:items];
     self.templateSelector.frame = CGRectMake(pad, y, availableW, 30);
@@ -51,11 +49,10 @@
     [self.templateSelector addTarget:self action:@selector(templateChanged:) forControlEvents:UIControlEventValueChanged];
     [self.scrollView addSubview:self.templateSelector];
     y += 42;
-    
-    // 3. Khung hiển thị mã nguồn C++
+
     CGFloat editorH = h - y - 70;
     if (editorH < 120) editorH = 120;
-    
+
     self.codeTextView = [[UITextView alloc] initWithFrame:CGRectMake(pad, y, availableW, editorH)];
     self.codeTextView.backgroundColor = [ToolTheme shared].surface;
     self.codeTextView.textColor = [UIColor colorWithRed:0.00 green:0.90 blue:0.46 alpha:1.0];
@@ -66,11 +63,10 @@
     self.codeTextView.layer.borderColor = [ToolTheme shared].border.CGColor;
     self.codeTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.scrollView addSubview:self.codeTextView];
-    
+
     [self updateCodeTemplateForIndex:0];
     y += editorH + 12;
-    
-    // 4. Nút Copy Code độc lập cực nhanh cho Hacker
+
     self.copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.copyButton.frame = CGRectMake(pad, y, availableW, 38);
     self.copyButton.backgroundColor = [ToolTheme shared].accent;
@@ -81,7 +77,7 @@
     self.copyButton.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
     [self.copyButton addTarget:self action:@selector(didTapCopy) forControlEvents:UIControlEventTouchUpInside];
     [self.scrollView addSubview:self.copyButton];
-    
+
     self.scrollView.contentSize = CGSizeMake(w, y + 60);
 }
 
@@ -112,10 +108,10 @@
 - (void)didTapCopy {
     NSString *code = self.codeTextView.text;
     if (code.length == 0) return;
-    
+
     UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
     pasteboard.string = code;
-    
+
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"✅ Thành công!" message:@"Đã copy toàn bộ mã nguồn C++ Hook vào Clipboard." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
