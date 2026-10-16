@@ -3,10 +3,7 @@
 #import "AITool.h"
 #import "AIMemoryTool.h"
 #import "AIESPTool.h"
-#import "DumperVC.h"
-#import "IL2CPPResolver.h"
-#import "ToolTheme.h"
-#import <mach-o/dyld.h>
+#import "GameFingerprint.h"
 #import "ToolTheme.h"
 
 static const CGFloat kInputBarHeight = 50;
@@ -42,7 +39,7 @@ static const CGFloat kInputBarHeight = 50;
     [self buildUI];
     [self setupKeyboardObservers];
 
-    NSString *welcome = @"AI Agent ready.\nHoi: hack map, hack speed, tim class...";
+    NSString *welcome = @"AI Agent ready.\nHoi: hack map, unlock skin, speed, god mode...";
     [self.items addObject:@{@"type": @"ai", @"text": welcome}];
     [self.tableView reloadData];
 
@@ -219,27 +216,28 @@ static const CGFloat kInputBarHeight = 50;
             game = @"Unknown";
         }
 
+        // Tích hợp tri thức dump.cs và các nhóm chức năng vào System Prompt
         NSString *sysPrompt = [NSString stringWithFormat:
             @"Ban la AI agent hack game IL2CPP iOS. Tra loi tieng Viet ngan gon, chinh xac.\n"
             @"Game hien tai: %@\n"
             @"\n"
+            @"=== KHO TRI THUC DUMP.CS (KEYWORD & CLASS) ===\n"
+            @"- AIMBOT: GetNearestEnemy, FindTarget, AimAt, Fire, Shoot, HeadPosition | Class: AimController, WeaponController\n"
+            @"- SPEED/MOVE: MoveSpeed, RunSpeed, SetSpeed, Teleport, JumpForce | Class: PlayerMovement, CharacterController\n"
+            @"- GOD MODE: Health, Hp, TakeDamage, Immortal, IsDead | Class: HealthComponent, CharacterStats\n"
+            @"- UNLOCK SKIN/HERO: SkinID, IsSkinUnlocked, UnlockSkin, HeroID, IsHeroUnlocked, UnlockHero | Class: SkinManager, HeroManager, PlayerData\n"
+            @"- ESP/MAP: WorldToScreen, Camera, IsVisible, DrawBox | Class: Camera, ESP\n"
+            @"\n"
             @"=== TOOL ===\n"
-            @"1. find_concept(concept) — DUNG DAU TIEN\n"
-            @"   concept: map, speed, damage, health, mana, money, cooldown, ammo, level\n"
+            @"1. find_concept(concept) — DUNG DAU TIEN (concept: map, speed, skin, hero, damage, health, money)\n"
             @"2. find_method_global(keyword) — tim method toan bo\n"
             @"3. dump_class_runtime(class_name) — xem chi tiet class\n"
-            @"4. search_classes(keyword) — tim class\n"
-            @"5. find_classes_by_method(method_name)\n"
-            @"6. find_method_in_class(class_name, keyword)\n"
-            @"7. find_field_in_class(class_name, keyword)\n"
-            @"8. read_file(filename, keyword)\n"
+            @"4. search_classes(keyword) — tìm class\n"
             @"\n"
             @"=== QUY TAC ===\n"
-            @"1. Cau hoi 'hack X' → find_concept('X')\n"
-            @"2. Neu 0 ket qua → find_method_global voi tu khoa tuong tu\n"
-            @"3. Cau hoi ve class cu the → dump_class_runtime\n"
-            @"4. Tra loi RO: game + class + method + RVA\n"
-            @"5. Khong bia RVA. Khong lap tool qua 3 lan.", game];
+            @"1. Cau hoi 'hack X' hoặc 'unlock skin/hero' → goi find_concept hoac find_method_global tuong ung.\n"
+            @"2. Tra loi ro rang: Game + Class + Method + Goi y hook return true/force.\n"
+            @"3. Khong bia RVA. Tuyet đối an toàn, chống crash game.", game];
 
         NSMutableArray *messages = [NSMutableArray array];
         [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
