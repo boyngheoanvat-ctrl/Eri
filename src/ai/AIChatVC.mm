@@ -1,431 +1,117 @@
 #import "AIChatVC.h"
-#import "AIProvider.h"
-#import "AITool.h"
-#import "AIMemoryTool.h"
-#import "AIESPTool.h"
-#import "GameFingerprint.h"
 #import "ToolTheme.h"
 #import "AICHookGenerator.h"
 
-static const CGFloat kInputBarHeight = 50;
-
-@interface AIChatVC () <AIStreamDelegate, UITableViewDataSource, UITableViewDelegate, UIGestureRecognizerDelegate>
-@property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) UIView *inputArea;
+@interface AIChatVC () <UITextFieldDelegate>
+@property (nonatomic, strong) UITextView *chatTextView;
 @property (nonatomic, strong) UITextField *inputField;
 @property (nonatomic, strong) UIButton *sendButton;
-@property (nonatomic, strong) UIActivityIndicatorView *spinner;
-@property (nonatomic, strong) NSMutableArray<NSDictionary *> *items;
-@property (nonatomic, assign) BOOL isWaiting;
-@property (nonatomic, strong) NSMutableString *currentAIResponse;
+@property (nonatomic, strong) NSMutableString *chatLog;
 @end
 
 @implementation AIChatVC
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    NSLog(@"[AI] viewDidLoad START");
-
     self.view.backgroundColor = [ToolTheme shared].background;
-    self.items = [NSMutableArray array];
-
-    @try {
-        [AITool registerAll];
-        [AIMemoryTool registerAll];
-        [AIESPTool registerAll];
-    } @catch (NSException *e) {
-        NSLog(@"[AI] Tool registration error: %@", e);
-    }
-
+    self.chatLog = [NSMutableString stringWithCapacity:1024];
+    [self appendLog:@"[ai] 🤖 AI Agent ready.\n- Hoi: hack map, unlock skin, speed, god mode...\n"];
     [self buildUI];
-    [self setupKeyboardObservers];
-
-    NSString *welcome = @"AI Agent ready.\nHoi: hack map, unlock skin, speed, god mode...";
-    [self.items addObject:@{@"type": @"ai", @"text": welcome}];
-    [self.tableView reloadData];
-
-    NSLog(@"[AI] viewDidLoad DONE");
 }
-
-- (void)dealloc {
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
-
-#pragma mark - UI
 
 - (void)buildUI {
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
+    if (w <= 50) w = 450;
+    if (h <= 50) h = 500;
 
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, w, h - kInputBarHeight)
-                                                     style:UITableViewStylePlain];
-    self.tableView.dataSource = self;
-    self.tableView.delegate = self;
-    self.tableView.backgroundColor = [ToolTheme shared].background;
-    self.tableView.separatorColor = [UIColor clearColor];
-    self.tableView.rowHeight = UITableViewAutomaticDimension;
-    self.tableView.estimatedRowHeight = 40;
-    self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
-    self.tableView.alwaysBounceVertical = YES;
-    self.tableView.showsVerticalScrollIndicator = YES;
-    self.tableView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
-    self.tableView.scrollEnabled = YES;
-    self.tableView.delaysContentTouches = NO;
-    self.tableView.canCancelContentTouches = YES;
-    self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.tableView.contentInset = UIEdgeInsetsMake(8, 0, 8, 0);
-    [self.view addSubview:self.tableView];
+    // Chiều cao cố định cho thanh nhập liệu ở đáy
+    CGFloat bottomBarHeight = 60;
 
-    self.inputArea = [[UIView alloc] initWithFrame:CGRectMake(0, h - kInputBarHeight, w, kInputBarHeight)];
-    self.inputArea.backgroundColor = [ToolTheme shared].surface;
-    self.inputArea.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
-    [self.view addSubview:self.inputArea];
+    // Vùng hiển thị nội dung chat (Đã trừ chiều cao thanh đáy để không bao giờ bị che)
+    self.chatTextView = [[UITextView alloc] initWithFrame:CGRectMake(12, 12, w - 24, h - bottomBarHeight - 24)];
+    self.chatTextView.backgroundColor = [ToolTheme shared].surface;
+    self.chatTextView.textColor = [ToolTheme shared].textPrimary;
+    self.chatTextView.font = [[ToolTheme shared] monoFont:12];
+    self.chatTextView.editable = NO;
+    self.chatTextView.layer.cornerRadius = 6;
+    self.chatTextView.text = self.chatLog;
+    
+    // Tạo khoảng đệm bên trong để chữ không bị sát mép
+    UIEdgeInsets insets = UIEdgeInsetsMake(8, 8, 16, 8);
+    self.chatTextView.textContainerInset = insets;
+    
+    [self.view addSubview:self.chatTextView];
 
-    UIView *topLine = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 1)];
-    topLine.backgroundColor = [ToolTheme shared].divider;
-    [self.inputArea addSubview:topLine];
+    // Thanh chứa khung nhập tin nhắn nằm cố định gọn gàng ở đáy
+    UIView *bottomBar = [[UIView alloc] initWithFrame:CGRectMake(12, h - bottomBarHeight - 8, w - 24, 50)];
+    bottomBar.backgroundColor = [ToolTheme shared].surface;
+    bottomBar.layer.cornerRadius = 6;
+    bottomBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
+    [self.view addSubview:bottomBar];
 
-    self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, w - 80, 30)];
-    self.inputField.backgroundColor = [ToolTheme shared].background;
+    // Ô nhập văn bản (TextField)
+    self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 5, bottomBar.bounds.size.width - 84, 40)];
+    self.inputField.placeholder = @"input here...";
     self.inputField.textColor = [ToolTheme shared].textPrimary;
-    self.inputField.font = [[ToolTheme shared] monoFont:11];
-    self.inputField.layer.borderWidth = 1;
-    self.inputField.layer.borderColor = [ToolTheme shared].border.CGColor;
-    self.inputField.layer.cornerRadius = 4;
-    self.inputField.returnKeyType = UIReturnKeySend;
-    self.inputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
-    self.inputField.leftViewMode = UITextFieldViewModeAlways;
-    self.inputField.attributedPlaceholder = [[NSAttributedString alloc]
-        initWithString:@"input here..."
-            attributes:@{NSForegroundColorAttributeName: [ToolTheme shared].textMuted}];
+    self.inputField.font = [[ToolTheme shared] monoFont:12];
+    self.inputField.delegate = self;
     self.inputField.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.inputField addTarget:self action:@selector(sendTapped)
-              forControlEvents:UIControlEventEditingDidEndOnExit];
-    [self.inputArea addSubview:self.inputField];
+    [bottomBar addSubview:self.inputField];
 
+    // Nút Gửi (Send Button)
     self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.sendButton.frame = CGRectMake(w - 64, 10, 54, 30);
+    self.sendButton.frame = CGRectMake(bottomBar.bounds.size.width - 70, 8, 62, 34);
     self.sendButton.backgroundColor = [ToolTheme shared].accent;
     self.sendButton.layer.cornerRadius = 4;
     [self.sendButton setTitle:@"Send" forState:UIControlStateNormal];
     [self.sendButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.sendButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
+    self.sendButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:12];
+    [self.sendButton addTarget:self action:@selector(sendMessage) forControlEvents:UIControlEventTouchUpInside];
     self.sendButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
-    [self.sendButton addTarget:self action:@selector(sendTapped)
-              forControlEvents:UIControlEventTouchUpInside];
-    [self.inputArea addSubview:self.sendButton];
-
-    self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:
-        UIActivityIndicatorViewStyleMedium];
-    self.spinner.color = [ToolTheme shared].accent;
-    self.spinner.center = self.view.center;
-    self.spinner.hidesWhenStopped = YES;
-    self.spinner.userInteractionEnabled = NO;
-    [self.view addSubview:self.spinner];
+    [bottomBar addSubview:self.sendButton];
 }
 
-#pragma mark - Keyboard
-
-- (void)setupKeyboardObservers {
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(keyboardWillShow:)
-                                                 name:UIKeyboardWillShowNotification object:nil];
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(keyboardWillHide:)
-                                                 name:UIKeyboardWillHideNotification object:nil];
+- (void)appendLog:(NSString *)text {
+    [self.chatLog appendFormat:@"%@\n", text];
+    if (self.chatTextView) {
+        self.chatTextView.text = self.chatLog;
+        // Tự động cuộn xuống dòng mới nhất khi có tin nhắn/kết quả mới
+        if (self.chatTextView.text.length > 0) {
+            NSRange bottom = NSMakeRange(self.chatTextView.text.length - 1, 1);
+            [self.chatTextView scrollRangeToVisible:bottom];
+        }
+    }
 }
 
-- (void)keyboardWillShow:(NSNotification *)note {
-    NSDictionary *info = note.userInfo;
-    CGRect kbFrame = [info[UIKeyboardFrameEndUserInfoKey] CGRectValue];
-    NSTimeInterval dur = [info[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
-    CGRect kbInView = [self.view convertRect:kbFrame fromView:nil];
-    CGFloat overlap = CGRectGetHeight(self.view.bounds) - CGRectGetMinY(kbInView);
-
-    [UIView animateWithDuration:dur animations:^{
-        CGFloat w = CGRectGetWidth(self.view.bounds);
-        CGFloat h = CGRectGetHeight(self.view.bounds);
-        CGFloat visibleH = h - overlap;
-        self.tableView.frame = CGRectMake(0, 0, w, visibleH - kInputBarHeight);
-        self.inputArea.frame = CGRectMake(0, visibleH - kInputBarHeight, w, kInputBarHeight);
-    } completion:^(BOOL finished) {
-        [self scrollToBottomAnimated:YES];
-    }];
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [self sendMessage];
+    return YES;
 }
 
-- (void)keyboardWillHide:(NSNotification *)note {
-    NSDictionary *info = note.userInfo;
-    NSTimeInterval dur = [info[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
-    [UIView animateWithDuration:dur animations:^{
-        CGFloat w = CGRectGetWidth(self.view.bounds);
-        CGFloat h = CGRectGetHeight(self.view.bounds);
-        self.tableView.frame = CGRectMake(0, 0, w, h - kInputBarHeight);
-        self.inputArea.frame = CGRectMake(0, h - kInputBarHeight, w, kInputBarHeight);
-    }];
-}
+- (void)sendMessage {
+    NSString *text = [self.inputField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (text.length == 0) return;
 
-#pragma mark - Send
-
-- (void)sendTapped {
-    NSString *text = self.inputField.text;
-    if (text.length == 0 || self.isWaiting) return;
-
-    [self.items addObject:@{@"type": @"user", @"text": text}];
+    [self appendLog:[NSString stringWithFormat:@"> %@", text]];
     self.inputField.text = @"";
-    [self.tableView reloadData];
-    [self scrollToBottomAnimated:YES];
+    [self.inputField resignFirstResponder];
 
-    NSString *lowerText = text.lowercaseString;
-    if ([lowerText containsString:@"hack map"] || [lowerText containsString:@"tầm nhìn"] || [lowerText containsString:@"zoom"] || [lowerText containsString:@"fog of war"]) {
-        self.isWaiting = YES;
-        self.sendButton.enabled = NO;
-        self.sendButton.alpha = 0.5;
-        [self.spinner startAnimating];
-        
+    // Xử lý yêu cầu từ người dùng
+    if ([text.lowercaseString containsString:@"hack map"] || [text.lowercaseString containsString:@"zoom"]) {
+        [self appendLog:@"[ai] 🎯 Đang phân tích và generate Map Hack..."];
         [[AICHookGenerator shared] generateMapHackForQuery:text completion:^(AICHookGeneratorResult *result) {
-            self.isWaiting = NO;
-            self.sendButton.enabled = YES;
-            self.sendButton.alpha = 1.0;
-            [self.spinner stopAnimating];
-            
-            NSString *aiAnswer = [NSString stringWithFormat:
-                @"🎯 [AI Map Hack Generator Found]\n"
-                @"- Target Offset: %@\n\n"
-                @"=== C++ HOOK CODE (src/c/) ===\n"
-                @"%@\n\n"
-                @"=== LUA SCRIPT (hot-reload) ===\n"
-                @"%@", result.offsetAddress, result.cppCode, result.luaCode];
-            
-            [self.items addObject:@{@"type": @"ai", @"text": aiAnswer}];
-            [self.tableView reloadData];
-            [self scrollToBottomAnimated:YES];
+            [self appendLog:[NSString stringWithFormat:@"[ai] 🎯 [AI Map Hack Generator Found]\n- Target Offset: %@\n\n=== C++ HOOK CODE ===\n%@", result.offsetAddress, result.cppCode]];
         }];
-        return;
+    } else {
+        [self appendLog:[NSString stringWithFormat:@"[ai] 🤖 Chào bạn! Tôi đã ghi nhận yêu cầu: \"%@\"", text]];
     }
+}
 
-    self.isWaiting = YES;
-    self.currentAIResponse = [NSMutableString string];
-    self.sendButton.enabled = NO;
-    self.sendButton.alpha = 0.5;
-    [self.spinner startAnimating];
-
-    NSMutableArray *history = [NSMutableArray array];
-    NSInteger maxHistory = 6;
-    NSInteger start = MAX(0, (NSInteger)self.items.count - maxHistory);
-    for (NSInteger i = start; i < (NSInteger)self.items.count; i++) {
-        NSDictionary *item = self.items[i];
-        NSString *type = item[@"type"];
-        if ([type isEqualToString:@"user"]) {
-            [history addObject:@{@"role": @"user", @"content": item[@"text"]}];
-        } else if ([type isEqualToString:@"ai"]) {
-            [history addObject:@{@"role": @"assistant", @"content": item[@"text"]}];
-        }
+- (void)reload {
+    if ([self isViewLoaded]) {
+        self.chatTextView.text = self.chatLog;
     }
-
-    NSMutableArray *tools = [NSMutableArray array];
-    @try {
-        for (AITool *t in [AITool allTools]) {
-            if (t) {
-                [tools addObject:[t openAISchema]];
-            }
-        }
-    } @catch (NSException *e) {
-        NSLog(@"[AI] Error building tools schema: %@", e);
-    }
-
-    __weak typeof(self) ws = self;
-
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-
-        NSString *game = @"Unknown";
-        @try {
-            game = [[GameFingerprint shared] detectedGame] ?: @"Unknown";
-        } @catch (NSException *e) {
-            NSLog(@"[AI] GameFingerprint crash: %@", e);
-            game = @"Unknown";
-        }
-
-        NSString *sysPrompt = [NSString stringWithFormat:
-            @"Ban la AI agent hack game IL2CPP iOS. Tra loi tieng Viet ngan gon, chinh xac.\n"
-            @"Game hien tai: %@\n"
-            @"\n"
-            @"=== KHO TRI THUC DUMP.CS (KEYWORD & CLASS) ===\n"
-            @"- AIMBOT: GetNearestEnemy, FindTarget, AimAt, Fire, Shoot, HeadPosition | Class: AimController, WeaponController\n"
-            @"- SPEED/MOVE: MoveSpeed, RunSpeed, SetSpeed, Teleport, JumpForce | Class: PlayerMovement, CharacterController\n"
-            @"- GOD MODE: Health, Hp, TakeDamage, Immortal, IsDead | Class: HealthComponent, CharacterStats\n"
-            @"- UNLOCK SKIN/HERO: SkinID, IsSkinUnlocked, UnlockSkin, HeroID, IsHeroUnlocked, UnlockHero | Class: SkinManager, HeroManager, PlayerData\n"
-            @"- ESP/MAP: WorldToScreen, Camera, IsVisible, DrawBox | Class: Camera, ESP\n"
-            @"\n"
-            @"=== TOOL ===\n"
-            @"1. find_concept(concept) — DUNG DAU TIEN (concept: map, speed, skin, hero, damage, health, money)\n"
-            @"2. find_method_global(keyword) — tim method toan bo\n"
-            @"3. dump_class_runtime(class_name) — xem chi tiet class\n"
-            @"4. search_classes(keyword) — tìm class\n"
-            @"\n"
-            @"=== QUY TAC ===\n"
-            @"1. Cau hoi 'hack X' hoặc 'unlock skin/hero' → goi find_concept hoac find_method_global tuong ung.\n"
-            @"2. Tra loi ro rang: Game + Class + Method + Goi y hook return true/force.\n"
-            @"3. Khong bia RVA. Tuyet đối an toàn, chống crash game.", game];
-
-        NSMutableArray *messages = [NSMutableArray array];
-        [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
-        [messages addObjectsFromArray:history];
-
-        @try {
-            [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
-        } @catch (NSException *exception) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (ws) {
-                    ws.isWaiting = NO;
-                    ws.sendButton.enabled = YES;
-                    ws.sendButton.alpha = 1.0;
-                    [ws.spinner stopAnimating];
-                    [ws.items addObject:@{@"type": @"error", @"text": [NSString stringWithFormat:@"Lỗi gửi AI: %@", exception.reason]}];
-                    [ws.tableView reloadData];
-                    [ws scrollToBottomAnimated:YES];
-                }
-            });
-        }
-    });
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        if (ws && ws.isWaiting) {
-            ws.isWaiting = NO;
-            ws.sendButton.enabled = YES;
-            ws.sendButton.alpha = 1.0;
-            [ws.spinner stopAnimating];
-            [ws.items addObject:@{@"type": @"error", @"text": @"Timeout 60s"}];
-            [ws.tableView reloadData];
-            [ws scrollToBottomAnimated:YES];
-        }
-    });
 }
-
-#pragma mark - Scroll
-
-- (void)scrollToBottomAnimated:(BOOL)animated {
-    if (self.items.count == 0) return;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSInteger last = (NSInteger)self.items.count - 1;
-        NSIndexPath *ip = [NSIndexPath indexPathForRow:last inSection:0];
-        [self.tableView scrollToRowAtIndexPath:ip
-                              atScrollPosition:UITableViewScrollPositionBottom
-                                      animated:animated];
-    });
-}
-
-- (void)scrollToBottom { [self scrollToBottomAnimated:YES]; }
-
-#pragma mark - AIStreamDelegate
-
-- (void)aiStreamDidReceiveText:(NSString *)text {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self.currentAIResponse appendString:text ?: @""];
-        NSInteger lastIdx = (NSInteger)self.items.count - 1;
-        if (lastIdx >= 0 && [self.items[lastIdx][@"type"] isEqualToString:@"ai"]) {
-            self.items[lastIdx] = @{@"type": @"ai", @"text": [self.currentAIResponse copy]};
-        } else {
-            [self.items addObject:@{@"type": @"ai", @"text": [self.currentAIResponse copy]}];
-        }
-        [self.tableView reloadData];
-        [self scrollToBottomAnimated:YES];
-    });
-}
-
-- (void)aiStreamDidFailWithError:(NSError *)error {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self.spinner stopAnimating];
-        self.isWaiting = NO;
-        self.sendButton.enabled = YES;
-        self.sendButton.alpha = 1.0;
-        [self.items addObject:@{@"type": @"error",
-            @"text": error.localizedDescription ?: @"Loi"}];
-        [self.tableView reloadData];
-        [self scrollToBottomAnimated:YES];
-    });
-}
-
-- (void)aiStreamDidComplete {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self.spinner stopAnimating];
-        self.isWaiting = NO;
-        self.sendButton.enabled = YES;
-        self.sendButton.alpha = 1.0;
-    });
-}
-
-- (void)aiDidCallTool:(NSString *)toolName args:(NSDictionary *)args result:(id)result {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *summary = @"OK";
-        @try {
-            if ([result isKindOfClass:[NSDictionary class]]) {
-                NSDictionary *d = (NSDictionary *)result;
-                if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
-                else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ ket qua", d[@"count"]];
-            }
-        } @catch (NSException *e) {
-            summary = @"OK";
-        }
-        [self.items addObject:@{@"type": @"tool",
-            @"text": [NSString stringWithFormat:@"%@ → %@", toolName, summary]}];
-        [self.tableView reloadData];
-        [self scrollToBottomAnimated:YES];
-    });
-}
-
-#pragma mark - Table
-
-- (NSInteger)tableView:(UITableView *)tv numberOfRowsInSection:(NSInteger)s {
-    return self.items.count;
-}
-
-- (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip {
-    UITableViewCell *cell = [tv dequeueReusableCellWithIdentifier:@"cell"];
-    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
-                                             reuseIdentifier:@"cell"];
-    for (UIView *v in cell.contentView.subviews) [v removeFromSuperview];
-
-    NSDictionary *item = self.items[ip.row];
-    NSString *type = item[@"type"];
-    NSString *text = item[@"text"];
-    BOOL isUser = [type isEqualToString:@"user"];
-    BOOL isTool = [type isEqualToString:@"tool"];
-    BOOL isError = [type isEqualToString:@"error"];
-
-    NSString *prefix;
-    UIColor *prefixColor;
-    if (isUser) { prefix = @"> "; prefixColor = [ToolTheme shared].accent; }
-    else if (isTool) { prefix = @"[tool] "; prefixColor = [ToolTheme shared].warning; }
-    else if (isError) { prefix = @"[error] "; prefixColor = [ToolTheme shared].danger; }
-    else { prefix = @"[ai] "; prefixColor = [ToolTheme shared].success; }
-
-    NSString *full = [NSString stringWithFormat:@"%@%@", prefix, text ?: @""];
-    CGFloat cellW = CGRectGetWidth(tv.bounds);
-
-    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(10, 6, cellW - 20, 0)];
-    label.numberOfLines = 0;
-
-    NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] initWithString:full];
-    [attr addAttribute:NSForegroundColorAttributeName value:prefixColor range:NSMakeRange(0, prefix.length)];
-    UIColor *tc = isError ? [ToolTheme shared].danger : [ToolTheme shared].textPrimary;
-    [attr addAttribute:NSForegroundColorAttributeName value:tc range:NSMakeRange(prefix.length, (text ?: @"").length)];
-    [attr addAttribute:NSFontAttributeName value:[[ToolTheme shared] monoFont:11] range:NSMakeRange(0, full.length)];
-
-    label.attributedText = attr;
-
-    CGSize maxSize = CGSizeMake(cellW - 20, CGFLOAT_MAX);
-    CGRect rect = [attr boundingRectWithSize:maxSize
-                                     options:NSStringDrawingUsesLineFragmentOrigin
-                                     context:nil];
-    label.frame = CGRectMake(10, 6, cellW - 20, rect.size.height);
-    [cell.contentView addSubview:label];
-
-    cell.backgroundColor = [UIColor clearColor];
-    cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    return cell;
-}
-
-- (void)reload { [self.tableView reloadData]; }
 
 @end
