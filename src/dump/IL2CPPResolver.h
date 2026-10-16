@@ -105,7 +105,7 @@ struct Il2CppClass {
 - (void)attachCurrentThread;
 
 - (Il2CppDomain *)domain_get;
-- (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(int *)count;
+- (const Il2CppAssembly **)domain_get_assemblies:(const Il2CppDomain *)domain count:(size_t *)count;
 - (Il2CppImage  *)assembly_get_image:(const Il2CppAssembly *)assembly;
 - (const char   *)image_get_name:(Il2CppImage *)image;
 - (size_t        )image_get_class_count:(Il2CppImage *)image;
@@ -113,10 +113,6 @@ struct Il2CppClass {
 
 - (const char   *)class_get_name:(Il2CppClass *)k;
 - (const char   *)class_get_namespace:(Il2CppClass *)k;
-- (uint32_t     )class_get_flags:(Il2CppClass *)klass;
-- (BOOL         )class_is_enum:(Il2CppClass *)klass;
-- (BOOL         )class_is_valuetype:(Il2CppClass *)klass;
-- (BOOL         )class_is_interface:(Il2CppClass *)klass;
 - (Il2CppClass  *)class_get_parent:(Il2CppClass *)klass;
 - (void         *)class_get_static_field_data:(Il2CppClass *)klass;
 
@@ -126,22 +122,15 @@ struct Il2CppClass {
 
 - (const char *)method_get_name:(MethodInfo *)m;
 - (uint32_t   )method_get_token:(MethodInfo *)m;
-- (uint32_t   )method_get_flags:(MethodInfo *)m;
 - (void      *)method_get_pointer:(MethodInfo *)m;
 - (const char *)method_get_return_type:(MethodInfo *)method;
-- (uint32_t   )method_get_param_count:(MethodInfo *)method;
-- (const char *)method_get_param_type_name:(MethodInfo *)method index:(uint32_t)index;
-- (const char *)method_get_param_name:(MethodInfo *)method index:(uint32_t)index;
 
 - (const char *)field_get_name:(FieldInfo *)f;
 - (int32_t    )field_get_offset:(FieldInfo *)f;
 - (uint32_t   )field_get_token:(FieldInfo *)f;
-- (uint32_t   )field_get_flags:(FieldInfo *)f;
 - (const char *)field_get_type_name:(FieldInfo *)field;
 
 - (const char *)property_get_name:(PropertyInfo *)p;
-- (MethodInfo *)property_get_get_method:(PropertyInfo *)p;
-- (MethodInfo *)property_get_set_method:(PropertyInfo *)p;
 
 - (const char *)type_get_name:(Il2CppType *)type;
 
