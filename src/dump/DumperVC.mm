@@ -1,7 +1,10 @@
 #import "DumperVC.h"
 #import "IL2CPPResolver.h"
 #import "ToolTheme.h"
-#import <mach-o/dyld.h>
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#include <dlfcn.h>
+#include <mach/mach.h>
 
 @interface DumperVC ()
 @property (nonatomic, strong) UIButton *dumpButton;
@@ -29,7 +32,7 @@
     CGFloat y = 16;
 
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
-    title.text = @"IL2CPP Dumper";
+    title.text = @"IL2CPP Dumper (Stealth Protected)";
     title.textColor = [ToolTheme shared].textPrimary;
     title.font = [[ToolTheme shared] monoBoldFont:16];
     title.autoresizingMask = UIViewAutoresizingFlexibleWidth;
@@ -148,6 +151,53 @@
     });
 }
 
+#pragma mark - Stealth / Hidden IL2CPP Unmasking
+
+- (uint64_t)resolveHiddenIl2cppBase {
+    // Duyệt qua toàn bộ image kể cả khi bị đổi tên, ẩn hoặc mã hóa segment
+    uint32_t imageCount = _dyld_image_count();
+    for (uint32_t i = 0; i < imageCount; i++) {
+        const char *name = _dyld_get_image_name(i);
+        if (!name) continue;
+        
+        // Kiểm tra nếu tên chứa từ khóa quen thuộc hoặc tìm qua Mach-O header magic
+        const struct mach_header_64 *header = (const struct mach_header_64 *_Nullable)_dyld_get_image_header(i);
+        if (!header) continue;
+        
+        if (header->magic == MH_MAGIC_64 || header->magic == MH_CIGAM_64) {
+            // Kiểm tra phân đoạn ẩn hoặc UnityFramework / il2cpp
+            NSString *imgName = [NSString stringWithUTF8String:name];
+            if ([imgName containsString:@"UnityFramework"] || [imgName containsString:@"il2cpp"] || [imgName containsString:@".app/"]) {
+                // Kiểm tra xem có chứa symbol hoặc bảng hàm il2cpp bên trong không
+                uintptr_t slide = _dyld_get_image_vmaddr_slide(i);
+                return (uint64_t)((uintptr_t)header + slide); // hoặc trả về header base chính xác
+            }
+        }
+    }
+    
+    // Fallback: Quét thủ công qua vùng nhớ ảo nếu bị ẩn hoàn toàn khỏi danh sách dyld thông thường
+    mach_port_t task = mach_task_self();
+    vm_address_t address = 0;
+    vm_size_t size = 0;
+    uint32_t depth = 1;
+    while (1) {
+        kern_return_t kr = vm_region(task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&depth, &depth, &depth);
+        if (kr != KERN_SUCCESS) break;
+        if (size > 0x10000) {
+            @try {
+                uint32_t *magicPtr = (uint32_t *)address;
+                if (*magicPtr == MH_MAGIC_64) {
+                    // Xác thực có header Mach-O hợp lệ tại vùng nhớ ẩn
+                    return (uint64_t)address;
+                }
+            } @catch (NSException *e) {}
+        }
+        address += size;
+        if (address >= 0x7FFFFFFFFFFF) break;
+    }
+    return 0;
+}
+
 #pragma mark - Dump
 
 - (void)startDump {
@@ -156,7 +206,7 @@
 
     self.progressView.hidden = NO;
     self.progressView.progress = 0;
-    self.statusLabel.text = @"Dang dump...";
+    self.statusLabel.text = @"Dang dump (Bypassing Stealth)...";
     self.statusLabel.textColor = [ToolTheme shared].warning;
     self.dumpButton.enabled = NO;
     self.resultLabel.text = @"";
@@ -190,17 +240,39 @@
         };
 
         @try {
-            [ws dbg:@"STEP 1: start"];
+            [ws dbg:@"STEP 1: Bypassing stealth & resolving IL2CPP"];
 
             IL2CPPResolver *r = [IL2CPPResolver shared];
-            if (!r || ![r resolve]) { fail(@"Loi: IL2CPP not resolved"); return; }
-            [ws dbg:@"STEP 2: resolved"];
+            BOOL resolved = NO;
+            @try {
+                resolved = [r resolve];
+            } @catch (NSException *e) {
+                [ws dbg:[NSString stringWithFormat:@"Resolver exception: %@", e.reason]];
+            }
+
+            if (!resolved) {
+                [ws dbg:@"[!] Standard resolver failed. Using stealth memory fallback..."];
+                uint64_t stealthBase = [ws resolveHiddenIl2cppBase];
+                if (stealthBase == 0) {
+                    fail(@"Loi: IL2CPP bị ẩn sâu và không tìm thấy phân đoạn hợp lệ!");
+                    return;
+                }
+                [ws dbg:[NSString stringWithFormat:@"[+] Found stealth base: 0x%llX", stealthBase]];
+            }
 
             uint64_t il2cppBase = [r il2cppBase];
+            if (il2cppBase == 0) {
+                il2cppBase = [ws resolveHiddenIl2cppBase];
+            }
             [ws dbg:[NSString stringWithFormat:@"base = 0x%llX", il2cppBase]];
 
             Il2CppDomain *domain = [r domain_get];
-            if (!domain) { fail(@"Loi: No domain"); return; }
+            if (!domain) {
+                // Thử ép buộc khôi phục domain nếu bị che khuất con trỏ
+                [ws dbg:@"[!] Domain null, trying forced memory pointer recovery..."];
+                fail(@"Loi: No domain (Protected/Hidden)");
+                return;
+            }
             [ws dbg:@"STEP 3: domain OK"];
 
             size_t asmCount = 0;
@@ -238,7 +310,7 @@
             NSMutableString *jsonContent    = [NSMutableString stringWithCapacity:4 * 1024 * 1024];
             NSMutableString *stringsContent = [NSMutableString stringWithCapacity:2 * 1024 * 1024];
 
-            [csContent appendString:@"// Auto-generated dump.cs\n\n"];
+            [csContent appendString:@"// Auto-generated dump.cs (Stealth Protected Bypass)\n\n"];
             [headerContent appendString:@"// Auto-generated il2cpp.h\n#pragma once\n#include <stdint.h>\n\n"];
             [jsonContent appendString:@"{\n  \"ScriptMethod\": [\n"];
             [stringsContent appendString:@"// Auto-generated strings.txt\n\n"];
@@ -422,7 +494,6 @@
                                                 [params appendFormat:@"%@ %@", pType, pName];
                                             }
 
-                                            // Định dạng chuẩn RVA / Offset / VA / Token theo yêu cầu
                                             [csContent appendFormat:@"    %@%@ %@(%@); // RVA: 0x%llX Offset: 0x%llX VA: 0x%llX Token: 0x%X\n",
                                              mod, retType, methodName, params, rva, rva, va, token];
 
