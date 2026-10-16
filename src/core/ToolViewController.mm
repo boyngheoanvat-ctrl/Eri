@@ -103,11 +103,11 @@
     for (NSInteger i = 0; i < titles.count; i++) {
         ToolRailButton *btn = [[ToolRailButton alloc] initWithFrame:CGRectMake(6, btnY, railW - 12, btnH)];
         
-        // Kiểm tra an toàn phương thức gán tiêu đề tương thích với custom ToolRailButton
+        // Ép kiểu tường minh để trình biên dịch Clang không báo lỗi strict selector checking
         if ([btn respondsToSelector:@selector(setTitle:forState:)]) {
-            [btn setTitle:titles[i] forState:UIControlStateNormal];
+            [(UIButton *)btn setTitle:titles[i] forState:UIControlStateNormal];
         } else if ([btn respondsToSelector:@selector(setTitle:)]) {
-            [btn setTitle:titles[i]];
+            [(id)btn setTitle:titles[i]];
         }
         
         btn.tag = i;
