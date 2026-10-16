@@ -8,6 +8,7 @@
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UITextField *inputField;
 @property (nonatomic, strong) UIButton *sendButton;
+@property (nonatomic, strong) UIButton *copyButton;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *messages;
 @property (nonatomic, assign) BOOL isWaitingResponse;
 @end
@@ -45,8 +46,8 @@
         bottomBar.backgroundColor = [ToolTheme shared].surface;
         [self.view addSubview:bottomBar];
 
-        self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 8, w - 110, 38)];
-        self.inputField.placeholder = @"Nhập câu hỏi AI...";
+        self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 8, w - 170, 38)];
+        self.inputField.placeholder = @"Nhập câu hỏi bạn muốn hỏi !!!";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
         self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -55,12 +56,22 @@
         [bottomBar addSubview:self.inputField];
 
         self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        self.sendButton.frame = CGRectMake(w - 94, 8, 82, 38);
+        self.sendButton.frame = CGRectMake(w - 154, 8, 70, 38);
         self.sendButton.backgroundColor = [ToolTheme shared].accent;
+        self.sendButton.layer.cornerRadius = 6;
         [self.sendButton setTitle:@"Gửi" forState:UIControlStateNormal];
         [self.sendButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         [self.sendButton addTarget:self action:@selector(didTapSend) forControlEvents:UIControlEventTouchUpInside];
         [bottomBar addSubview:self.sendButton];
+
+        self.copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        self.copyButton.frame = CGRectMake(w - 78, 8, 66, 38);
+        self.copyButton.backgroundColor = [ToolTheme shared].surfaceAlt;
+        self.copyButton.layer.cornerRadius = 6;
+        [self.copyButton setTitle:@"Copy" forState:UIControlStateNormal];
+        [self.copyButton setTitleColor:[ToolTheme shared].accent forState:UIControlStateNormal];
+        [self.copyButton addTarget:self action:@selector(didTapCopy) forControlEvents:UIControlEventTouchUpInside];
+        [bottomBar addSubview:self.copyButton];
     }
 }
 
@@ -80,6 +91,15 @@
             [apiMessages addObject:@{@"role": m[@"role"], @"content": m[@"content"]}];
         }
         [[AIProvider shared] sendMessages:apiMessages tools:@[] delegate:self];
+    }
+}
+
+- (void)didTapCopy {
+    @autoreleasepool {
+        if (self.messages.count > 0) {
+            NSDictionary *last = self.messages.lastObject;
+            [[UIPasteboard generalPasteboard] setString:last[@"content"] ?: @""];
+        }
     }
 }
 
