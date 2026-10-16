@@ -1,4 +1,4 @@
-Name: Build ToolKit
+name: Build ToolKit
 
 on:
   push:
@@ -27,12 +27,13 @@ jobs:
           curl -L --fail -o iPhoneOS16.5.sdk.tar.xz \
             https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
           tar -xf iPhoneOS16.5.sdk.tar.xz
+          test -d iPhoneOS16.5.sdk && echo "SDK ok"
 
       - name: Install ldid
         run: |
-          git clone https://github.com/ProcursusTeam/ldid.git
+          git clone --depth=1 https://github.com/ProcursusTeam/ldid.git
           cd ldid
-          git submodule update --init
+          git submodule update --init --recursive
           make CXX=clang++
           sudo cp ldid /usr/local/bin/
 
@@ -42,14 +43,13 @@ jobs:
           curl -L --fail -o lua-5.4.6.tar.gz \
             https://www.lua.org/ftp/lua-5.4.6.tar.gz
           tar -xf lua-5.4.6.tar.gz
-          echo "Lua downloaded"
 
       - name: Compile Lua for iOS (arm64)
         run: |
+          set -e
           SDK=$HOME/sdks/iPhoneOS16.5.sdk
           cd $HOME/lua-5.4.6/src
 
-          # KHÔNG define LUA_USE_POSIX / LUA_USE_DLOPEN (đã có trong luaconf.h)
           SRC="lapi.c lauxlib.c lbaselib.c lcode.c lcorolib.c lctype.c ldblib.c \
                ldebug.c ldo.c ldump.c lfunc.c lgc.c linit.c liolib.c llex.c \
                lmathlib.c lmem.c loadlib.c lobject.c lopcodes.c loslib.c \
@@ -57,23 +57,18 @@ jobs:
                ltm.c lundump.c lutf8lib.c lvm.c lzio.c"
 
           for f in $SRC; do
-            if [ -f "$f" ]; then
-              clang \
-                -target arm64-apple-ios14.0 \
-                -isysroot "$SDK" \
-                -c "$f" \
-                -DLUA_USE_IOS \
-                -Wno-everything \
-                -o "${f%.c}.o" || echo "Failed: $f"
-            fi
+            clang \
+              -target arm64-apple-ios14.0 \
+              -isysroot "$SDK" \
+              -c "$f" \
+              -DLUA_USE_IOS \
+              -Wno-everything \
+              -o "${f%.c}.o"
           done
 
-          # SỬA: dùng llvm-ar thay vì xcrun ar
-          ls -la *.o | head
           llvm-ar rcs liblua.a *.o
           ls -la liblua.a
 
-          # Copy vào project
           mkdir -p $GITHUB_WORKSPACE/libs
           cp liblua.a $GITHUB_WORKSPACE/libs/
           cp *.h $GITHUB_WORKSPACE/libs/
@@ -81,11 +76,11 @@ jobs:
       - name: Verify liblua
         run: |
           ls -la libs/
-          echo "=== liblua.a info ==="
           llvm-ar t libs/liblua.a | head -20
 
       - name: Build dylib with Lua
         run: |
+          set -e
           SDK=$HOME/sdks/iPhoneOS16.5.sdk
           SRC=$(find src -name "*.mm" | tr '\n' ' ')
           echo "Sources: $SRC"
