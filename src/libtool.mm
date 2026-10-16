@@ -10,10 +10,7 @@ static void libtool_init(void) {
                    dispatch_get_main_queue(), ^{
 
         @try {
-            // KHÔNG tạo ToolWindow ở đây — để lazy create trong handleTripleTap
-            // (tạo sớm có thể crash vì app chưa fully active)
-
-            // Tìm key window (không phải ToolWindow)
+            // Tìm key window hợp lệ để kiểm tra môi trường ứng dụng khi khởi động
             UIWindow *kw = nil;
             for (UIWindow *w in UIApplication.sharedApplication.windows) {
                 if (w.isKeyWindow && ![w isKindOfClass:[ToolWindow class]]) {
@@ -22,7 +19,6 @@ static void libtool_init(void) {
                 }
             }
 
-            // Fallback: lấy window đầu tiên không phải ToolWindow
             if (!kw) {
                 for (UIWindow *w in UIApplication.sharedApplication.windows) {
                     if (![w isKindOfClass:[ToolWindow class]]) {
@@ -33,26 +29,9 @@ static void libtool_init(void) {
             }
 
             if (kw) {
-                [[ToolGestureManager shared] attachToWindow:kw];
-                NSLog(@"[ToolKit] Gesture attached to %@", kw);
+                NSLog(@"[ToolKit] Initialized successfully on window: %@", kw);
             } else {
-                NSLog(@"[ToolKit] No key window found — thu lai sau 2s");
-
-                // Thử lại sau 2 giây (game có thể chưa tạo window)
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
-                               dispatch_get_main_queue(), ^{
-                    UIWindow *kw2 = nil;
-                    for (UIWindow *w in UIApplication.sharedApplication.windows) {
-                        if (![w isKindOfClass:[ToolWindow class]]) {
-                            kw2 = w;
-                            break;
-                        }
-                    }
-                    if (kw2) {
-                        [[ToolGestureManager shared] attachToWindow:kw2];
-                        NSLog(@"[ToolKit] Gesture attached (retry) to %@", kw2);
-                    }
-                });
+                NSLog(@"[ToolKit] No valid window found during init");
             }
         } @catch (NSException *e) {
             NSLog(@"[ToolKit] libtool_init crash: %@", e);
