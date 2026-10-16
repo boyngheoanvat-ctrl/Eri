@@ -5,6 +5,7 @@
 #import <mach-o/nlist.h>
 #include <string.h>
 #include <stdio.h>
+#import <mach/mach.h>
 
 #pragma mark - Auto symbol finder
 
@@ -157,6 +158,13 @@ static void *find_sym(void *handle, const char *baseName) {
     typedef Il2CppDomain *(*fn_t)(void);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_domain_get");
     return fn ? fn() : NULL;
+}
+
+// Bổ sung cài đặt cho domain_get_assemblies:count:
+- (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(size_t *)count {
+    if (!domain) return NULL;
+    if (count) *count = domain->assembly_count;
+    return domain->assemblies;
 }
 
 - (Il2CppImage *)assembly_get_image:(Il2CppAssembly *)assembly {
@@ -322,6 +330,15 @@ static void *find_sym(void *handle, const char *baseName) {
     return m->token;
 }
 
+// Bổ sung cài đặt cho method_get_flags:
+- (uint32_t)method_get_flags:(MethodInfo *)m {
+    if (!m) return 0;
+    typedef uint32_t (*fn_t)(const MethodInfo *);
+    fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_method_get_flags");
+    if (fn) return fn(m);
+    return m->flags;
+}
+
 - (void *)method_get_pointer:(MethodInfo *)m {
     if (!m) return NULL;
     typedef void *(*fn_t)(const MethodInfo *);
@@ -389,6 +406,24 @@ static void *find_sym(void *handle, const char *baseName) {
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_type_get_name");
     if (fn) return fn(type);
     return NULL;
+}
+
+#pragma mark - Memory Operations (Bổ sung cho CHookVC)
+
++ (uintptr_t)getRealOffset:(uintptr_t)offset {
+    uintptr_t slide = _dyld_get_image_vmaddr_slide(0);
+    const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(0);
+    return (uintptr_t)header + slide + offset;
+}
+
++ (BOOL)writeInt32:(uintptr_t)address value:(int32_t)value {
+    mach_port_t task = mach_task_self();
+    vm_prot_t oldProt;
+    kern_return_t kr = vm_protect(task, (vm_address_t)address & ~(vm_page_size - 1), vm_page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+    if (kr != KERN_SUCCESS) return NO;
+    *(int32_t *)address = value;
+    vm_protect(task, (vm_address_t)address & ~(vm_page_size - 1), vm_page_size, FALSE, oldProt);
+    return YES;
 }
 
 @end
