@@ -4,7 +4,6 @@
 #import <mach-o/loader.h>
 #import <dlfcn.h>
 #import <mach/mach.h>
-#import <unistd.h>
 
 @implementation MemoryEditor
 
@@ -161,22 +160,9 @@
     NSData *data = [self dataForValue:value type:type];
     if (!data) return NO;
 
-    mach_port_t task = mach_task_self();
-    vm_address_t pageAddr = addr & ~(vm_page_size - 1);
-    vm_size_t pageSize = vm_page_size;
-    
-    vm_prot_t oldProt = 0;
-    boolean_t get_old = FALSE;
-    
-    // Cấp quyền Read/Write/Copy tạm thời để ghi đè an toàn
-    kern_return_t kr = vm_protect(task, pageAddr, pageSize, get_old, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-    if (kr != KERN_SUCCESS) {
-        kr = vm_write(task, addr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
-        return kr == KERN_SUCCESS;
-    }
-
-    kr = vm_write(task, addr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
-    vm_protect(task, pageAddr, pageSize, get_old, oldProt);
+    kern_return_t kr = vm_write(mach_task_self(), addr,
+                                 (vm_offset_t)data.bytes,
+                                 (mach_msg_type_number_t)data.length);
 
     return kr == KERN_SUCCESS;
 }
@@ -242,14 +228,37 @@ static BOOL g_isFreezeThreadRunning = NO;
                             MemValueType type = (MemValueType)[dict[@"type"] integerValue];
                             NSString *valueStr = dict[@"value"];
                             
-                            [[MemoryEditor shared] writeValue:valueStr at:address type:type];
+                            [[MemoryEditor shared] writeValueDirect:valueStr at:address type:type];
                         }
                     }
-                    usleep(50000); // Lặp lại việc ghi đè mỗi 50ms
+                    usleep(50000); // Quét và ghi đè liên tục mỗi 50ms
                 }
             }
         });
     }
+}
+
+- (BOOL)writeValueDirect:(NSString *)value at:(vm_address_t)addr type:(MemValueType)type {
+    NSData *data = [self dataForValue:value type:type];
+    if (!data) return NO;
+
+    mach_port_t task = mach_task_self();
+    vm_address_t pageAddr = addr & ~(vm_page_size - 1);
+    vm_size_t pageSize = vm_page_size;
+    
+    vm_prot_t oldProt = 0;
+    boolean_t get_old = FALSE;
+    
+    kern_return_t kr = vm_protect(task, pageAddr, pageSize, get_old, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+    if (kr != KERN_SUCCESS) {
+        kr = vm_write(task, addr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
+        return kr == KERN_SUCCESS;
+    }
+
+    kr = vm_write(task, addr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
+    vm_protect(task, pageAddr, pageSize, get_old, oldProt);
+
+    return kr == KERN_SUCCESS;
 }
 
 - (void)freezeAddress:(vm_address_t)addr value:(NSString *)value type:(MemValueType)type shouldFreeze:(BOOL)freeze {
