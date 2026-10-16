@@ -30,7 +30,7 @@
         self.scriptEditor.backgroundColor = [ToolTheme shared].surface;
         self.scriptEditor.textColor = [ToolTheme shared].textPrimary;
         self.scriptEditor.font = [[ToolTheme shared] monoFont:11];
-        self.scriptEditor.text = @"-- Nhập đoạn script Lua tại đây\nprint('Lua Engine Initialized via Ghidra RVA');";
+        self.scriptEditor.text = @"-- Nhập đoạn script Lua tại đây');";
         self.scriptEditor.layer.cornerRadius = 6;
         [self.view addSubview:self.scriptEditor];
         y += 120;
@@ -52,6 +52,14 @@
         self.consoleView.layer.cornerRadius = 6;
         self.consoleView.text = @"Lua Engine Ready.";
         [self.view addSubview:self.consoleView];
+    }
+}
+
+- (void)setScriptContent:(NSString *)content {
+    @autoreleasepool {
+        if (content) {
+            self.scriptEditor.text = content;
+        }
     }
 }
 
