@@ -1,136 +1,144 @@
 #import "ToolViewController.h"
 #import "ToolTheme.h"
-#import "AIChatVC.h"
+#import "ToolRailButton.h"
+#import "ESPVC.h"
 #import "DumperVC.h"
 #import "MemoryVC.h"
 #import "MethodCallerVC.h"
 #import "LuaVC.h"
-#import "ESPVC.h"
+#import "AIChatVC.h"
 
 @interface ToolViewController ()
-@property (nonatomic, strong) UIView *headerView;
-@property (nonatomic, strong) UIView *sidebarView;
-@property (nonatomic, strong) UIView *contentView;
-@property (nonatomic, strong) NSArray *tabButtons;
-@property (nonatomic, assign) NSInteger currentTabIndex;
-
-@property (nonatomic, strong) AIChatVC *aiVC;
-@property (nonatomic, strong) DumperVC *dumperVC;
-@property (nonatomic, strong) MemoryVC *memoryVC;
-@property (nonatomic, strong) MethodCallerVC *methodCallerVC;
-@property (nonatomic, strong) LuaVC *luaVC;
-@property (nonatomic, strong) ESPVC *espVC;
+@property (nonatomic, strong) UIView *contentArea;
+@property (nonatomic, strong) UIView *railView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) NSMutableArray<ToolRailButton *> *railButtons;
+@property (nonatomic, strong) NSArray<UIViewController *> *childViewControllersList;
+@property (nonatomic, assign) NSInteger currentIndex;
 @end
 
 @implementation ToolViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithRed:0.08 green:0.10 blue:0.14 alpha:0.95];
-    self.view.layer.cornerRadius = 12;
+    
+    // Thiết kế khung cửa sổ chính mang phong cách ImGui Window
+    self.view.backgroundColor = [ToolTheme shared].background;
+    self.view.layer.cornerRadius = 4.0; // Bo góc nhẹ đặc trưng ImGui
+    self.view.layer.borderWidth = 1.0;
+    self.view.layer.borderColor = [ToolTheme shared].border.CGColor;
     self.view.clipsToBounds = YES;
     
-    [self setupViewControllers];
-    [self setupLayout];
+    [self setupImGuiLayout];
 }
 
-- (void)setupViewControllers {
-    self.aiVC = [[AIChatVC alloc] init];
-    self.dumperVC = [[DumperVC alloc] init];
-    self.memoryVC = [[MemoryVC alloc] init];
-    self.methodCallerVC = [[MethodCallerVC alloc] init];
-    self.luaVC = [[LuaVC alloc] init];
-    self.espVC = [[ESPVC alloc] init];
-}
-
-- (void)setupLayout {
+- (void)setupImGuiLayout {
     CGFloat totalW = CGRectGetWidth(self.view.bounds);
     CGFloat totalH = CGRectGetHeight(self.view.bounds);
-    if (totalW <= 0) totalW = 500;
-    if (totalH <= 0) totalH = 320;
+    if (totalW <= 50) totalW = 550;
+    if (totalH <= 50) totalH = 340;
     
-    CGFloat headerH = 36;
-    CGFloat sidebarW = 72;
+    // 1. ImGui Title Bar (Thanh tiêu đề giả lập)
+    UIView *titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, 26)];
+    titleBar.backgroundColor = [ToolTheme shared].surfaceAlt;
+    titleBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
+    [self.view addSubview:titleBar];
     
-    self.headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, headerH)];
-    self.headerView.backgroundColor = [ToolTheme shared].surfaceAlt;
-    self.headerView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
-    [self.view addSubview:self.headerView];
+    self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 0, totalW - 20, 26)];
+    self.titleLabel.text = @"  Eri Nguyễn & Team - ImGui Mod Menu v2.0";
+    self.titleLabel.textColor = [ToolTheme shared].accent;
+    self.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
+    self.titleLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [titleBar addSubview:self.titleLabel];
     
-    UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 6, totalW - 24, 24)];
-    titleLbl.text = @"Mod By Eri Nguyễn (tad 3 ngón vào màn hình để hiện Menu Mod, tad 2 ngón vào màn hình để ẩn Menu Mod)";
-    titleLbl.textColor = [ToolTheme shared].textPrimary;
-    titleLbl.font = [[ToolTheme shared] monoBoldFont:11];
-    titleLbl.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.headerView addSubview:titleLbl];
+    // Đường viền dưới thanh tiêu đề
+    UIView *titleSep = [[UIView alloc] initWithFrame:CGRectMake(0, 25, totalW, 1)];
+    titleSep.backgroundColor = [ToolTheme shared].border;
+    titleSep.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [titleBar addSubview:titleSep];
     
-    self.sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, headerH, sidebarW, totalH - headerH)];
-    self.sidebarView.backgroundColor = [ToolTheme shared].surfaceAlt;
-    self.sidebarView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleRightMargin;
-    [self.view addSubview:self.sidebarView];
+    // 2. Navigation Rail (Cột nút chuyển tab bên trái chuẩn ImGui)
+    CGFloat railW = 90;
+    CGFloat railY = 26;
+    CGFloat railH = totalH - railY;
     
-    self.contentView = [[UIView alloc] initWithFrame:CGRectMake(sidebarW, headerH, totalW - sidebarW, totalH - headerH)];
-    self.contentView.backgroundColor = [UIColor clearColor];
-    self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:self.contentView];
+    self.railView = [[UIView alloc] initWithFrame:CGRectMake(0, railY, railW, railH)];
+    self.railView.backgroundColor = [ToolTheme shared].surface;
+    self.railView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleRightMargin;
+    [self.view addSubview:self.railView];
     
-    NSArray *titles = @[@"AI", @"Dump", @"Mem", @"Call", @"Lua", @"ESP"];
-    NSMutableArray *buttons = [NSMutableArray array];
+    UIView *railSep = [[UIView alloc] initWithFrame:CGRectMake(railW - 1, 0, 1, railH)];
+    railSep.backgroundColor = [ToolTheme shared].border;
+    railSep.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleLeftMargin;
+    [self.railView addSubview:railSep];
     
-    CGFloat btnH = 42;
-    CGFloat spacing = 6;
-    CGFloat startY = 8;
+    // 3. Content Area (Khu vực hiển thị nội dung tính năng)
+    CGFloat contentX = railW;
+    CGFloat contentY = railY;
+    CGFloat contentW = totalW - railW;
+    CGFloat contentH = railH;
     
-    for (int i = 0; i < titles.count; i++) {
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
-        btn.frame = CGRectMake(6, startY + (i * (btnH + spacing)), sidebarW - 12, btnH);
-        btn.backgroundColor = (i == 0) ? [ToolTheme shared].accent : [ToolTheme shared].surface;
+    self.contentArea = [[UIView alloc] initWithFrame:CGRectMake(contentX, contentY, contentW, contentH)];
+    self.contentArea.backgroundColor = [UIColor clearColor];
+    self.contentArea.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.view addSubview:self.contentArea];
+    
+    // 4. Khởi tạo các View Controllers cho từng Tab
+    self.childViewControllersList = @[
+        [[ESPVC alloc] init],
+        [[DumperVC alloc] init],
+        [[MemoryVC alloc] init],
+        [[MethodCallerVC alloc] init],
+        [[LuaVC alloc] init],
+        [[AIChatVC alloc] init]
+    ];
+    
+    NSArray *titles = @[@"ESP", @"Dump", @"Mem", @"Call", @"Lua", @"AI"];
+    self.railButtons = [NSMutableArray array];
+    
+    CGFloat btnH = 38;
+    CGFloat btnY = 8;
+    
+    for (NSInteger i = 0; i < titles.count; i++) {
+        ToolRailButton *btn = [[ToolRailButton alloc] initWithFrame:CGRectMake(6, btnY, railW - 12, btnH)];
         [btn setTitle:titles[i] forState:UIControlStateNormal];
-        [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        btn.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
-        btn.layer.cornerRadius = 6;
         btn.tag = i;
-        [btn addTarget:self action:@selector(didTapTabButton:) forControlEvents:UIControlEventTouchUpInside];
-        btn.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-        [self.sidebarView addSubview:btn];
-        [buttons addObject:btn];
+        [btn addTarget:self action:@selector(didSelectTab:) forControlEvents:UIControlEventTouchUpInside];
+        [self.railView addSubview:btn];
+        [self.railButtons addObject:btn];
+        
+        btnY += btnH + 6;
     }
-    self.tabButtons = buttons;
     
-    [self selectTab:0];
+    // Mặc định chọn tab đầu tiên (ESP)
+    [self switchTab:0];
 }
 
-- (void)didTapTabButton:(UIButton *)sender {
-    [self selectTab:sender.tag];
+- (void)didSelectTab:(ToolRailButton *)sender {
+    [self switchTab:sender.tag];
 }
 
-- (void)selectTab:(NSInteger)index {
-    self.currentTabIndex = index;
+- (void)switchTab:(NSInteger)index {
+    if (index < 0 || index >= self.childViewControllersList.count) return;
+    self.currentIndex = index;
     
-    for (int i = 0; i < self.tabButtons.count; i++) {
-        UIButton *b = self.tabButtons[i];
-        b.backgroundColor = (i == index) ? [ToolTheme shared].accent : [ToolTheme shared].surface;
+    // Cập nhật trạng thái active cho các nút trên Rail
+    for (NSInteger i = 0; i < self.railButtons.count; i++) {
+        self.railButtons[i].selected = (i == index);
     }
     
-    for (UIView *sub in self.contentView.subviews) {
-        [sub removeFromSuperview];
+    // Xóa view cũ trong content area an toàn
+    for (UIView *subview in self.contentArea.subviews) {
+        [subview removeFromSuperview];
     }
     
-    UIViewController *targetVC = nil;
-    switch (index) {
-        case 0: targetVC = self.aiVC; break;
-        case 1: targetVC = self.dumperVC; break;
-        case 2: targetVC = self.memoryVC; break;
-        case 3: targetVC = self.methodCallerVC; break;
-        case 4: targetVC = self.luaVC; break;
-        case 5: targetVC = self.espVC; break;
-        default: targetVC = self.aiVC; break;
-    }
+    // Load view controller tương ứng
+    UIViewController *targetVC = self.childViewControllersList[index];
+    targetVC.view.frame = self.contentArea.bounds;
+    targetVC.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     
     [self addChildViewController:targetVC];
-    targetVC.view.frame = self.contentView.bounds;
-    targetVC.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.contentView addSubview:targetVC.view];
+    [self.contentArea addSubview:targetVC.view];
     [targetVC didMoveToParentViewController:self];
     
     if ([targetVC respondsToSelector:@selector(reload)]) {
@@ -138,12 +146,11 @@
     }
 }
 
-- (void)reload {
-    if ([self isViewLoaded] && self.contentView.subviews.count > 0) {
-        UIViewController *currentVC = self.childViewControllers.lastObject;
-        if (currentVC && [currentVC respondsToSelector:@selector(reload)]) {
-            [currentVC performSelector:@selector(reload)];
-        }
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    if (self.childViewControllersList.count > 0 && self.currentIndex < self.childViewControllersList.count) {
+        UIViewController *currentVC = self.childViewControllersList[self.currentIndex];
+        currentVC.view.frame = self.contentArea.bounds;
     }
 }
 
