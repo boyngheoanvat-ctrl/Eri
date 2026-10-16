@@ -12,6 +12,7 @@
 @property (nonatomic, strong) UIView *contentArea;
 @property (nonatomic, strong) UIView *topTabBar;
 @property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UIView *resizeHandle; // Nút góc phải dưới để kéo to nhỏ
 @property (nonatomic, strong) NSMutableArray<UIButton *> *tabButtons;
 @property (nonatomic, strong) NSArray<UIViewController *> *childViewControllersList;
 @property (nonatomic, assign) NSInteger currentIndex;
@@ -22,9 +23,9 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    // Thiết kế khung cửa sổ chính mang phong cách ImGui Window chuẩn mod menu
+    // Thiết kế khung cửa sổ chính mang phong cách ImGui Window
     self.view.backgroundColor = [ToolTheme shared].background;
-    self.view.layer.cornerRadius = 4.0;
+    self.view.layer.cornerRadius = 6.0;
     self.view.layer.borderWidth = 1.0;
     self.view.layer.borderColor = [ToolTheme shared].border.CGColor;
     self.view.clipsToBounds = YES;
@@ -38,11 +39,14 @@
     if (totalW <= 50) totalW = 600;
     if (totalH <= 50) totalH = 360;
     
-    // 1. ImGui Title Bar (Thanh tiêu đề trên cùng)
+    // 1. ImGui Title Bar (Thanh tiêu đề trên cùng - Cho phép kéo di chuyển cửa sổ)
     UIView *titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, 26)];
     titleBar.backgroundColor = [ToolTheme shared].surfaceAlt;
     titleBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:titleBar];
+    
+    UIPanGestureRecognizer *moveGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleWindowPan:)];
+    [titleBar addGestureRecognizer:moveGesture];
     
     self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 0, totalW - 20, 26)];
     self.titleLabel.text = @"  IL2CPP Tool v1.1.23 [ BY @Eri Nguyễn, F4CK CHEAT ]";
@@ -56,7 +60,7 @@
     titleSep.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [titleBar addSubview:titleSep];
     
-    // 2. Horizontal Top Tab Bar (Thanh tab ngang bên dưới thanh tiêu đề - Giống mẫu yêu cầu)
+    // 2. Horizontal Top Tab Bar (Thanh tab ngang ở đỉnh)
     CGFloat tabBarH = 32;
     CGFloat tabBarY = 26;
     
@@ -70,7 +74,7 @@
     tabSep.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.topTabBar addSubview:tabSep];
     
-    // 3. Content Area (Vùng hiển thị nội dung các tab chiếm trọn phần bên dưới)
+    // 3. Content Area (Vùng hiển thị nội dung các tab)
     CGFloat contentY = tabBarY + tabBarH;
     CGFloat contentH = totalH - contentY;
     
@@ -79,18 +83,17 @@
     self.contentArea.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.contentArea];
     
-    // 4. Khởi tạo danh sách các Tab VC tương ứng
+    // 4. Khởi tạo danh sách các Tab VC
     self.childViewControllersList = @[
-        [[ESPVC alloc] init],        // Tools / ESP
-        [[DumperVC alloc] init],     // Dumper
-        [[MemoryVC alloc] init],     // Memory
-        [[MethodCallerVC alloc] init], // Call
-        [[LuaVC alloc] init],        // Scripting (Lua)
-        [[AIChatVC alloc] init],     // AI Chat
-        [[CHookVC alloc] init]       // C++ Script & Hook
+        [[ESPVC alloc] init],
+        [[DumperVC alloc] init],
+        [[MemoryVC alloc] init],
+        [[MethodCallerVC alloc] init],
+        [[LuaVC alloc] init],
+        [[AIChatVC alloc] init],
+        [[CHookVC alloc] init]
     ];
     
-    // Danh sách tiêu đề các tab ngang nằm ở đỉnh giống hệt ảnh mẫu
     NSArray *titles = @[@"Tools", @"Dumper", @"Memory", @"Call", @"Scripting", @"AI", @"C++"];
     self.tabButtons = [NSMutableArray array];
     
@@ -99,19 +102,15 @@
     CGFloat btnY = 4;
     
     for (NSInteger i = 0; i < titles.count; i++) {
-        // Tính toán chiều rộng tự động dựa vào độ dài chữ của tiêu đề tab
         NSString *title = titles[i];
         CGFloat btnW = [title sizeWithAttributes:@{NSFontAttributeName: [[ToolTheme shared] monoBoldFont:11]}].width + 20;
-        if (btnW < 60) btnW = 60; // Đảm bảo chiều rộng tối thiểu
+        if (btnW < 60) btnW = 60;
         
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
         btn.frame = CGRectMake(startX, btnY, btnW, btnH);
         [btn setTitle:title forState:UIControlStateNormal];
         btn.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
-        [btn setTitleColor:[ToolTheme shared].textSecondary forState:UIControlStateNormal];
-        [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateSelected];
         
-        // Hiệu ứng màu nền dạng ImGui button cho tab
         btn.backgroundColor = [ToolTheme shared].surfaceAlt;
         btn.layer.cornerRadius = 3;
         btn.layer.borderWidth = 1;
@@ -125,8 +124,48 @@
         startX += btnW + 6;
     }
     
-    // Mặc định chọn tab đầu tiên
+    // 5. Thêm Resize Handle (Nút góc phải dưới để kéo to nhỏ cửa sổ)
+    self.resizeHandle = [[UIView alloc] initWithFrame:CGRectMake(totalW - 20, totalH - 20, 20, 20)];
+    self.resizeHandle.backgroundColor = [UIColor clearColor];
+    self.resizeHandle.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin;
+    
+    // Vẽ các sọc nhỏ đặc trưng của góc kéo ImGui
+    for (int i = 0; i < 3; i++) {
+        UIView *line = [[UIView alloc] initWithFrame:CGRectMake(14 - (i * 5), 18 - (i * 5), 4 + (i * 5), 2)];
+        line.backgroundColor = [ToolTheme shared].textSecondary;
+        line.alpha = 0.6;
+        [self.resizeHandle addSubview:line];
+    }
+    
+    UIPanGestureRecognizer *resizeGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleResizePan:)];
+    [self.resizeHandle addGestureRecognizer:resizeGesture];
+    [self.view addSubview:self.resizeHandle];
+    
     [self selectTab:0];
+}
+
+// Cử chỉ kéo di chuyển vị trí cửa sổ
+- (void)handleWindowPan:(UIPanGestureRecognizer *)gesture {
+    CGPoint translation = [gesture translationInView:self.view.superview];
+    CGPoint center = self.view.center;
+    self.view.center = CGPointMake(center.x + translation.x, center.y + translation.y);
+    [gesture setTranslation:CGPointZero inView:self.view.superview];
+}
+
+// Cử chỉ kéo thay đổi kích thước to nhỏ (Resize) từ góc phải dưới
+- (void)handleResizePan:(UIPanGestureRecognizer *)gesture {
+    CGPoint translation = [gesture translationInView:self.view];
+    CGRect frame = self.view.frame;
+    
+    CGFloat newWidth = frame.size.width + translation.x;
+    CGFloat newHeight = frame.size.height + translation.y;
+    
+    // Giới hạn kích thước tối thiểu để không bị bóp méo giao diện
+    if (newWidth < 400) newWidth = 400;
+    if (newHeight < 250) newHeight = 250;
+    
+    self.view.frame = CGRectMake(frame.origin.x, frame.origin.y, newWidth, newHeight);
+    [gesture setTranslation:CGPointZero inView:self.view];
 }
 
 - (void)didSelectTab:(UIButton *)sender {
@@ -137,7 +176,6 @@
     if (index < 0 || index >= self.childViewControllersList.count) return;
     self.currentIndex = index;
     
-    // Cập nhật trạng thái Active/Selected cho các nút tab ngang
     for (NSInteger i = 0; i < self.tabButtons.count; i++) {
         UIButton *btn = self.tabButtons[i];
         BOOL isSelected = (i == index);
@@ -153,7 +191,6 @@
         }
     }
     
-    // Xóa view cũ và gắn view của tab được chọn vào contentArea
     for (UIView *subview in self.contentArea.subviews) {
         [subview removeFromSuperview];
     }
