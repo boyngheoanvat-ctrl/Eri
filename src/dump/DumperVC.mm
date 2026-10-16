@@ -154,7 +154,6 @@
 #pragma mark - Stealth / Hidden IL2CPP Unmasking
 
 - (uint64_t)resolveHiddenIl2cppBase {
-    // Duyệt qua toàn bộ image kể cả khi bị đổi tên, ẩn hoặc mã hóa segment
     uint32_t imageCount = _dyld_image_count();
     for (uint32_t i = 0; i < imageCount; i++) {
         const char *name = _dyld_get_image_name(i);
@@ -170,31 +169,6 @@
                 return (uint64_t)((uintptr_t)header + slide);
             }
         }
-    }
-    
-    // Fallback chuẩn 64-bit sử dụng vm_region_64 để tránh lỗi undefined symbol
-    mach_port_t task = mach_task_self();
-    vm_address_t address = 0;
-    vm_size_t size = 0;
-    mach_msg_type_number_t infoCount = VM_REGION_BASIC_INFO_COUNT_64;
-    vm_region_basic_info_data_64_t info;
-    mach_port_t object_name = MACH_PORT_NULL;
-    
-    while (1) {
-        infoCount = VM_REGION_BASIC_INFO_COUNT_64;
-        kern_return_t kr = vm_region_64(task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &infoCount, &object_name);
-        if (kr != KERN_SUCCESS) break;
-        
-        if (size > 0x10000) {
-            @try {
-                uint32_t *magicPtr = (uint32_t *)address;
-                if (*magicPtr == MH_MAGIC_64) {
-                    return (uint64_t)address;
-                }
-            } @catch (NSException *e) {}
-        }
-        address += size;
-        if (address >= 0x7FFFFFFFFFFF) break;
     }
     return 0;
 }
@@ -267,9 +241,12 @@
             }
             [ws dbg:[NSString stringWithFormat:@"base = 0x%llX", il2cppBase]];
 
+            // AN TOÀN: Attach thread trước khi gọi hàm IL2CPP để tránh crash văng game
+            [r attachCurrentThread];
+
             Il2CppDomain *domain = [r domain_get];
             if (!domain) {
-                fail(@"Loi: No domain (Protected/Hidden)");
+                fail(@"Loi: No domain (Protected/Hidden hoặc chưa load xong)");
                 return;
             }
             [ws dbg:@"STEP 3: domain OK"];
@@ -278,11 +255,11 @@
             const Il2CppAssembly **assemblies = [r domain_get_assemblies:domain count:&asmCount];
 
             if (!assemblies || asmCount == 0) {
-                if (domain->assembly_count > 0 && domain->assemblies) {
+                if (domain && domain->assembly_count > 0 && domain->assemblies) {
                     assemblies = (const Il2CppAssembly **)domain->assemblies;
                     asmCount = domain->assembly_count;
                 } else {
-                    fail(@"Loi: Khong co assembly");
+                    fail(@"Loi: Khong co assembly hoac game chua khoi tao xong");
                     return;
                 }
             }
@@ -322,7 +299,7 @@
             for (int a = 0; a < maxAssemblies; a++) {
                 @autoreleasepool {
                     @try {
-                        Il2CppAssembly *asm_ = (Il2CppAssembly *)assemblies[a];
+                        const Il2CppAssembly *asm_ = assemblies[a];
                         if (!asm_) continue;
 
                         Il2CppImage *image = [r assembly_get_image:asm_];
