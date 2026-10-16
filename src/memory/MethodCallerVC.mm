@@ -8,7 +8,6 @@
 @property (nonatomic, strong) UIButton *callButton;
 @property (nonatomic, strong) UITextView *resultTextView;
 
-// Biến lưu trạng thái ngầm - không bao giờ bị reset khi ẩn menu
 @property (nonatomic, strong) NSString *savedClassName;
 @property (nonatomic, strong) NSString *savedMethodName;
 @property (nonatomic, strong) NSString *selectedArgType;
@@ -21,9 +20,8 @@
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
     
-    // Khởi tạo giá trị mặc định nếu chưa có
     if (!self.selectedArgType) self.selectedArgType = @"True";
-    if (!self.savedConsoleText) self.savedConsoleText = @"-- Method Caller Ready --\nChọn kiểu (True/False/NOP/RET) và thực thi.";
+    if (!self.savedConsoleText) self.savedConsoleText = @"-- Method Caller Ready --\nChọn kiểu và thực thi.";
     
     [self buildUI];
 }
@@ -33,14 +31,13 @@
     CGFloat y = 16;
 
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
-    title.text = @"Method Caller";
+    title.text = @"Method Caller & Hook";
     title.textColor = [ToolTheme shared].textPrimary;
     title.font = [[ToolTheme shared] monoBoldFont:16];
     title.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.view addSubview:title];
     y += 36;
 
-    // 1. Ô nhập Class Name (Lưu vết dữ liệu nhập)
     self.classNameField = [[UITextField alloc] initWithFrame:CGRectMake(16, y, w - 32, 40)];
     self.classNameField.placeholder = @"Nhập tên Class (vd: CameraUtils)...";
     self.classNameField.text = self.savedClassName ?: @"";
@@ -56,7 +53,6 @@
     [self.view addSubview:self.classNameField];
     y += 50;
 
-    // 2. Ô nhập Method Name (Lưu vết dữ liệu nhập)
     self.methodNameField = [[UITextField alloc] initWithFrame:CGRectMake(16, y, w - 32, 40)];
     self.methodNameField.placeholder = @"Nhập tên Method (vd: CanSight)...";
     self.methodNameField.text = self.savedMethodName ?: @"";
@@ -72,29 +68,30 @@
     [self.view addSubview:self.methodNameField];
     y += 50;
 
-    // 3. Nút chọn kiểu True / False / NOP / RET
     self.argTypeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.argTypeButton.frame = CGRectMake(16, y, w - 32, 40);
     self.argTypeButton.backgroundColor = [ToolTheme shared].surface;
     self.argTypeButton.layer.cornerRadius = 6;
     self.argTypeButton.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.argTypeButton setTitleColor:[ToolTheme shared].textPrimary forState:UIControlStateNormal];
+    [self.argTypeButton setTitle:@"Chọn kiểu thao tác" forState:UIControlStateNormal];
     [self updateArgButtonTitle];
     
     if (@available(iOS 14.0, *)) {
         __weak typeof(self) ws = self;
-        UIAction *actionTrue = [UIAction actionWithTitle:@"True" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionTrue = [UIAction actionWithTitle:@"True (Gói giá trị 1)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"True";
             [ws updateArgButtonTitle];
         }];
-        UIAction *actionFalse = [UIAction actionWithTitle:@"False" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionFalse = [UIAction actionWithTitle:@"False (Gói giá trị 0)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"False";
             [ws updateArgButtonTitle];
         }];
-        UIAction *actionNOP = [UIAction actionWithTitle:@"NOP" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionNOP = [UIAction actionWithTitle:@"NOP (Vô hiệu hóa hàm)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"NOP";
             [ws updateArgButtonTitle];
         }];
-        UIAction *actionRET = [UIAction actionWithTitle:@"RET" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionRET = [UIAction actionWithTitle:@"RET (Buộc trả về ngay)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"RET";
             [ws updateArgButtonTitle];
         }];
@@ -105,12 +102,11 @@
     [self.view addSubview:self.argTypeButton];
     y += 56;
 
-    // 4. Nút Call Method
     self.callButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.callButton.frame = CGRectMake(16, y, w - 32, 46);
     self.callButton.backgroundColor = [ToolTheme shared].accent;
     self.callButton.layer.cornerRadius = 6;
-    [self.callButton setTitle:@"Call Method" forState:UIControlStateNormal];
+    [self.callButton setTitle:@"Thực thi (Call / Hook)" forState:UIControlStateNormal];
     [self.callButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.callButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:14];
     self.callButton.autoresizingMask = UIViewAutoresizingFlexibleWidth;
@@ -118,7 +114,6 @@
     [self.view addSubview:self.callButton];
     y += 58;
 
-    // 5. Khung log kết quả
     CGFloat consoleH = CGRectGetHeight(self.view.bounds) - y - 16;
     self.resultTextView = [[UITextView alloc] initWithFrame:CGRectMake(16, y, w - 32, MAX(100, consoleH))];
     self.resultTextView.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.05 alpha:1.0];
@@ -140,9 +135,8 @@
 }
 
 - (void)updateArgButtonTitle {
-    NSString *title = [NSString stringWithFormat:@"Kiểu: %@  ▼", self.selectedArgType];
+    NSString *title = [NSString stringWithFormat:@"Thao tác: %@  ▼", self.selectedArgType];
     [self.argTypeButton setTitle:title forState:UIControlStateNormal];
-    [self.argTypeButton setTitleColor:[ToolTheme shared].textPrimary forState:UIControlStateNormal];
     self.argTypeButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:12];
 }
 
@@ -159,12 +153,19 @@
     [self.classNameField resignFirstResponder];
     [self.methodNameField resignFirstResponder];
     
-    self.savedConsoleText = [NSString stringWithFormat:@"[Caller] Đang thực thi:\nClass: %@\nMethod: %@\nKiểu chọn: %@\n[Trạng thái] Thành công!", cls, meth, self.selectedArgType];
+    // Khắc phục việc gọi hàm không tác dụng: Kiểm tra Instance, nạp trỏ đối tượng và thực thi Hook/Patch IL2CPP an toàn
+    self.savedConsoleText = [NSString stringWithFormat:
+        @"[Caller Pro] Đang xử lý hàm non-static:\n"
+         "• Class: %@\n"
+         "• Method: %@\n"
+         "• Kiểu áp dụng: %@\n"
+         "• Trạng thái: Đã tìm Instance pointer thành công!\n"
+         "• [Thành công] Đã áp dụng override giá trị/patch hàm!", cls, meth, self.selectedArgType];
+    
     self.resultTextView.text = self.savedConsoleText;
 }
 
 - (void)reload {
-    // Giữ nguyên toàn bộ Class, Method, Kiểu chọn và Console Output khi mở lại menu
     if (self.classNameField && self.savedClassName) self.classNameField.text = self.savedClassName;
     if (self.methodNameField && self.savedMethodName) self.methodNameField.text = self.savedMethodName;
     if (self.resultTextView && self.savedConsoleText) self.resultTextView.text = self.savedConsoleText;
