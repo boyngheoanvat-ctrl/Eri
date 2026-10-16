@@ -102,7 +102,7 @@ struct Il2CppClass {
 - (void)attachCurrentThread;
 
 - (Il2CppDomain *)domain_get;
-- (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(size_t *)count; // Bổ sung
+- (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(size_t *)count;
 - (Il2CppImage  *)assembly_get_image:(Il2CppAssembly *)assembly;
 - (const char   *)image_get_name:(Il2CppImage *)image;
 - (size_t        )image_get_class_count:(Il2CppImage *)image;
@@ -119,7 +119,7 @@ struct Il2CppClass {
 
 - (const char *)method_get_name:(MethodInfo *)m;
 - (uint32_t   )method_get_token:(MethodInfo *)m;
-- (uint32_t   )method_get_flags:(MethodInfo *)m; // Bổ sung
+- (uint32_t   )method_get_flags:(MethodInfo *)m;
 - (void      *)method_get_pointer:(MethodInfo *)m;
 - (const char *)method_get_return_type:(MethodInfo *)method;
 
