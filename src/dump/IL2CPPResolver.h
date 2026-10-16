@@ -44,7 +44,6 @@ struct Il2CppDomain {
 // Domain
 - (Il2CppDomain *)domain_get;
 - (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(size_t *)count;
-- (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(int *)count; // Bổ sung tương thích int*
 
 // Image
 - (Il2CppImage  *)assembly_get_image:(Il2CppAssembly *)assembly;
