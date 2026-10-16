@@ -6,7 +6,7 @@
 
 @interface AIChatCell : UITableViewCell
 @property (nonatomic, strong) UILabel *contentLbl;
-@property (nonatomic, strong) UIButton *copyButton;
+@property (nonatomic, strong) UIButton *actionCopyButton;
 @property (nonatomic, copy) void (^onCopyBlock)(void);
 @end
 
@@ -22,14 +22,14 @@
         self.contentLbl.font = [[ToolTheme shared] monoFont:11];
         [self.contentView addSubview:self.contentLbl];
 
-        self.copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        [self.copyButton setTitle:@"Copy" forState:UIControlStateNormal];
-        [self.copyButton setTitleColor:[ToolTheme shared].accent forState:UIControlStateNormal];
-        self.copyButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:10];
-        self.copyButton.backgroundColor = [ToolTheme shared].surfaceAlt;
-        self.copyButton.layer.cornerRadius = 4;
-        [self.copyButton addTarget:self action:@selector(didTapCopy) forControlEvents:UIControlEventTouchUpInside];
-        [self.contentView addSubview:self.copyButton];
+        self.actionCopyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        [self.actionCopyButton setTitle:@"Copy" forState:UIControlStateNormal];
+        [self.actionCopyButton setTitleColor:[ToolTheme shared].accent forState:UIControlStateNormal];
+        self.actionCopyButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:10];
+        self.actionCopyButton.backgroundColor = [ToolTheme shared].surfaceAlt;
+        self.actionCopyButton.layer.cornerRadius = 4;
+        [self.actionCopyButton addTarget:self action:@selector(didTapCopy) forControlEvents:UIControlEventTouchUpInside];
+        [self.contentView addSubview:self.actionCopyButton];
     }
     return self;
 }
@@ -49,10 +49,10 @@
     self.contentLbl.frame = CGRectMake(padding, 8, maxW, size.height);
 
     if ([role isEqualToString:@"assistant"]) {
-        self.copyButton.hidden = NO;
-        self.copyButton.frame = CGRectMake(width - 70 - padding, 8 + size.height + 4, 60, 24);
+        self.actionCopyButton.hidden = NO;
+        self.actionCopyButton.frame = CGRectMake(width - 70 - padding, 8 + size.height + 4, 60, 24);
     } else {
-        self.copyButton.hidden = YES;
+        self.actionCopyButton.hidden = YES;
     }
 }
 @end
@@ -73,7 +73,7 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.messages) {
         self.messages = [NSMutableArray arrayWithArray:@[
-            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!!"}
+            @{@"role": @"assistant", @"content": @"[AI & Ghidra Suite Ready] Chào ngài, hệ thống phân tích tĩnh RVA đã sẵn sàng."}
         ]];
     }
     [self buildUI];
@@ -101,7 +101,7 @@
         [self.view addSubview:self.bottomBar];
 
         self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 10, w - 90, 40)];
-        self.inputField.placeholder = @"Nhập câu hỏi ở đây";
+        self.inputField.placeholder = @"Nhập câu lệnh hỏi AI hoặc RVA...";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
         self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -130,14 +130,14 @@
         [self.inputField resignFirstResponder];
         self.inputField.text = @"";
         [self.messages addObject:@{@"role": @"user", @"content": text}];
-        [self.messages addObject:@{@"role": @"assistant", @"content": @"[Đang phân tích...]"}];
+        [self.messages addObject:@{@"role": @"assistant", @"content": @"[Đang phân tích Ghidra RVA...]"}];
         [self.tableView reloadData];
         [self scrollToBottom];
         self.isWaitingResponse = YES;
 
         NSMutableArray *apiMessages = [NSMutableArray array];
         for (NSDictionary *m in self.messages) {
-            if ([m[@"content"] isEqualToString:@"[Đang phân tích...]"]) continue;
+            if ([m[@"content"] isEqualToString:@"[Đang phân tích Ghidra RVA...]"]) continue;
             [apiMessages addObject:@{@"role": m[@"role"], @"content": m[@"content"]}];
         }
         [[AIProvider shared] sendMessages:apiMessages tools:@[] delegate:self];
