@@ -1,6 +1,6 @@
 #import <UIKit/UIKit.h>
 #import "ESPClassFinder.h"
-
+ 
 @interface ESPOverlay : NSObject
 
 @property (nonatomic, assign) BOOL enabled;
