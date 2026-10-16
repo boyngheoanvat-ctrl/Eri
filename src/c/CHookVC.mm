@@ -1,4 +1,5 @@
 #import "CHookVC.h"
+#import "IL2CPPResolver.h"
 
 @interface CHookVC ()
 @end
@@ -83,7 +84,7 @@
     if (index == 0) {
         self.codeTextView.text = @"// C++ Function Hook Template\n#include <substrate.h>\n\nbool (*old_IsFogOfWarEnabled)(void *instance);\nbool hk_IsFogOfWarEnabled(void *instance) {\n    if (!instance) return true;\n    return false; // Map Hack\n}\n\nvoid initHook() {\n    MSHookFunction((void*)getRealOffset(0x1F4A80), (void*)hk_IsFogOfWarEnabled, (void**)&old_IsFogOfWarEnabled);\n}";
     } else if (index == 1) {
-        self.codeTextView.text = @"// Memory Hex Patch Template\nvoid patchMemory() {\n    // Ghi đè trực tiếp giá trị vào offset game\n    writeHex(0x1F4A80, \"C0 03 5F D6\");\n}";
+        self.codeTextView.text = @"// Memory Hex Patch Template\nvoid patchMemory() {\n    writeHex(0x1F4A80, \"C0 03 5F D6\");\n}";
     } else {
         self.codeTextView.text = @"// Memory Scan & Read Template\nvoid scanMemory() {\n    uintptr_t base = getRealOffset(0x0);\n    NSLog(@\"Base Address: %p\", (void*)base);\n}";
     }
@@ -104,10 +105,9 @@
     NSString *code = self.codeTextView.text;
     if (code.length == 0) return;
     
-    [self appendConsole:[NSString stringWithFormat:@"> Đang thực thi và patch mã C++ vào tiến trình game..."]];
+    [self appendConsole:@"> Đang thực thi và patch mã C++ vào tiến trình game..."];
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // Thực thi can thiệp thật qua IL2CPPResolver / vm_write
         uintptr_t targetOffset = [IL2CPPResolver getRealOffset:0x1F4A80];
         [IL2CPPResolver writeInt32:targetOffset value:999];
         
