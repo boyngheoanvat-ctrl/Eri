@@ -39,6 +39,7 @@ struct FieldInfo {
     Il2CppClass *parent;
     int32_t      offset;
     uint32_t     token;
+    uint32_t     flags;
 };
 
 struct PropertyInfo {
@@ -90,6 +91,7 @@ struct Il2CppClass {
     uint16_t       field_count;
     uint16_t       event_count;
     uint16_t       nested_type_count;
+    uint32_t       flags;
 };
 
 @interface IL2CPPResolver : NSObject
@@ -98,17 +100,23 @@ struct Il2CppClass {
 
 - (BOOL)resolve;
 - (BOOL)isResolved;
+- (uint64_t)il2cppBase;
 
 - (void)attachCurrentThread;
 
 - (Il2CppDomain *)domain_get;
-- (Il2CppImage  *)assembly_get_image:(Il2CppAssembly *)assembly;
+- (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(int *)count;
+- (Il2CppImage  *)assembly_get_image:(const Il2CppAssembly *)assembly;
 - (const char   *)image_get_name:(Il2CppImage *)image;
 - (size_t        )image_get_class_count:(Il2CppImage *)image;
 - (Il2CppClass  *)image_get_class:(Il2CppImage *)image index:(size_t)index;
 
 - (const char   *)class_get_name:(Il2CppClass *)k;
 - (const char   *)class_get_namespace:(Il2CppClass *)k;
+- (uint32_t     )class_get_flags:(Il2CppClass *)klass;
+- (BOOL         )class_is_enum:(Il2CppClass *)klass;
+- (BOOL         )class_is_valuetype:(Il2CppClass *)klass;
+- (BOOL         )class_is_interface:(Il2CppClass *)klass;
 - (Il2CppClass  *)class_get_parent:(Il2CppClass *)klass;
 - (void         *)class_get_static_field_data:(Il2CppClass *)klass;
 
@@ -118,16 +126,30 @@ struct Il2CppClass {
 
 - (const char *)method_get_name:(MethodInfo *)m;
 - (uint32_t   )method_get_token:(MethodInfo *)m;
+- (uint32_t   )method_get_flags:(MethodInfo *)m;
 - (void      *)method_get_pointer:(MethodInfo *)m;
 - (const char *)method_get_return_type:(MethodInfo *)method;
+- (uint32_t   )method_get_param_count:(MethodInfo *)method;
+- (const char *)method_get_param_type_name:(MethodInfo *)method index:(uint32_t)index;
+- (const char *)method_get_param_name:(MethodInfo *)method index:(uint32_t)index;
 
 - (const char *)field_get_name:(FieldInfo *)f;
 - (int32_t    )field_get_offset:(FieldInfo *)f;
 - (uint32_t   )field_get_token:(FieldInfo *)f;
+- (uint32_t   )field_get_flags:(FieldInfo *)f;
 - (const char *)field_get_type_name:(FieldInfo *)field;
 
 - (const char *)property_get_name:(PropertyInfo *)p;
+- (MethodInfo *)property_get_get_method:(PropertyInfo *)p;
+- (MethodInfo *)property_get_set_method:(PropertyInfo *)p;
 
 - (const char *)type_get_name:(Il2CppType *)type;
+
+// Giao diện ghi đè bộ nhớ trực tiếp (Memory Operations & Offsets)
++ (uintptr_t)getRealOffset:(uintptr_t)offset;
++ (BOOL)writeFloat:(uintptr_t)address value:(float)value;
++ (BOOL)writeInt32:(uintptr_t)address value:(int32_t)value;
++ (float)readFloat:(uintptr_t)address;
++ (int32_t)readInt32:(uintptr_t)address;
 
 @end
