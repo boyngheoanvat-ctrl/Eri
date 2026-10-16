@@ -12,7 +12,7 @@
 @property (nonatomic, strong) UIView *contentArea;
 @property (nonatomic, strong) UIView *topTabBar;
 @property (nonatomic, strong) UILabel *titleLabel;
-@property (nonatomic, strong) UIView *resizeHandle; // Nút góc phải dưới để kéo to nhỏ
+@property (nonatomic, strong) UIView *resizeHandle;
 @property (nonatomic, strong) NSMutableArray<UIButton *> *tabButtons;
 @property (nonatomic, strong) NSArray<UIViewController *> *childViewControllersList;
 @property (nonatomic, assign) NSInteger currentIndex;
@@ -23,7 +23,6 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    // Thiết kế khung cửa sổ chính mang phong cách ImGui Window
     self.view.backgroundColor = [ToolTheme shared].background;
     self.view.layer.cornerRadius = 6.0;
     self.view.layer.borderWidth = 1.0;
@@ -39,7 +38,7 @@
     if (totalW <= 50) totalW = 600;
     if (totalH <= 50) totalH = 360;
     
-    // 1. ImGui Title Bar (Thanh tiêu đề trên cùng - Cho phép kéo di chuyển cửa sổ)
+    // 1. Title Bar (Kéo di chuyển cửa sổ)
     UIView *titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, 26)];
     titleBar.backgroundColor = [ToolTheme shared].surfaceAlt;
     titleBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
@@ -60,7 +59,7 @@
     titleSep.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [titleBar addSubview:titleSep];
     
-    // 2. Horizontal Top Tab Bar (Thanh tab ngang ở đỉnh)
+    // 2. Top Tab Bar (Menu ngang ở đỉnh)
     CGFloat tabBarH = 32;
     CGFloat tabBarY = 26;
     
@@ -74,7 +73,7 @@
     tabSep.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.topTabBar addSubview:tabSep];
     
-    // 3. Content Area (Vùng hiển thị nội dung các tab)
+    // 3. Content Area
     CGFloat contentY = tabBarY + tabBarH;
     CGFloat contentH = totalH - contentY;
     
@@ -124,12 +123,11 @@
         startX += btnW + 6;
     }
     
-    // 5. Thêm Resize Handle (Nút góc phải dưới để kéo to nhỏ cửa sổ)
+    // 5. Resize Handle (Góc phải dưới để kéo to nhỏ cửa sổ)
     self.resizeHandle = [[UIView alloc] initWithFrame:CGRectMake(totalW - 20, totalH - 20, 20, 20)];
     self.resizeHandle.backgroundColor = [UIColor clearColor];
     self.resizeHandle.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin;
     
-    // Vẽ các sọc nhỏ đặc trưng của góc kéo ImGui
     for (int i = 0; i < 3; i++) {
         UIView *line = [[UIView alloc] initWithFrame:CGRectMake(14 - (i * 5), 18 - (i * 5), 4 + (i * 5), 2)];
         line.backgroundColor = [ToolTheme shared].textSecondary;
@@ -144,7 +142,6 @@
     [self selectTab:0];
 }
 
-// Cử chỉ kéo di chuyển vị trí cửa sổ
 - (void)handleWindowPan:(UIPanGestureRecognizer *)gesture {
     CGPoint translation = [gesture translationInView:self.view.superview];
     CGPoint center = self.view.center;
@@ -152,7 +149,6 @@
     [gesture setTranslation:CGPointZero inView:self.view.superview];
 }
 
-// Cử chỉ kéo thay đổi kích thước to nhỏ (Resize) từ góc phải dưới
 - (void)handleResizePan:(UIPanGestureRecognizer *)gesture {
     CGPoint translation = [gesture translationInView:self.view];
     CGRect frame = self.view.frame;
@@ -160,7 +156,6 @@
     CGFloat newWidth = frame.size.width + translation.x;
     CGFloat newHeight = frame.size.height + translation.y;
     
-    // Giới hạn kích thước tối thiểu để không bị bóp méo giao diện
     if (newWidth < 400) newWidth = 400;
     if (newHeight < 250) newHeight = 250;
     
