@@ -98,7 +98,7 @@ static const CGFloat kInputBarHeight = 50;
     self.inputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
     self.inputField.leftViewMode = UITextFieldViewModeAlways;
     self.inputField.attributedPlaceholder = [[NSAttributedString alloc]
-        initWithString:@"Hỏi Ghidra, C++, Lua..."
+        initWithString:@"Mời Nhập Câu Hỏi Của Bạn"
             attributes:@{NSForegroundColorAttributeName: [ToolTheme shared].textMuted}];
     self.inputField.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.inputField addTarget:self action:@selector(sendTapped)
@@ -212,9 +212,8 @@ static const CGFloat kInputBarHeight = 50;
             game = @"Unknown";
         }
 
-        NSString *sysPrompt = [NSString stringWithFormat:
-            @"Tôi Có Thể Giúp Gì Cho Bạn ?"
-            @"Hãy Cho Tôi Biết Game Đang Muốn Mod : %@\n", game];
+        NSString *sysPrompt = [NSString stringWithFormat:          
+            @"Tôi Có Thể Giúp Gì Cho Bạn ?", game];
 
         NSMutableArray *messages = [NSMutableArray array];
         [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
@@ -254,7 +253,7 @@ static const CGFloat kInputBarHeight = 50;
 
 #pragma mark - AIStreamDelegate
 
-- (void)aiStreamDidReceiveText:(NSString *)text {
+- (void)aiStreamDidReceiveText:(NSString * _Nullable)text {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.currentAIResponse appendString:text ?: @""];
         NSInteger lastIdx = (NSInteger)self.items.count - 1;
@@ -371,7 +370,6 @@ static const CGFloat kInputBarHeight = 50;
     label.frame = CGRectMake(12, 8, cellW - 24, ceil(rect.size.height));
     [cell.contentView addSubview:label];
 
-    // Thêm nút Copy nhanh ở góc phải phía trên cho các tin nhắn AI hoặc cho phép chạm đúp để copy
     if (!isUser) {
         UIButton *copyBtn = [UIButton buttonWithType:UIButtonTypeSystem];
         copyBtn.frame = CGRectMake(cellW - 55, 4, 45, 20);
@@ -393,7 +391,6 @@ static const CGFloat kInputBarHeight = 50;
         NSString *text = item[@"text"] ?: @"";
         [UIPasteboard generalPasteboard].string = text;
         
-        // Hiển thị thông báo nhỏ hoặc đổi tạm tiêu đề nút thành "Copied!"
         [sender setTitle:@"Copied!" forState:UIControlStateNormal];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [sender setTitle:@"Copy" forState:UIControlStateNormal];
