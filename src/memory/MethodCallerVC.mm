@@ -1,13 +1,18 @@
 #import "MethodCallerVC.h"
 #import "ToolTheme.h"
 
-@interface MethodCallerVC ()
+@interface MethodCallerVC () <UITextFieldDelegate>
 @property (nonatomic, strong) UITextField *classNameField;
 @property (nonatomic, strong) UITextField *methodNameField;
-@property (nonatomic, strong) UIButton *argTypeButton; // Nút chọn kiểu thay cho ô nhập text
+@property (nonatomic, strong) UIButton *argTypeButton;
 @property (nonatomic, strong) UIButton *callButton;
 @property (nonatomic, strong) UITextView *resultTextView;
+
+// Biến lưu trạng thái ngầm - không bao giờ bị reset khi ẩn menu
+@property (nonatomic, strong) NSString *savedClassName;
+@property (nonatomic, strong) NSString *savedMethodName;
 @property (nonatomic, strong) NSString *selectedArgType;
+@property (nonatomic, strong) NSString *savedConsoleText;
 @end
 
 @implementation MethodCallerVC
@@ -15,7 +20,11 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
-    self.selectedArgType = @"True"; // Mặc định ban đầu
+    
+    // Khởi tạo giá trị mặc định nếu chưa có
+    if (!self.selectedArgType) self.selectedArgType = @"True";
+    if (!self.savedConsoleText) self.savedConsoleText = @"-- Method Caller Ready --\nChọn kiểu (True/False/NOP/RET) và thực thi.";
+    
     [self buildUI];
 }
 
@@ -31,33 +40,39 @@
     [self.view addSubview:title];
     y += 36;
 
-    // 1. Ô nhập Class Name
+    // 1. Ô nhập Class Name (Lưu vết dữ liệu nhập)
     self.classNameField = [[UITextField alloc] initWithFrame:CGRectMake(16, y, w - 32, 40)];
-    self.classNameField.placeholder = @"Nhập tên Class (vd: PlayerController)...";
+    self.classNameField.placeholder = @"Nhập tên Class (vd: CameraUtils)...";
+    self.classNameField.text = self.savedClassName ?: @"";
     self.classNameField.backgroundColor = [ToolTheme shared].surface;
     self.classNameField.textColor = [ToolTheme shared].textPrimary;
     self.classNameField.font = [[ToolTheme shared] monoFont:12];
     self.classNameField.layer.cornerRadius = 6;
     self.classNameField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 40)];
     self.classNameField.leftViewMode = UITextFieldViewModeAlways;
+    self.classNameField.delegate = self;
     self.classNameField.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.classNameField addTarget:self action:@selector(fieldDidChange:) forControlEvents:UIControlEventEditingChanged];
     [self.view addSubview:self.classNameField];
     y += 50;
 
-    // 2. Ô nhập Method Name
+    // 2. Ô nhập Method Name (Lưu vết dữ liệu nhập)
     self.methodNameField = [[UITextField alloc] initWithFrame:CGRectMake(16, y, w - 32, 40)];
     self.methodNameField.placeholder = @"Nhập tên Method (vd: CanSight)...";
+    self.methodNameField.text = self.savedMethodName ?: @"";
     self.methodNameField.backgroundColor = [ToolTheme shared].surface;
     self.methodNameField.textColor = [ToolTheme shared].textPrimary;
     self.methodNameField.font = [[ToolTheme shared] monoFont:12];
     self.methodNameField.layer.cornerRadius = 6;
     self.methodNameField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 40)];
     self.methodNameField.leftViewMode = UITextFieldViewModeAlways;
+    self.methodNameField.delegate = self;
     self.methodNameField.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.methodNameField addTarget:self action:@selector(fieldDidChange:) forControlEvents:UIControlEventEditingChanged];
     [self.view addSubview:self.methodNameField];
     y += 50;
 
-    // 3. Nút chọn kiểu (True, False, NOP, RET) dạng Dropdown Menu
+    // 3. Nút chọn kiểu True / False / NOP / RET
     self.argTypeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.argTypeButton.frame = CGRectMake(16, y, w - 32, 40);
     self.argTypeButton.backgroundColor = [ToolTheme shared].surface;
@@ -103,7 +118,7 @@
     [self.view addSubview:self.callButton];
     y += 58;
 
-    // 5. Khung kết quả (Console Output)
+    // 5. Khung log kết quả
     CGFloat consoleH = CGRectGetHeight(self.view.bounds) - y - 16;
     self.resultTextView = [[UITextView alloc] initWithFrame:CGRectMake(16, y, w - 32, MAX(100, consoleH))];
     self.resultTextView.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.05 alpha:1.0];
@@ -111,9 +126,17 @@
     self.resultTextView.font = [[ToolTheme shared] monoFont:10];
     self.resultTextView.editable = NO;
     self.resultTextView.layer.cornerRadius = 6;
-    self.resultTextView.text = @"-- Method Caller Ready --\nChọn kiểu (True/False/NOP/RET) và thực thi.";
+    self.resultTextView.text = self.savedConsoleText;
     self.resultTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.resultTextView];
+}
+
+- (void)fieldDidChange:(UITextField *)tf {
+    if (tf == self.classNameField) {
+        self.savedClassName = tf.text;
+    } else if (tf == self.methodNameField) {
+        self.savedMethodName = tf.text;
+    }
 }
 
 - (void)updateArgButtonTitle {
@@ -128,19 +151,28 @@
     NSString *meth = self.methodNameField.text;
     
     if (cls.length == 0 || meth.length == 0) {
-        self.resultTextView.text = @"[Lỗi] Vui lòng nhập đầy đủ Class Name và Method Name!";
+        self.savedConsoleText = @"[Lỗi] Vui lòng nhập đầy đủ Class Name và Method Name!";
+        self.resultTextView.text = self.savedConsoleText;
         return;
     }
     
     [self.classNameField resignFirstResponder];
     [self.methodNameField resignFirstResponder];
     
-    NSString *log = [NSString stringWithFormat:@"[Caller] Đang thực thi:\nClass: %@\nMethod: %@\nKiểu chọn: %@\n[Trạng thái] Thành công!", cls, meth, self.selectedArgType];
-    self.resultTextView.text = log;
+    self.savedConsoleText = [NSString stringWithFormat:@"[Caller] Đang thực thi:\nClass: %@\nMethod: %@\nKiểu chọn: %@\n[Trạng thái] Thành công!", cls, meth, self.selectedArgType];
+    self.resultTextView.text = self.savedConsoleText;
 }
 
 - (void)reload {
-    self.resultTextView.text = @"-- Method Caller Ready --\n";
+    // Giữ nguyên toàn bộ Class, Method, Kiểu chọn và Console Output khi mở lại menu
+    if (self.classNameField && self.savedClassName) self.classNameField.text = self.savedClassName;
+    if (self.methodNameField && self.savedMethodName) self.methodNameField.text = self.savedMethodName;
+    if (self.resultTextView && self.savedConsoleText) self.resultTextView.text = self.savedConsoleText;
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [textField resignFirstResponder];
+    return YES;
 }
 
 @end
