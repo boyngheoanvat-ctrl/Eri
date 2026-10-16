@@ -160,11 +160,10 @@ static void *find_sym(void *handle, const char *baseName) {
     return fn ? fn() : NULL;
 }
 
-// Bổ sung cài đặt cho domain_get_assemblies:count:
 - (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(size_t *)count {
     if (!domain) return NULL;
     if (count) *count = domain->assembly_count;
-    return domain->assemblies;
+    return (const Il2CppAssembly **)domain->assemblies; // Đã ép kiểu tường minh chuẩn const
 }
 
 - (Il2CppImage *)assembly_get_image:(Il2CppAssembly *)assembly {
@@ -330,7 +329,6 @@ static void *find_sym(void *handle, const char *baseName) {
     return m->token;
 }
 
-// Bổ sung cài đặt cho method_get_flags:
 - (uint32_t)method_get_flags:(MethodInfo *)m {
     if (!m) return 0;
     typedef uint32_t (*fn_t)(const MethodInfo *);
@@ -408,7 +406,7 @@ static void *find_sym(void *handle, const char *baseName) {
     return NULL;
 }
 
-#pragma mark - Memory Operations (Bổ sung cho CHookVC)
+#pragma mark - Memory Operations
 
 + (uintptr_t)getRealOffset:(uintptr_t)offset {
     uintptr_t slide = _dyld_get_image_vmaddr_slide(0);
