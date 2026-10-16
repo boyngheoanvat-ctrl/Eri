@@ -204,27 +204,39 @@ static const CGFloat kInputBarHeight = 50;
     __weak typeof(self) ws = self;
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        @autoreleasepool {
+            NSString *game = @"Unknown";
+            @try {
+                game = [[GameFingerprint shared] detectedGame] ?: @"Unknown";
+            } @catch (NSException *e) {
+                game = @"Unknown";
+            }
 
-        NSString *game = @"Unknown";
-        @try {
-            game = [[GameFingerprint shared] detectedGame];
-        } @catch (NSException *e) {
-            game = @"Unknown";
+            NSString *sysPrompt = [NSString stringWithFormat:          
+                @"Tôi Có Thể Giúp Gì Cho Bạn ?", game];
+
+            NSMutableArray *messages = [NSMutableArray array];
+            [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
+            [messages addObjectsFromArray:history];
+
+            @try {
+                [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
+            } @catch (NSException *e) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (ws) {
+                        ws.isWaiting = NO;
+                        ws.sendButton.enabled = YES;
+                        ws.sendButton.alpha = 1.0;
+                        [ws.spinner stopAnimating];
+                    }
+                });
+            }
         }
-
-        NSString *sysPrompt = [NSString stringWithFormat:          
-            @"Tôi Có Thể Giúp Gì Cho Bạn ?", game];
-
-        NSMutableArray *messages = [NSMutableArray array];
-        [messages addObject:@{@"role": @"system", @"content": sysPrompt}];
-        [messages addObjectsFromArray:history];
-
-        [[AIProvider shared] sendMessages:messages tools:tools delegate:ws];
     });
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        if (ws.isWaiting) {
+        if (ws && ws.isWaiting) {
             ws.isWaiting = NO;
             ws.sendButton.enabled = YES;
             ws.sendButton.alpha = 1.0;
@@ -241,11 +253,15 @@ static const CGFloat kInputBarHeight = 50;
 - (void)scrollToBottomAnimated:(BOOL)animated {
     if (self.items.count == 0) return;
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSInteger last = (NSInteger)self.items.count - 1;
-        NSIndexPath *ip = [NSIndexPath indexPathForRow:last inSection:0];
-        [self.tableView scrollToRowAtIndexPath:ip
-                              atScrollPosition:UITableViewScrollPositionBottom
-                                      animated:animated];
+        @autoreleasepool {
+            NSInteger last = (NSInteger)self.items.count - 1;
+            if (last >= 0 && last < self.items.count) {
+                NSIndexPath *ip = [NSIndexPath indexPathForRow:last inSection:0];
+                [self.tableView scrollToRowAtIndexPath:ip
+                                      atScrollPosition:UITableViewScrollPositionBottom
+                                              animated:animated];
+            }
+        }
     });
 }
 
@@ -255,52 +271,64 @@ static const CGFloat kInputBarHeight = 50;
 
 - (void)aiStreamDidReceiveText:(NSString * _Nullable)text {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.currentAIResponse appendString:text ?: @""];
-        NSInteger lastIdx = (NSInteger)self.items.count - 1;
-        if (lastIdx >= 0 && [self.items[lastIdx][@"type"] isEqualToString:@"ai"]) {
-            self.items[lastIdx] = @{@"type": @"ai", @"text": [self.currentAIResponse copy]};
-        } else {
-            [self.items addObject:@{@"type": @"ai", @"text": [self.currentAIResponse copy]}];
+        @autoreleasepool {
+            if (!self.currentAIResponse) {
+                self.currentAIResponse = [NSMutableString string];
+            }
+            [self.currentAIResponse appendString:text ?: @""];
+            NSInteger lastIdx = (NSInteger)self.items.count - 1;
+            if (lastIdx >= 0 && lastIdx < self.items.count && [self.items[lastIdx][@"type"] isEqualToString:@"ai"]) {
+                self.items[lastIdx] = @{@"type": @"ai", @"text": [self.currentAIResponse copy]};
+            } else {
+                [self.items addObject:@{@"type": @"ai", @"text": [self.currentAIResponse copy]}];
+            }
+            [self.tableView reloadData];
+            [self scrollToBottomAnimated:YES];
         }
-        [self.tableView reloadData];
-        [self scrollToBottomAnimated:YES];
     });
 }
 
-- (void)aiStreamDidFailWithError:(NSError *)error {
+- (void)aiStreamDidFailWithError:(NSError * _Nullable)error {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.spinner stopAnimating];
-        self.isWaiting = NO;
-        self.sendButton.enabled = YES;
-        self.sendButton.alpha = 1.0;
-        [self.items addObject:@{@"type": @"error",
-            @"text": error.localizedDescription ?: @"Lỗi kết nối"}];
-        [self.tableView reloadData];
-        [self scrollToBottomAnimated:YES];
+        @autoreleasepool {
+            [self.spinner stopAnimating];
+            self.isWaiting = NO;
+            self.sendButton.enabled = YES;
+            self.sendButton.alpha = 1.0;
+            NSString *errDesc = error.localizedDescription ?: @"Lỗi kết nối";
+            [self.items addObject:@{@"type": @"error", @"text": errDesc}];
+            [self.tableView reloadData];
+            [self scrollToBottomAnimated:YES];
+        }
     });
 }
 
 - (void)aiStreamDidComplete {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.spinner stopAnimating];
-        self.isWaiting = NO;
-        self.sendButton.enabled = YES;
-        self.sendButton.alpha = 1.0;
+        @autoreleasepool {
+            [self.spinner stopAnimating];
+            self.isWaiting = NO;
+            self.sendButton.enabled = YES;
+            self.sendButton.alpha = 1.0;
+        }
     });
 }
 
-- (void)aiDidCallTool:(NSString *)toolName args:(NSDictionary *)args result:(id)result {
+- (void)aiDidCallTool:(NSString * _Nullable)toolName args:(NSDictionary * _Nullable)args result:(id _Nullable)result {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *summary = @"OK";
-        if ([result isKindOfClass:[NSDictionary class]]) {
-            NSDictionary *d = (NSDictionary *)result;
-            if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
-            else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ kết quả", d[@"count"]];
+        @autoreleasepool {
+            NSString *summary = @"OK";
+            if ([result isKindOfClass:[NSDictionary class]]) {
+                NSDictionary *d = (NSDictionary *)result;
+                if (d[@"error"]) summary = [NSString stringWithFormat:@"error: %@", d[@"error"]];
+                else if (d[@"count"]) summary = [NSString stringWithFormat:@"%@ kết quả", d[@"count"]];
+            }
+            NSString *safeToolName = toolName ?: @"unknown_tool";
+            [self.items addObject:@{@"type": @"tool",
+                @"text": [NSString stringWithFormat:@"%@ → %@", safeToolName, summary]}];
+            [self.tableView reloadData];
+            [self scrollToBottomAnimated:YES];
         }
-        [self.items addObject:@{@"type": @"tool",
-            @"text": [NSString stringWithFormat:@"%@ → %@", toolName, summary]}];
-        [self.tableView reloadData];
-        [self scrollToBottomAnimated:YES];
     });
 }
 
@@ -321,96 +349,109 @@ static const CGFloat kInputBarHeight = 50;
     
     for (UIView *v in cell.contentView.subviews) [v removeFromSuperview];
 
-    NSDictionary *item = self.items[ip.row];
-    NSString *type = item[@"type"];
-    NSString *text = item[@"text"] ?: @"";
-    BOOL isUser = [type isEqualToString:@"user"];
-    BOOL isTool = [type isEqualToString:@"tool"];
-    BOOL isError = [type isEqualToString:@"error"];
+    @autoreleasepool {
+        if (ip.row >= self.items.count) return cell;
+        NSDictionary *item = self.items[ip.row];
+        NSString *type = item[@"type"] ?: @"ai";
+        NSString *text = item[@"text"] ?: @"";
+        BOOL isUser = [type isEqualToString:@"user"];
+        BOOL isTool = [type isEqualToString:@"tool"];
+        BOOL isError = [type isEqualToString:@"error"];
 
-    NSString *prefix = @"> ";
-    UIColor *prefixColor = [ToolTheme shared].accent;
-    if (isTool) { prefix = @"[tool] "; prefixColor = [ToolTheme shared].warning; }
-    else if (isError) { prefix = @"[error] "; prefixColor = [ToolTheme shared].danger; }
-    else if (!isUser) { prefix = @"[ai] "; prefixColor = [ToolTheme shared].success; }
+        NSString *prefix = @"> ";
+        UIColor *prefixColor = [ToolTheme shared].accent;
+        if (isTool) { prefix = @"[tool] "; prefixColor = [ToolTheme shared].warning; }
+        else if (isError) { prefix = @"[error] "; prefixColor = [ToolTheme shared].danger; }
+        else if (!isUser) { prefix = @"[ai] "; prefixColor = [ToolTheme shared].success; }
 
-    NSString *full = [NSString stringWithFormat:@"%@%@", prefix, text];
-    CGFloat cellW = CGRectGetWidth(tv.bounds);
+        NSString *full = [NSString stringWithFormat:@"%@%@", prefix, text];
+        CGFloat cellW = CGRectGetWidth(tv.bounds);
+        if (cellW <= 0) cellW = 320;
 
-    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, cellW - 24, 0)];
-    label.numberOfLines = 0;
+        UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, cellW - 24, 0)];
+        label.numberOfLines = 0;
 
-    NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] initWithString:full];
-    [attr addAttribute:NSForegroundColorAttributeName value:prefixColor range:NSMakeRange(0, prefix.length)];
-    
-    UIColor *textColor = isError ? [ToolTheme shared].danger : [ToolTheme shared].textPrimary;
-    [attr addAttribute:NSForegroundColorAttributeName value:textColor range:NSMakeRange(prefix.length, text.length)];
-    [attr addAttribute:NSFontAttributeName value:[[ToolTheme shared] monoFont:11] range:NSMakeRange(0, full.length)];
+        NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] initWithString:full];
+        [attr addAttribute:NSForegroundColorAttributeName value:prefixColor range:NSMakeRange(0, prefix.length)];
+        
+        UIColor *textColor = isError ? [ToolTheme shared].danger : [ToolTheme shared].textPrimary;
+        [attr addAttribute:NSForegroundColorAttributeName value:textColor range:NSMakeRange(prefix.length, text.length)];
+        [attr addAttribute:NSFontAttributeName value:[[ToolTheme shared] monoFont:11] range:NSMakeRange(0, full.length)];
 
-    if (!isUser && !isError) {
-        NSArray *keywords = @[@"void", @"bool", @"int", @"uint64_t", @"float", @"double", @"char", @"const", @"return", @"if", @"else", @"for", @"while", @"struct", @"class", @"#import", @"#include", @"auto", @"static", @"true", @"false", @"nullptr", @"local", @"function", @"end", @"print", @"then", @"do"];
-        NSString *lowerStr = full.lowercaseString;
-        for (NSString *kw in keywords) {
-            NSRange range = [lowerStr rangeOfString:kw];
-            while (range.location != NSNotFound) {
-                [attr addAttribute:NSForegroundColorAttributeName value:[UIColor colorWithRed:0.40 green:0.80 blue:1.00 alpha:1.0] range:range];
-                
-                if (range.location + range.length >= lowerStr.length) break;
-                range = [lowerStr rangeOfString:kw options:0 range:NSMakeRange(range.location + range.length, lowerStr.length - (range.location + range.length))];
+        if (!isUser && !isError) {
+            NSArray *keywords = @[@"void", @"bool", @"int", @"uint64_t", @"float", @"double", @"char", @"const", @"return", @"if", @"else", @"for", @"while", @"struct", @"class", @"#import", @"#include", @"auto", @"static", @"true", @"false", @"nullptr", @"local", @"function", @"end", @"print", @"then", @"do"];
+            NSString *lowerStr = full.lowercaseString;
+            for (NSString *kw in keywords) {
+                NSRange range = [lowerStr rangeOfString:kw];
+                while (range.location != NSNotFound) {
+                    [attr addAttribute:NSForegroundColorAttributeName value:[UIColor colorWithRed:0.40 green:0.80 blue:1.00 alpha:1.0] range:range];
+                    
+                    if (range.location + range.length >= lowerStr.length) break;
+                    range = [lowerStr rangeOfString:kw options:0 range:NSMakeRange(range.location + range.length, lowerStr.length - (range.location + range.length))];
+                }
             }
         }
-    }
 
-    label.attributedText = attr;
+        label.attributedText = attr;
 
-    CGSize maxSize = CGSizeMake(cellW - 24, CGFLOAT_MAX);
-    CGRect rect = [attr boundingRectWithSize:maxSize
-                                     options:NSStringDrawingUsesLineFragmentOrigin
-                                     context:nil];
-    label.frame = CGRectMake(12, 8, cellW - 24, ceil(rect.size.height));
-    [cell.contentView addSubview:label];
+        CGSize maxSize = CGSizeMake(cellW - 24, CGFLOAT_MAX);
+        CGRect rect = [attr boundingRectWithSize:maxSize
+                                         options:NSStringDrawingUsesLineFragmentOrigin
+                                         context:nil];
+        label.frame = CGRectMake(12, 8, cellW - 24, ceil(rect.size.height));
+        [cell.contentView addSubview:label];
 
-    if (!isUser) {
-        UIButton *copyBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-        copyBtn.frame = CGRectMake(cellW - 55, 4, 45, 20);
-        [copyBtn setTitle:@"Copy" forState:UIControlStateNormal];
-        [copyBtn setTitleColor:[ToolTheme shared].accent forState:UIControlStateNormal];
-        copyBtn.titleLabel.font = [[ToolTheme shared] monoBoldFont:10];
-        copyBtn.tag = ip.row;
-        [copyBtn addTarget:self action:@selector(copyMessageTapped:) forControlEvents:UIControlEventTouchUpInside];
-        [cell.contentView addSubview:copyBtn];
+        if (!isUser) {
+            UIButton *copyBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+            copyBtn.frame = CGRectMake(cellW - 55, 4, 45, 20);
+            [copyBtn setTitle:@"Copy" forState:UIControlStateNormal];
+            [copyBtn setTitleColor:[ToolTheme shared].accent forState:UIControlStateNormal];
+            copyBtn.titleLabel.font = [[ToolTheme shared] monoBoldFont:10];
+            [copyBtn addTarget:self action:@selector(copyMessageTapped:) forControlEvents:UIControlEventTouchUpInside];
+            [cell.contentView addSubview:copyBtn];
+        }
     }
 
     return cell;
 }
 
 - (void)copyMessageTapped:(UIButton *)sender {
-    NSInteger index = sender.tag;
-    if (index >= 0 && index < self.items.count) {
-        NSDictionary *item = self.items[index];
-        NSString *text = item[@"text"] ?: @"";
-        [UIPasteboard generalPasteboard].string = text;
-        
-        [sender setTitle:@"Copied!" forState:UIControlStateNormal];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [sender setTitle:@"Copy" forState:UIControlStateNormal];
-        });
+    @autoreleasepool {
+        UIView *contentView = sender.superview;
+        UITableViewCell *cell = (UITableViewCell *)contentView.superview;
+        if ([cell isKindOfClass:[UITableViewCell class]]) {
+            NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
+            if (indexPath && indexPath.row < self.items.count) {
+                NSDictionary *item = self.items[indexPath.row];
+                NSString *text = item[@"text"] ?: @"";
+                [UIPasteboard generalPasteboard].string = text;
+                
+                [sender setTitle:@"Copied!" forState:UIControlStateNormal];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [sender setTitle:@"Copy" forState:UIControlStateNormal];
+                });
+            }
+        }
     }
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    NSDictionary *item = self.items[indexPath.row];
-    NSString *text = item[@"text"] ?: @"";
-    NSString *full = [NSString stringWithFormat:@"> %@", text];
-    CGFloat cellW = CGRectGetWidth(tableView.bounds);
-    
-    UIFont *font = [[ToolTheme shared] monoFont:11];
-    NSDictionary *attrs = @{NSFontAttributeName: font};
-    CGRect rect = [full boundingRectWithSize:CGSizeMake(cellW - 24, CGFLOAT_MAX)
-                                     options:NSStringDrawingUsesLineFragmentOrigin
-                                  attributes:attrs
-                                     context:nil];
-    return ceil(rect.size.height) + 16;
+    @autoreleasepool {
+        if (indexPath.row >= self.items.count) return 50;
+        NSDictionary *item = self.items[indexPath.row];
+        NSString *text = item[@"text"] ?: @"";
+        NSString *full = [NSString stringWithFormat:@"> %@", text];
+        CGFloat cellW = CGRectGetWidth(tableView.bounds);
+        if (cellW <= 0) cellW = 320;
+        
+        UIFont *font = [[ToolTheme shared] monoFont:11];
+        NSDictionary *attrs = @{NSFontAttributeName: font};
+        CGRect rect = [full boundingRectWithSize:CGSizeMake(cellW - 24, CGFLOAT_MAX)
+                                         options:NSStringDrawingUsesLineFragmentOrigin
+                                      attributes:attrs
+                                         context:nil];
+        return ceil(rect.size.height) + 16;
+    }
 }
 
 - (void)reload { [self.tableView reloadData]; }
