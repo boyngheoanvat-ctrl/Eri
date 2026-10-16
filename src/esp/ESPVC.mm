@@ -1,13 +1,11 @@
 #import "ESPVC.h"
 #import "ToolTheme.h"
-#include <dlfcn.h>
+#import "ESPOverlay.h"
 
 @interface ESPVC ()
-@property (nonatomic, strong) UISwitch *boxSwitch;
-@property (nonatomic, strong) UISwitch *lineSwitch;
-@property (nonatomic, strong) UISwitch *distanceSwitch;
-@property (nonatomic, strong) UISwitch *healthSwitch;
-@property (nonatomic, strong) UITextView *statusView;
+@property (nonatomic, strong) UISwitch *espSwitch;
+@property (nonatomic, strong) UIView *overlayContainer;
+@property (nonatomic, strong) id espOverlayView; // ESPOverlayView
 @end
 
 @implementation ESPVC
@@ -20,69 +18,90 @@
 
 - (void)buildUI {
     CGFloat w = CGRectGetWidth(self.view.bounds);
-    CGFloat y = 16;
-
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
-    title.text = @"ESP Overlay Manager";
-    title.textColor = [ToolTheme shared].textPrimary;
-    title.font = [[ToolTheme shared] monoBoldFont:16];
-    title.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.view addSubview:title];
-    y += 40;
-
-    NSArray *titles = @[@"ESP Box (Khung nhân vật)", @"ESP Line (Đường kẻ)", @"ESP Distance (Khoảng cách)", @"ESP Health (Máu)"];
-    NSArray *selectors = @[@"boxChanged:", @"lineChanged:", @"distanceChanged:", @"healthChanged:"];
+    CGFloat pad = 16;
+    CGFloat y = 20;
     
-    for (int i = 0; i < titles.count; i++) {
-        UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 100, 32)];
-        lbl.text = titles[i];
-        lbl.textColor = [ToolTheme shared].textPrimary;
-        lbl.font = [[ToolTheme shared] monoFont:12];
-        lbl.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-        [self.view addSubview:lbl];
+    UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, 24)];
+    titleLbl.text = @"ESP Radar & Circle Settings";
+    titleLbl.textColor = [ToolTheme shared].textPrimary;
+    titleLbl.font = [[ToolTheme shared] monoBoldFont:13];
+    [self.view addSubview:titleLbl];
+    y += 36;
+    
+    // Dòng bật/tắt ESP vẽ vòng tròn
+    UIView *rowView = [[UIView alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, 44)];
+    rowView.backgroundColor = [ToolTheme shared].surface;
+    rowView.layer.cornerRadius = 6;
+    [self.view addSubview:rowView];
+    
+    UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 10, w - 100, 24)];
+    lbl.text = @"Bật Vòng Tròn ESP (Circle Radar)";
+    lbl.textColor = [ToolTheme shared].textPrimary;
+    lbl.font = [[ToolTheme shared] monoFont:11];
+    [rowView addSubview:lbl];
+    
+    self.espSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(CGRectGetWidth(rowView.bounds) - 65, 8, 50, 24)];
+    self.espSwitch.onTintColor = [ToolTheme shared].accent;
+    [self.espSwitch addTarget:self action:@selector(espSwitchChanged:) forControlEvents:UIControlEventValueChanged];
+    [rowView addSubview:self.espSwitch];
+}
 
-        UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(w - 75, y, 50, 32)];
-        sw.onTintColor = [ToolTheme shared].accent;
-        sw.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
-        [sw addTarget:self action:NSSelectorFromString(selectors[i]) forControlEvents:UIControlEventValueChanged];
-        [self.view addSubview:sw];
-        
-        if (i == 0) self.boxSwitch = sw;
-        else if (i == 1) self.lineSwitch = sw;
-        else if (i == 2) self.distanceSwitch = sw;
-        else if (i == 3) self.healthSwitch = sw;
-
-        y += 46;
+- (void)espSwitchChanged:(UISwitch *)sender {
+    if (sender.isOn) {
+        [self showESPOverlayCircle];
+        [self log:@"[ESP] Đã kích hoạt vẽ vòng tròn trên màn hình!"];
+    } else {
+        [self hideESPOverlayCircle];
+        [self log:@"[ESP] Đã tắt vòng tròn ESP."];
     }
-
-    CGFloat statusH = CGRectGetHeight(self.view.bounds) - y - 16;
-    self.statusView = [[UITextView alloc] initWithFrame:CGRectMake(16, y, w - 32, MAX(80, statusH))];
-    self.statusView.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.05 alpha:1.0];
-    self.statusView.textColor = [ToolTheme shared].success;
-    self.statusView.font = [[ToolTheme shared] monoFont:10];
-    self.statusView.editable = NO;
-    self.statusView.layer.cornerRadius = 6;
-    self.statusView.text = @"-- ESP Overlay Active --\nĐã sẵn sàng hiển thị trên Metal/OpenGL context.";
-    self.statusView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:self.statusView];
 }
 
-- (void)boxChanged:(UISwitch *)sender {
-    self.statusView.text = [NSString stringWithFormat:@"[ESP] Box ESP: %@", sender.isOn ? @"ON" : @"OFF"];
+- (void)showESPOverlayCircle {
+    UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
+    if (!keyWindow) return;
+    
+    if (!self.overlayContainer) {
+        self.overlayContainer = [[UIView alloc] initWithFrame:keyWindow.bounds];
+        self.overlayContainer.backgroundColor = [UIColor clearColor];
+        self.overlayContainer.userInteractionEnabled = NO;
+        
+        // Khởi tạo ESPOverlayView vẽ vòng tròn
+        Class overlayClass = NSClassFromString(@"ESPOverlayView");
+        if (overlayClass) {
+            id overlay = [[overlayClass alloc] initWithFrame:keyWindow.bounds];
+            [self.overlayContainer addSubview:overlay];
+            self.espOverlayView = overlay;
+        }
+    }
+    
+    // Bật cờ isESPEnabled thành YES và gọi setNeedsDisplay để vẽ lại
+    if (self.espOverlayView && [self.espOverlayView respondsToSelector:@selector(setIsESPEnabled:)]) {
+        [self.espOverlayView performSelector:@selector(setIsESPEnabled:) withObject:@(YES)];
+    }
+    if (self.espOverlayView && [self.espOverlayView respondsToSelector:@selector(setNeedsDisplay)]) {
+        [self.espOverlayView performSelector:@selector(setNeedsDisplay)];
+    }
+    
+    [keyWindow addSubview:self.overlayContainer];
 }
 
-- (void)lineChanged:(UISwitch *)sender {
-    self.statusView.text = [NSString stringWithFormat:@"[ESP] Line ESP: %@", sender.isOn ? @"ON" : @"OFF"];
+- (void)hideESPOverlayCircle {
+    if (self.overlayContainer) {
+        if (self.espOverlayView && [self.espOverlayView respondsToSelector:@selector(setIsESPEnabled:)]) {
+            [self.espOverlayView performSelector:@selector(setIsESPEnabled:) withObject:@(NO)];
+        }
+        [self.overlayContainer removeFromSuperview];
+        self.overlayContainer = nil;
+    }
 }
 
-- (void)distanceChanged:(UISwitch *)sender {
-    self.statusView.text = [NSString stringWithFormat:@"[ESP] Distance ESP: %@", sender.isOn ? @"ON" : @"OFF"];
+- (void)log:(NSString *)text {
+    // Ghi log trạng thái ESP
+    NSLog(@"%@", text);
 }
 
-- (void)healthChanged:(UISwitch *)sender {
-    self.statusView.text = [NSString stringWithFormat:@"[ESP] Health Bar ESP: %@", sender.isOn ? @"ON" : @"OFF"];
+- (void)reload {
+    // Đồng bộ trạng thái khi chuyển tab ESP
 }
-
-- (void)reload {}
 
 @end
