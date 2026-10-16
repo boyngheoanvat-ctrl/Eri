@@ -61,7 +61,7 @@
     [self.view addSubview:self.headerView];
     
     UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 6, totalW - 24, 24)];
-    titleLbl.text = @"Mod By Eri Nguyễn (Chạm 3 ngón để ẩn/hiện)";
+    titleLbl.text = @"Mod By Eri Nguyễn (Chạm 3 ngón để ẩn/hiện Menu Mod)";
     titleLbl.textColor = [ToolTheme shared].textPrimary;
     titleLbl.font = [[ToolTheme shared] monoBoldFont:11];
     titleLbl.autoresizingMask = UIViewAutoresizingFlexibleWidth;
