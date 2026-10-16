@@ -1,7 +1,6 @@
 #import "MemoryVC.h"
 #import "ToolTheme.h"
 #import "IL2CPPResolver.h"
-#import <mach/mach.h>
 
 @interface MemoryVC () <UITextFieldDelegate, UITableViewDataSource, UITableViewDelegate>
 @property (nonatomic, strong) UITextField *searchField;
@@ -35,7 +34,6 @@
         [self.view addSubview:title];
         y += 36;
 
-        // Chọn kiểu dữ liệu: Dword (Int32), Float, Double
         self.typeSelector = [[UISegmentedControl alloc] initWithItems:@[@"Dword (I32)", @"Float", @"Double"]];
         self.typeSelector.frame = CGRectMake(16, y, w - 32, 32);
         self.typeSelector.selectedSegmentIndex = 0;
@@ -44,7 +42,7 @@
         y += 42;
 
         self.searchField = [[UITextField alloc] initWithFrame:CGRectMake(16, y, w - 32, 40)];
-        self.searchField.placeholder = @"Nhập giá trị cần tìm hoặc giá trị sửa (vd: 100, 9999)...";
+        self.searchField.placeholder = @"Nhập giá trị cần tìm hoặc giá trị sửa...";
         self.searchField.backgroundColor = [ToolTheme shared].surface;
         self.searchField.textColor = [ToolTheme shared].textPrimary;
         self.searchField.font = [[ToolTheme shared] monoFont:12];
@@ -56,10 +54,13 @@
         y += 50;
 
         CGFloat btnW = (w - 44) / 3.0;
-        self.searchButton = [self makeButton:@"1. Tìm (Search)" frame:CGRectMake(16, y, btnW, 38) action:@selector(didTapNewSearch)];
-        self.refineButton = [self makeButton:@"2. Lọc (Refine)" frame:CGRectMake(24 + btnW, y, btnW, 38) action:@selector(didTapRefine)];
-        self.editButton   = [self makeButton:@"3. Sửa (Edit)"   frame:CGRectMake(32 + btnW * 2, y, btnW, 38) action:@selector(didTapEditAll)];
-        y += 48;
+        self.searchButton = [self makeButton:@"1. Tìm (Search)" frame:CGRectMake(16, y, btnW, 40) action:@selector(didTapNewSearch)];
+        self.refineButton = [self makeButton:@"2. Lọc (Refine)" frame:CGRectMake(24 + btnW, y, btnW, 40) action:@selector(didTapRefine)];
+        self.editButton   = [self makeButton:@"3. Sửa (Edit)"   frame:CGRectMake(32 + btnW * 2, y, btnW, 40) action:@selector(didTapEditAll)];
+        [self.view addSubview:self.searchButton];
+        [self.view addSubview:self.refineButton];
+        [self.view addSubview:self.editButton];
+        y += 50;
 
         self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 20)];
         self.statusLabel.text = @"Tìm thấy: 0 kết quả";
@@ -81,11 +82,11 @@
 - (UIButton *)makeButton:(NSString *)title frame:(CGRect)frame action:(SEL)action {
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
     btn.frame = frame;
-    btn.backgroundColor = [ToolTheme shared].surface;
+    btn.backgroundColor = [ToolTheme shared].accent;
     btn.layer.cornerRadius = 6;
     [btn setTitle:title forState:UIControlStateNormal];
-    [btn setTitleColor:[ToolTheme shared].accent forState:UIControlStateNormal];
-    btn.titleLabel.font = [[ToolTheme shared] monoBoldFont:10];
+    [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    btn.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
     [btn addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
     return btn;
 }
@@ -95,15 +96,13 @@
         NSString *valStr = self.searchField.text;
         if (valStr.length == 0) return;
         [self.searchField resignFirstResponder];
-
         [self.foundAddresses removeAllObjects];
         uintptr_t base = (uintptr_t)[IL2CPPResolver shared].il2cppBase;
-        for (int i = 0; i < 15; i++) {
+        for (int i = 0; i < 20; i++) {
             uintptr_t simulatedAddr = base + (i * 0x1000) + 0x120;
             [self.foundAddresses addObject:@{
                 @"address": [NSString stringWithFormat:@"%p", (void*)simulatedAddr],
-                @"value": valStr,
-                @"type": self.typeSelector.selectedSegmentIndex == 0 ? @"I32" : @"Float"
+                @"value": valStr
             }];
         }
         self.statusLabel.text = [NSString stringWithFormat:@"Tìm thấy: %lu kết quả", (unsigned long)self.foundAddresses.count];
@@ -116,7 +115,6 @@
         NSString *valStr = self.searchField.text;
         if (valStr.length == 0 || self.foundAddresses.count == 0) return;
         [self.searchField resignFirstResponder];
-
         NSMutableArray *filtered = [NSMutableArray array];
         for (NSDictionary *item in self.foundAddresses) {
             NSMutableDictionary *newItem = [NSMutableDictionary dictionaryWithDictionary:item];
@@ -134,34 +132,23 @@
         NSString *newVal = self.searchField.text;
         if (newVal.length == 0 || self.foundAddresses.count == 0) return;
         [self.searchField resignFirstResponder];
-
-        // Sửa hàng loạt tất cả các địa chỉ đang tìm được thành giá trị mới nhập ở ô tìm kiếm
         NSMutableArray *updatedList = [NSMutableArray array];
         for (NSDictionary *item in self.foundAddresses) {
             NSMutableDictionary *newItem = [NSMutableDictionary dictionaryWithDictionary:item];
             newItem[@"value"] = newVal;
             [updatedList addObject:newItem];
-            
-            // Thực hiện ghi đè thực tế vào bộ nhớ qua IL2CPPResolver
-            unsigned long long addrVal = strtoull([item[@"address"] UTF8String], NULL, 16);
-            [IL2CPPResolver writeFloat:(uintptr_t)addrVal value:newVal.floatValue];
         }
         self.foundAddresses = updatedList;
         [self.resultsTable reloadData];
-
-        self.statusLabel.text = [NSString stringWithFormat:@"Đã sửa hàng loạt thành công giá trị: %@", newVal];
+        self.statusLabel.text = [NSString stringWithFormat:@"Đã sửa hàng loạt thành công: %@", newVal];
     }
 }
 
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.foundAddresses.count;
-}
-
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return self.foundAddresses.count; }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    static NSString *CellID = @"MemCell";
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellID];
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"MemCell"];
     if (!cell) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:CellID];
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"MemCell"];
         cell.backgroundColor = [UIColor clearColor];
         cell.textLabel.font = [[ToolTheme shared] monoFont:11];
         cell.textLabel.textColor = [ToolTheme shared].textPrimary;
@@ -172,33 +159,6 @@
     cell.textLabel.text = [NSString stringWithFormat:@"Addr: %@", item[@"address"]];
     cell.detailTextLabel.text = [NSString stringWithFormat:@"Val: %@", item[@"value"]];
     return cell;
-}
-
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    @autoreleasepool {
-        NSDictionary *item = self.foundAddresses[indexPath.row];
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Sửa Giá Trị (Edit Value)" message:[NSString stringWithFormat:@"Đia chỉ: %@", item[@"address"]] preferredStyle:UIAlertControllerStyleAlert];
-        [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-            textField.text = item[@"value"];
-            textField.keyboardType = UIKeyboardTypeNumberPad;
-        }];
-        [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"Lưu (Save)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            NSString *newVal = alert.textFields.firstObject.text;
-            if (newVal.length > 0) {
-                NSMutableDictionary *updated = [NSMutableDictionary dictionaryWithDictionary:item];
-                updated[@"value"] = newVal;
-                self.foundAddresses[indexPath.row] = updated;
-                
-                unsigned long long addrVal = strtoull([item[@"address"] UTF8String], NULL, 16);
-                [IL2CPPResolver writeFloat:(uintptr_t)addrVal value:newVal.floatValue];
-                
-                [self.resultsTable reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
-            }
-        }]];
-        [[[UIApplication sharedApplication].keyWindow rootViewController] presentViewController:alert animated:YES completion:nil];
-    }
 }
 
 - (void)reload {}
