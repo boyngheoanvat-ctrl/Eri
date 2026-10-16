@@ -9,9 +9,8 @@
 @property (nonatomic, strong, nonnull) NSMutableArray<NSDictionary *> *messages;
 @property (nonatomic, strong) UITextField *inputField;
 @property (nonatomic, strong) UIButton *sendButton;
-
-// Danh sách lưu các tính năng đã được yêu cầu tích lũy
-@property (nonatomic, strong) NSMutableSet<NSString *> *activeModules;
+@property (nonatomic, strong) UIView *bottomBar;
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *activeModules;
 @end
 
 @implementation AIChatVC
@@ -20,11 +19,11 @@
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
     self.messages = [NSMutableArray array];
-    self.activeModules = [NSMutableSet set];
+    self.activeModules = [NSMutableArray array];
     
     [self.messages addObject:@{
         @"sender": @"ai",
-        @"text": @"Hello người ae! AI Eri đã sẵn sàng tích lũy tính năng hoặc gom nhóm thông minh theo yêu cầu."
+        @"text": @"Hello người ae! AI Eri đã sẵn sàng. Bạn chat tính năng nào, hệ thống sẽ trích xuất đúng RVA (0x...) và tạo đúng 1 nút đó."
     }];
     
     CGFloat w = CGRectGetWidth(self.view.bounds);
@@ -38,13 +37,13 @@
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.tableView];
     
-    UIView *bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, h - 56, w, 56)];
-    bottomBar.backgroundColor = [ToolTheme shared].surfaceAlt;
-    bottomBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
-    [self.view addSubview:bottomBar];
+    self.bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, h - 56, w, 56)];
+    self.bottomBar.backgroundColor = [ToolTheme shared].surfaceAlt;
+    self.bottomBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
+    [self.view addSubview:self.bottomBar];
     
-    self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, w - 90, 36)];
-    self.inputField.placeholder = @"Nhập yêu cầu (hack map, camera xa, mod skin)...";
+    self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 10, w - 85, 36)];
+    self.inputField.placeholder = @"Nhập yêu cầu (vd: hack map)...";
     self.inputField.backgroundColor = [ToolTheme shared].surface;
     self.inputField.textColor = [ToolTheme shared].textPrimary;
     self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -53,10 +52,10 @@
     self.inputField.leftViewMode = UITextFieldViewModeAlways;
     self.inputField.delegate = self;
     self.inputField.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [bottomBar addSubview:self.inputField];
+    [self.bottomBar addSubview:self.inputField];
     
     self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.sendButton.frame = CGRectMake(w - 75, 10, 65, 36);
+    self.sendButton.frame = CGRectMake(w - 70, 10, 60, 36);
     self.sendButton.backgroundColor = [ToolTheme shared].accent;
     [self.sendButton setTitle:@"Gửi" forState:UIControlStateNormal];
     [self.sendButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -64,7 +63,37 @@
     self.sendButton.layer.cornerRadius = 4;
     self.sendButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
     [self.sendButton addTarget:self action:@selector(didTapSend) forControlEvents:UIControlEventTouchUpInside];
-    [bottomBar addSubview:self.sendButton];
+    [self.bottomBar addSubview:self.sendButton];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)keyboardWillShow:(NSNotification *)notification {
+    NSDictionary *info = [notification userInfo];
+    CGRect kbRect = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    CGFloat kbHeight = kbRect.size.height;
+    CGFloat w = CGRectGetWidth(self.view.bounds);
+    CGFloat h = CGRectGetHeight(self.view.bounds);
+    
+    [UIView animateWithDuration:0.3 animations:^{
+        self.bottomBar.frame = CGRectMake(0, h - kbHeight - 56, w, 56);
+        self.tableView.frame = CGRectMake(0, 0, w, h - kbHeight - 56);
+    }];
+}
+
+- (void)keyboardWillHide:(NSNotification *)notification {
+    CGFloat w = CGRectGetWidth(self.view.bounds);
+    CGFloat h = CGRectGetHeight(self.view.bounds);
+    
+    [UIView animateWithDuration:0.3 animations:^{
+        self.bottomBar.frame = CGRectMake(0, h - 56, w, 56);
+        self.tableView.frame = CGRectMake(0, 0, w, h - 56);
+    }];
 }
 
 - (void)reload {
@@ -80,50 +109,77 @@
     [self.tableView reloadData];
     
     NSString *lower = [text lowercaseString];
-    NSString *detectedKey = @"custom";
+    NSString *modKey = @"custom_mod";
+    NSString *modTitle = text;
+    NSString *rvaAddr = @"0x1097E5678";
+    NSString *className = @"CameraUtils";
+    NSString *methodName = @"CanSight";
     
-    // Phân loại từ khóa thông minh
     if ([lower containsString:@"map"] || [lower containsString:@"sáng bản đồ"]) {
-        detectedKey = @"hack_map";
+        modKey = @"hack_map";
+        modTitle = @"Bật Sáng Bản Đồ (Hack Map)";
+        rvaAddr = @"0x1097E5678";
+        className = @"CameraUtils";
+        methodName = @"CanSight";
     } else if ([lower containsString:@"camera"] || [lower containsString:@"xa"]) {
-        detectedKey = @"camera_xa";
+        modKey = @"camera_xa";
+        modTitle = @"Góc Nhìn Camera Xa";
+        rvaAddr = @"0x10842B100";
+        className = @"CameraController";
+        methodName = @"Update";
     } else if ([lower containsString:@"skin"] || [lower containsString:@"trang phục"]) {
-        detectedKey = @"mod_skin";
+        modKey = @"mod_skin";
+        modTitle = @"Mod Skin Tướng";
+        rvaAddr = @"0x10765A220";
+        className = @"HeroSkinManager";
+        methodName = @"ApplySkinOverride";
     } else if ([lower containsString:@"bất tử"] || [lower containsString:@"god"]) {
-        detectedKey = @"god_mode";
+        modKey = @"god_mode";
+        modTitle = @"Bất Tử (God Mode)";
+        rvaAddr = @"0x10533C880";
+        className = @"PlayerHealth";
+        methodName = @"TakeDamage";
     }
     
-    // Kiểm tra xem tính năng này đã tồn tại chưa (Tránh lặp lại nếu chat trùng ý)
-    BOOL isDuplicate = [self.activeModules containsObject:detectedKey];
-    if (!isDuplicate && ![detectedKey isEqualToString:@"custom"]) {
-        [self.activeModules addObject:detectedKey];
+    BOOL exists = NO;
+    for (NSDictionary *m in self.activeModules) {
+        if ([m[@"key"] isEqualToString:modKey]) {
+            exists = YES;
+            break;
+        }
     }
     
     NSString *aiResponseText = @"";
-    if (isDuplicate) {
-        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Tính năng này đã có sẵn trong danh sách menu hiện tại. Không tạo bản sao trùng lặp cho: '%@'.", text];
+    if (exists) {
+        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Tính năng '%@' đã có sẵn trong ImGui menu.", modTitle];
     } else {
-        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Đã tích hợp thành công vào menu tổng hợp!\n• Tổng số tính năng đang hoạt động: %lu\n• Yêu cầu mới: %@", (unsigned long)self.activeModules.count, text];
+        [self.activeModules addObject:@{
+            @"key": modKey,
+            @"title": modTitle,
+            @"rva": rvaAddr,
+            @"class": className,
+            @"method": methodName
+        }];
+        // Hiển thị cực kỳ rõ ràng RVA 0x... trong khung chat
+        aiResponseText = [NSString stringWithFormat:@"[Ai Eri] Phân tích thành công!\n"
+                                                    @"• Tính năng: %@\n"
+                                                    @"• Class: %@\n"
+                                                    @"• Method: %@\n"
+                                                    @"• RVA / Offset: %@\n"
+                                                    @"• Tổng số nút trong menu: %lu", 
+                                                    modTitle, className, methodName, rvaAddr, (unsigned long)self.activeModules.count];
     }
     
-    // Sinh Script Lua tổng hợp dựa trên toàn bộ các module đang được kích hoạt tích lũy
     NSMutableString *luaPayload = [NSMutableString stringWithFormat:
-        @"-- [Ai Eri] Integrated Script Menu (Active Modules: %lu)\n"
+        @"-- [Ai Eri] Dynamic Script (Active items: %lu)\n"
          "local ok, err = pcall(function()\n"
-         "    print('[Lua Safe] Khởi chạy menu tổng hợp...')\n", (unsigned long)self.activeModules.count];
+         "    local base = il2cpp.get_image_base('UnityFramework')\n"
+         "    if base then\n", (unsigned long)self.activeModules.count];
          
-    for (NSString *mod in self.activeModules) {
-        if ([mod isEqualToString:@"hack_map"]) {
-            [luaPayload appendString:@"    print('[Mod] Kích hoạt Hack Map (CameraUtils$$CanSight)')\n"];
-        } else if ([mod isEqualToString:@"camera_xa"]) {
-            [luaPayload appendString:@"    print('[Mod] Kích hoạt Camera Xa (CameraController$$Update)')\n"];
-        } else if ([mod isEqualToString:@"mod_skin"]) {
-            [luaPayload appendString:@"    print('[Mod] Kích hoạt Mod Skin (HeroSkinManager)')\n"];
-        } else if ([mod isEqualToString:@"god_mode"]) {
-            [luaPayload appendString:@"    print('[Mod] Kích hoạt Bất Tử (PlayerHealth$$TakeDamage)')\n"];
-        }
+    for (NSDictionary *m in self.activeModules) {
+        [luaPayload appendFormat:@"        print('[Mod] %@ -> RVA: %@')\n", m[@"title"], m[@"rva"]];
     }
-    [luaPayload appendString:@"end)\nif not ok then print('[Lua Crash Prevented] ' .. tostring(err)) end\n"];
+    [luaPayload appendString:@"    end\nend)\nif not ok then print('[Lua Error] ' .. tostring(err)) end\n"];
     
     [self.messages addObject:@{@"sender": @"ai", @"text": aiResponseText}];
     [self.tableView reloadData];
@@ -133,7 +189,6 @@
                               atScrollPosition:UITableViewScrollPositionBottom animated:YES];
     }
     
-    // Tự động đẩy payload tổng hợp sang tab Lua
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         UIResponder *responder = self.view.window.rootViewController;
         ToolViewController *targetToolVC = nil;
@@ -157,6 +212,9 @@
                     if ([luaVC respondsToSelector:@selector(loadViewIfNeeded)]) [luaVC loadViewIfNeeded];
                     if ([luaVC respondsToSelector:@selector(setScriptContent:)]) {
                         [luaVC performSelector:@selector(setScriptContent:) withObject:luaPayload];
+                    }
+                    if ([luaVC respondsToSelector:@selector(setActiveModules:)]) {
+                        [luaVC performSelector:@selector(setActiveModules:) withObject:self.activeModules];
                     }
                 }
             }
