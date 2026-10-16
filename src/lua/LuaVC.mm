@@ -43,7 +43,6 @@ static UIView *sharedImGuiContainerView = nil;
 }
 
 - (void)loadView {
-    // Chủ động định nghĩa view với kích thước an toàn tránh frame zero gây crash
     CGRect screenRect = [UIScreen mainScreen].bounds;
     CGFloat defaultW = MIN(CGRectGetWidth(screenRect), CGRectGetHeight(screenRect)) - 100;
     CGFloat defaultH = MIN(CGRectGetWidth(screenRect), CGRectGetHeight(screenRect)) - 120;
@@ -63,14 +62,15 @@ static UIView *sharedImGuiContainerView = nil;
     [super viewDidLayoutSubviews];
     if (self.scrollView) {
         self.scrollView.frame = self.view.bounds;
-        self.scrollView.contentSize = CGSizeMake(CGRectGetWidth(self.view.bounds), CGRectGetHeight(self.view.bounds) + 60);
+        CGFloat contentW = CGRectGetWidth(self.view.bounds);
+        self.scrollView.contentSize = CGSizeMake(contentW, CGRectGetHeight(self.view.bounds) + 60);
     }
 }
 
 - (void)buildUI {
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
-    if (w <= 50) w = 400;
+    if (w <= 50) w = 450;
     if (h <= 50) h = 300;
     
     self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
@@ -78,34 +78,40 @@ static UIView *sharedImGuiContainerView = nil;
     self.scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.scrollView];
 
-    CGFloat pad = 8;
-    CGFloat y = 8;
-    CGFloat availableW = w - (pad * 4);
-    CGFloat runBtnW = availableW * 0.4;
-    CGFloat otherBtnW = (availableW * 0.6) / 2.0;
+    CGFloat pad = 12;
+    CGFloat y = 10;
+    
+    // Tính toán chuẩn xác chiều rộng cho 3 nút: Chạy/Dừng (40%), Paste (30%), Clear (30%) trừ lề an toàn
+    CGFloat availableW = w - (pad * 2);
+    CGFloat runBtnW = availableW * 0.38;
+    CGFloat pasteBtnW = availableW * 0.30;
+    CGFloat clearBtnW = availableW - runBtnW - pasteBtnW - 8; // Trừ khoảng cách spacing giữa các nút
     CGFloat btnH = 36;
 
-    self.runStopButton = [self makeButton:@"▶️ Chạy" x:pad y:y w:runBtnW h:btnH color:[UIColor colorWithRed:0.20 green:0.70 blue:0.40 alpha:1.0]];
+    CGFloat bx = pad;
+    self.runStopButton = [self makeButton:@"▶️ Chạy" x:bx y:y w:runBtnW h:btnH color:[UIColor colorWithRed:0.20 green:0.70 blue:0.40 alpha:1.0]];
     [self.runStopButton addTarget:self action:@selector(runStopTapped) forControlEvents:UIControlEventTouchUpInside];
 
-    self.pasteButton = [self makeButton:@"Paste" x:pad * 2 + runBtnW y:y w:otherBtnW h:btnH color:[UIColor colorWithRed:0.30 green:0.50 blue:0.70 alpha:1.0]];
+    bx += runBtnW + 4;
+    self.pasteButton = [self makeButton:@"Paste" x:bx y:y w:pasteBtnW h:btnH color:[UIColor colorWithRed:0.30 green:0.50 blue:0.70 alpha:1.0]];
     [self.pasteButton addTarget:self action:@selector(pasteTapped) forControlEvents:UIControlEventTouchUpInside];
 
-    self.clearButton = [self makeButton:@"Clear" x:pad * 3 + runBtnW + otherBtnW y:y w:otherBtnW h:btnH color:[UIColor colorWithRed:0.40 green:0.40 blue:0.40 alpha:1.0]];
+    bx += pasteBtnW + 4;
+    self.clearButton = [self makeButton:@"Clear" x:bx y:y w:clearBtnW h:btnH color:[UIColor colorWithRed:0.40 green:0.40 blue:0.40 alpha:1.0]];
     [self.clearButton addTarget:self action:@selector(clearTapped) forControlEvents:UIControlEventTouchUpInside];
 
-    y += btnH + 8;
+    y += btnH + 10;
 
-    UILabel *editorLabel = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, 16)];
+    UILabel *editorLabel = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, availableW, 16)];
     editorLabel.text = @"EDITOR (LUA & IMGUI SCRIPT)";
     editorLabel.textColor = [ToolTheme shared].textMuted;
     editorLabel.font = [[ToolTheme shared] monoFont:10];
     editorLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.scrollView addSubview:editorLabel];
-    y += 20;
+    y += 18;
 
-    CGFloat editorH = 160;
-    self.editorView = [[UITextView alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, editorH)];
+    CGFloat editorH = 150;
+    self.editorView = [[UITextView alloc] initWithFrame:CGRectMake(pad, y, availableW, editorH)];
     self.editorView.backgroundColor = [ToolTheme shared].surface;
     self.editorView.textColor = [ToolTheme shared].textPrimary;
     self.editorView.font = [UIFont fontWithName:@"Menlo" size:11] ?: [UIFont systemFontOfSize:11];
@@ -114,18 +120,18 @@ static UIView *sharedImGuiContainerView = nil;
     self.editorView.delegate = self;
     self.editorView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.scrollView addSubview:self.editorView];
-    y += editorH + 8;
+    y += editorH + 10;
 
-    UILabel *consoleLabel = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, 16)];
+    UILabel *consoleLabel = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, availableW, 16)];
     consoleLabel.text = @"CONSOLE OUTPUT";
     consoleLabel.textColor = [ToolTheme shared].textMuted;
     consoleLabel.font = [[ToolTheme shared] monoFont:10];
     consoleLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.scrollView addSubview:consoleLabel];
-    y += 20;
+    y += 18;
 
-    CGFloat consoleH = MAX(100, h - y - pad - 20);
-    self.consoleView = [[UITextView alloc] initWithFrame:CGRectMake(pad, y, w - pad * 2, consoleH)];
+    CGFloat consoleH = MAX(90, h - y - pad - 10);
+    self.consoleView = [[UITextView alloc] initWithFrame:CGRectMake(pad, y, availableW, consoleH)];
     self.consoleView.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.05 alpha:1.0];
     self.consoleView.textColor = [ToolTheme shared].success;
     self.consoleView.font = [UIFont fontWithName:@"Menlo" size:10] ?: [UIFont systemFontOfSize:10];
@@ -144,7 +150,7 @@ static UIView *sharedImGuiContainerView = nil;
     [b setTitle:title forState:UIControlStateNormal];
     [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     b.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
-    b.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleRightMargin;
+    b.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.scrollView addSubview:b];
     return b;
 }
