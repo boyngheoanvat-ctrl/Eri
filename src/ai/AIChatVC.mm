@@ -73,7 +73,7 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.messages) {
         self.messages = [NSMutableArray arrayWithArray:@[
-            @{@"role": @"assistant", @"content": @"[AI & Ghidra Suite Ready] Chào ngài, hệ thống phân tích tĩnh RVA đã sẵn sàng."}
+            @{@"role": @"assistant", @"content": @"Hello Chào Người Anh Em !!!"}
         ]];
     }
     [self buildUI];
@@ -130,14 +130,14 @@
         [self.inputField resignFirstResponder];
         self.inputField.text = @"";
         [self.messages addObject:@{@"role": @"user", @"content": text}];
-        [self.messages addObject:@{@"role": @"assistant", @"content": @"[Đang phân tích Ghidra RVA...]"}];
+        [self.messages addObject:@{@"role": @"assistant", @"content": @"[Đang phân tích...]"}];
         [self.tableView reloadData];
         [self scrollToBottom];
         self.isWaitingResponse = YES;
 
         NSMutableArray *apiMessages = [NSMutableArray array];
         for (NSDictionary *m in self.messages) {
-            if ([m[@"content"] isEqualToString:@"[Đang phân tích Ghidra RVA...]"]) continue;
+            if ([m[@"content"] isEqualToString:@"[Đang phân tích...]"]) continue;
             [apiMessages addObject:@{@"role": m[@"role"], @"content": m[@"content"]}];
         }
         [[AIProvider shared] sendMessages:apiMessages tools:@[] delegate:self];
