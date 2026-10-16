@@ -163,7 +163,7 @@ static void *find_sym(void *handle, const char *baseName) {
     if (fn) return fn(domain, count);
 
     if (!domain) return NULL;
-    if (count) *count = domain->assemblyCount;
+    if (count) *count = domain->assembly_count; // Đã sửa thành assembly_count chuẩn ABI
     return (const Il2CppAssembly **)domain->assemblies;
 }
 
