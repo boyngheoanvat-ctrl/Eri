@@ -39,7 +39,7 @@ static const CGFloat kInputBarHeight = 50;
     [self buildUI];
     [self setupKeyboardObservers];
 
-    NSString *welcome = @"AI Agent & Ghidra ready.\nHỏi: phân tích Ghidra, hack map, viết code C++/Lua...";
+    NSString *welcome = @"Hello Người Anh Em Của Tôi";
     [self.items addObject:@{@"type": @"ai", @"text": welcome}];
     [self.tableView reloadData];
 
