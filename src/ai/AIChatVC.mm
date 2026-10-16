@@ -37,7 +37,6 @@
 
         self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, w, tableH) style:UITableViewStylePlain];
         self.tableView.backgroundColor = [UIColor clearColor];
-        self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
         self.tableView.dataSource = self;
         self.tableView.delegate = self;
         [self.view addSubview:self.tableView];
@@ -47,7 +46,7 @@
         [self.view addSubview:bottomBar];
 
         self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 8, w - 110, 38)];
-        self.inputField.placeholder = @"Nhập RVA hoặc câu lệnh hỏi AI...";
+        self.inputField.placeholder = @"Nhập câu hỏi AI...";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
         self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -58,7 +57,6 @@
         self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
         self.sendButton.frame = CGRectMake(w - 94, 8, 82, 38);
         self.sendButton.backgroundColor = [ToolTheme shared].accent;
-        self.sendButton.layer.cornerRadius = 6;
         [self.sendButton setTitle:@"Gửi" forState:UIControlStateNormal];
         [self.sendButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         [self.sendButton addTarget:self action:@selector(didTapSend) forControlEvents:UIControlEventTouchUpInside];
@@ -70,29 +68,18 @@
     @autoreleasepool {
         NSString *text = [self.inputField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         if (text.length == 0 || self.isWaitingResponse) return;
-
         [self.inputField resignFirstResponder];
         self.inputField.text = @"";
-
         [self.messages addObject:@{@"role": @"user", @"content": text}];
         [self.messages addObject:@{@"role": @"assistant", @"content": @"[Đang phân tích Ghidra RVA...]"}];
         [self.tableView reloadData];
-        [self scrollToBottom];
-
         self.isWaitingResponse = YES;
-
         NSMutableArray *apiMessages = [NSMutableArray array];
         for (NSDictionary *m in self.messages) {
             if ([m[@"content"] isEqualToString:@"[Đang phân tích Ghidra RVA...]"]) continue;
             [apiMessages addObject:@{@"role": m[@"role"], @"content": m[@"content"]}];
         }
-
-        NSMutableArray *toolsSchema = [NSMutableArray array];
-        for (AITool *tool in [AITool allTools]) {
-            [toolsSchema addObject:[tool openAISchema]];
-        }
-
-        [[AIProvider shared] sendMessages:apiMessages tools:toolsSchema delegate:self];
+        [[AIProvider shared] sendMessages:apiMessages tools:@[] delegate:self];
     }
 }
 
@@ -102,24 +89,11 @@
             self.messages[self.messages.count - 1] = @{@"role": @"assistant", @"content": text ?: @"[Không có phản hồi]"};
         }
         [self.tableView reloadData];
-        [self scrollToBottom];
     }
 }
 
 - (void)aiStreamDidComplete { self.isWaitingResponse = NO; }
-- (void)aiStreamDidFailWithError:(NSError *)error {
-    self.isWaitingResponse = NO;
-    if (self.messages.count > 0) {
-        self.messages[self.messages.count - 1] = @{@"role": @"assistant", @"content": [NSString stringWithFormat:@"[Lỗi] %@", error.localizedDescription]};
-    }
-    [self.tableView reloadData];
-}
-
-- (void)scrollToBottom {
-    if (self.messages.count > 0) {
-        [self.tableView scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:self.messages.count - 1 inSection:0] atScrollPosition:UITableViewScrollPositionBottom animated:YES];
-    }
-}
+- (void)aiStreamDidFailWithError:(NSError *)error { self.isWaitingResponse = NO; }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return self.messages.count; }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -127,7 +101,6 @@
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"ChatCell"];
         cell.backgroundColor = [UIColor clearColor];
-        cell.selectionStyle = UITableViewCellSelectionStyleNone;
         cell.textLabel.numberOfLines = 0;
         cell.textLabel.font = [[ToolTheme shared] monoFont:11];
     }
