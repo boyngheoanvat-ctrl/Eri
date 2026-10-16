@@ -101,7 +101,7 @@
         [self.view addSubview:self.bottomBar];
 
         self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 10, w - 90, 40)];
-        self.inputField.placeholder = @"Nhập câu lệnh hỏi AI hoặc RVA...";
+        self.inputField.placeholder = @"Nhập câu hỏi bạn muốn hỏi AI ở đây";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
         self.inputField.font = [[ToolTheme shared] monoFont:12];
