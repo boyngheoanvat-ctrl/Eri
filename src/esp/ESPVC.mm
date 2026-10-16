@@ -4,11 +4,11 @@
 
 @interface ESPVC ()
 @property (nonatomic, strong) UIScrollView *scrollView;
-@property (nonatomic, strong) UISwitch *masterSwitch; // Nút kích hoạt ESP tổng (vẽ vòng tròn màn hình)
-@property (nonatomic, strong) UISwitch *boxSwitch;    // ESP Box
-@property (nonatomic, strong) UISwitch *lineSwitch;   // ESP Line
-@property (nonatomic, strong) UISwitch *distSwitch;   // ESP Distance
-@property (nonatomic, strong) UISwitch *healthSwitch; // ESP Health
+@property (nonatomic, strong) UISwitch *masterSwitch;
+@property (nonatomic, strong) UISwitch *boxSwitch;
+@property (nonatomic, strong) UISwitch *lineSwitch;
+@property (nonatomic, strong) UISwitch *distSwitch;
+@property (nonatomic, strong) UISwitch *healthSwitch;
 @end
 
 @implementation ESPVC
@@ -35,7 +35,6 @@
     CGFloat rowH = 44;
     CGFloat availableW = w - (pad * 2);
     
-    // 1. Master Toggle: Kích hoạt ESP tổng (vẽ vòng tròn trên màn hình)
     [self addRowTitle:@"🟢 Kích Hoạt ESP (Master Toggle)" y:y w:availableW];
     self.masterSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(availableW - 50, y - 2, 51, 31)];
     self.masterSwitch.onTintColor = [ToolTheme shared].accent;
@@ -44,13 +43,11 @@
     
     y += rowH + 8;
     
-    // Vạch ngăn cách
     UIView *sep = [[UIView alloc] initWithFrame:CGRectMake(pad, y, availableW, 1)];
     sep.backgroundColor = [ToolTheme shared].surfaceAlt;
     [self.scrollView addSubview:sep];
     y += 16;
     
-    // 2. Các tính năng chi tiết (Box, Line, Distance, Health)
     NSArray *titles = @[@"ESP Box (Khung nhân vật)", 
                           @"ESP Line (Đường gióng)", 
                           @"ESP Distance (Khoảng cách)", 
@@ -68,7 +65,7 @@
         UISwitch *sw = switches[i];
         sw.frame = CGRectMake(availableW - 50, y - 2, 51, 31);
         sw.onTintColor = [ToolTheme shared].accent;
-        sw.enabled = NO; // Ban đầu tắt Master thì các tính năng con bị vô hiệu hóa
+        sw.enabled = NO;
         [sw addTarget:self action:@selector(subSwitchChanged:) forControlEvents:UIControlEventValueChanged];
         [self.scrollView addSubview:sw];
         
@@ -90,27 +87,24 @@
     [self.scrollView addSubview:lbl];
 }
 
-#pragma mark - Actions & Logic ESP
-
 - (void)masterSwitchChanged:(UISwitch *)sender {
     BOOL isOn = sender.isOn;
     
-    // Kích hoạt hoặc vô hiệu hóa các tính năng con khi bật/tắt Master Switch
     self.boxSwitch.enabled = isOn;
     self.lineSwitch.enabled = isOn;
     self.distSwitch.enabled = isOn;
     self.healthSwitch.enabled = isOn;
     
     if (!isOn) {
-        // Nếu tắt master, tự động tắt luôn các tính năng con và xóa sạch overlay
         self.boxSwitch.on = NO;
         self.lineSwitch.on = NO;
         self.distSwitch.on = NO;
         self.healthSwitch.on = NO;
+        [[ESPOverlay shared] hide];
+    } else {
+        [[ESPOverlay shared] show];
     }
     
-    // Gọi sang lớp ESPOverlay để hiển thị/ẩn vòng tròn trạng thái màn hình và render
-    [ESPOverlay setMasterEnabled:isOn];
     [self updateOverlayConfig];
 }
 
@@ -119,19 +113,17 @@
 }
 
 - (void)updateOverlayConfig {
-    BOOL master = self.masterSwitch.isOn;
-    BOOL box = master && self.boxSwitch.isOn;
-    BOOL line = master && self.lineSwitch.isOn;
-    BOOL dist = master && self.distSwitch.isOn;
-    BOOL health = master && self.healthSwitch.isOn;
-    
-    // Truyền cấu hình trực tiếp vào engine vẽ ESPOverlay
-    [ESPOverlay updateConfigWithMaster:master box:box line:line distance:dist health:health];
+    ESPOverlay *overlay = [ESPOverlay shared];
+    overlay.enabled = self.masterSwitch.isOn;
+    overlay.showBox = self.masterSwitch.isOn && self.boxSwitch.isOn;
+    overlay.showLine = self.masterSwitch.isOn && self.lineSwitch.isOn;
+    overlay.showDistance = self.masterSwitch.isOn && self.distSwitch.isOn;
+    overlay.showHP = self.masterSwitch.isOn && self.healthSwitch.isOn;
 }
 
 - (void)reload {
     if ([self isViewLoaded]) {
-        // Đồng bộ trạng thái giao diện hiện tại
+        // Đồng bộ trạng thái giao diện
     }
 }
 
