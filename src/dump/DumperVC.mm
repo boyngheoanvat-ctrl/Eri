@@ -160,34 +160,35 @@
         const char *name = _dyld_get_image_name(i);
         if (!name) continue;
         
-        // Kiểm tra nếu tên chứa từ khóa quen thuộc hoặc tìm qua Mach-O header magic
         const struct mach_header_64 *header = (const struct mach_header_64 *_Nullable)_dyld_get_image_header(i);
         if (!header) continue;
         
         if (header->magic == MH_MAGIC_64 || header->magic == MH_CIGAM_64) {
-            // Kiểm tra phân đoạn ẩn hoặc UnityFramework / il2cpp
             NSString *imgName = [NSString stringWithUTF8String:name];
             if ([imgName containsString:@"UnityFramework"] || [imgName containsString:@"il2cpp"] || [imgName containsString:@".app/"]) {
-                // Kiểm tra xem có chứa symbol hoặc bảng hàm il2cpp bên trong không
                 uintptr_t slide = _dyld_get_image_vmaddr_slide(i);
-                return (uint64_t)((uintptr_t)header + slide); // hoặc trả về header base chính xác
+                return (uint64_t)((uintptr_t)header + slide);
             }
         }
     }
     
-    // Fallback: Quét thủ công qua vùng nhớ ảo nếu bị ẩn hoàn toàn khỏi danh sách dyld thông thường
+    // Fallback chuẩn 64-bit sử dụng vm_region_64 để tránh lỗi undefined symbol
     mach_port_t task = mach_task_self();
     vm_address_t address = 0;
     vm_size_t size = 0;
-    uint32_t depth = 1;
+    mach_msg_type_number_t infoCount = VM_REGION_BASIC_INFO_COUNT_64;
+    vm_region_basic_info_data_64_t info;
+    mach_port_t object_name = MACH_PORT_NULL;
+    
     while (1) {
-        kern_return_t kr = vm_region(task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&depth, &depth, &depth);
+        infoCount = VM_REGION_BASIC_INFO_COUNT_64;
+        kern_return_t kr = vm_region_64(task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &infoCount, &object_name);
         if (kr != KERN_SUCCESS) break;
+        
         if (size > 0x10000) {
             @try {
                 uint32_t *magicPtr = (uint32_t *)address;
                 if (*magicPtr == MH_MAGIC_64) {
-                    // Xác thực có header Mach-O hợp lệ tại vùng nhớ ẩn
                     return (uint64_t)address;
                 }
             } @catch (NSException *e) {}
@@ -268,8 +269,6 @@
 
             Il2CppDomain *domain = [r domain_get];
             if (!domain) {
-                // Thử ép buộc khôi phục domain nếu bị che khuất con trỏ
-                [ws dbg:@"[!] Domain null, trying forced memory pointer recovery..."];
                 fail(@"Loi: No domain (Protected/Hidden)");
                 return;
             }
