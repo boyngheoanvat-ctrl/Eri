@@ -50,28 +50,29 @@
     if (totalW <= 0) totalW = 500;
     if (totalH <= 0) totalH = 320;
     
-    CGFloat headerH = 36;
-    CGFloat sidebarW = 72;
+    CGFloat headerH = 36; // Chiều cao cố định thanh tiêu đề
+    CGFloat sidebarW = 72; // Độ rộng cột menu tab bên trái
     
-    // 1. Thanh tiêu đề (Đã bỏ nút X)
+    // 1. Thanh tiêu đề đặt đúng ở góc trên cùng (Y = 0)
     self.headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, headerH)];
     self.headerView.backgroundColor = [ToolTheme shared].surfaceAlt;
     self.headerView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:self.headerView];
     
-    UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 6, 300, 24)];
+    UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 6, totalW - 24, 24)];
     titleLbl.text = @"Mod By Eri Nguyễn (Chạm 2 ngón để ẩn)";
     titleLbl.textColor = [ToolTheme shared].textPrimary;
     titleLbl.font = [[ToolTheme shared] monoBoldFont:11];
+    titleLbl.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.headerView addSubview:titleLbl];
     
-    // 2. Sidebar chứa nút tab
+    // 2. Sidebar đặt ngay bên dưới thanh tiêu đề (Y = headerH, Chiều cao = totalH - headerH)
     self.sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, headerH, sidebarW, totalH - headerH)];
     self.sidebarView.backgroundColor = [ToolTheme shared].surfaceAlt;
     self.sidebarView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleRightMargin;
     [self.view addSubview:self.sidebarView];
     
-    // 3. Content View
+    // 3. Content View đặt bên cạnh sidebar và bên dưới tiêu đề
     self.contentView = [[UIView alloc] initWithFrame:CGRectMake(sidebarW, headerH, totalW - sidebarW, totalH - headerH)];
     self.contentView.backgroundColor = [UIColor clearColor];
     self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -107,14 +108,13 @@
 
 - (void)setupGestures {
     UITapGestureRecognizer *twoFingerTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTwoFingerTap:)];
-    twoFingerTap.numberOfTouchesRequired = 2; // Ép buộc 2 ngón tay
-    twoFingerTap.numberOfTapsRequired = 1;    // Chạm 1 lần bằng 2 ngón
+    twoFingerTap.numberOfTouchesRequired = 2;
+    twoFingerTap.numberOfTapsRequired = 1;
     [self.view addGestureRecognizer:twoFingerTap];
 }
 
 - (void)handleTwoFingerTap:(UITapGestureRecognizer *)gesture {
     if (gesture.state == UIGestureRecognizerStateEnded) {
-        // Trạng thái chạm 2 ngón thành công -> Ẩn menu chính
         [UIView animateWithDuration:0.25 animations:^{
             self.view.alpha = 0.0;
         } completion:^(BOOL finished) {
@@ -145,7 +145,7 @@
         case 0: targetVC = self.aiVC; break;
         case 1: targetVC = self.dumperVC; break;
         case 2: targetVC = self.memoryVC; break;
-        case 3: targetVC = self.methodCallerVC; break;
+        case 3: targetVC = self.methodCallerVC; break: // syntax safe
         case 4: targetVC = self.luaVC; break;
         case 5: targetVC = self.espVC; break;
         default: targetVC = self.aiVC; break;
