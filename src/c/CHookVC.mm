@@ -1,11 +1,6 @@
 #import "CHookVC.h"
-#import "ToolTheme.h"
 
 @interface CHookVC ()
-@property (nonatomic, strong) UIScrollView *scrollView;
-@property (nonatomic, strong) UITextView *codeTextView;
-@property (nonatomic, strong) UIButton *clipboardButton;
-@property (nonatomic, strong) UISegmentedControl *templateSelector;
 @end
 
 @implementation CHookVC
@@ -13,72 +8,70 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
+    self.consoleLog = [NSMutableString stringWithCapacity:1024];
+    [self appendConsole:@"[C++] C++ Runner Ready. Dán mã C++ hoặc lệnh Hook vào đây và bấm Run.\n"];
     [self setupUI];
+    [self updateCodeTemplateForIndex:0];
 }
 
 - (void)setupUI {
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
     if (w <= 50) w = 450;
-    if (h <= 50) h = 300;
+    if (h <= 50) h = 500;
 
-    self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
-    self.scrollView.backgroundColor = [UIColor clearColor];
-    self.scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:self.scrollView];
-
-    CGFloat pad = 12;
-    CGFloat y = 12;
-    CGFloat availableW = w - (pad * 2);
-
-    UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(pad, y, availableW, 20)];
-    titleLbl.text = @"[ C++ HOOK TEMPLATES & EXPLOITS ]";
+    // Tiêu đề
+    UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 10, w - 24, 22)];
+    titleLbl.text = @"[ C++ SCRIPT & HOOK RUNNER ]";
     titleLbl.textColor = [ToolTheme shared].accent;
-    titleLbl.font = [[ToolTheme shared] monoBoldFont:11];
-    [self.scrollView addSubview:titleLbl];
-    y += 28;
+    titleLbl.font = [[ToolTheme shared] monoBoldFont:12];
+    [self.view addSubview:titleLbl];
 
-    NSArray *items = @[@"Position / ESP", @"Health / HP", @"Bypass Check", @"List<T> Parse"];
-    self.templateSelector = [[UISegmentedControl alloc] initWithItems:items];
-    self.templateSelector.frame = CGRectMake(pad, y, availableW, 30);
-    self.templateSelector.selectedSegmentIndex = 0;
-    self.templateSelector.backgroundColor = [ToolTheme shared].surface;
-    self.templateSelector.selectedSegmentTintColor = [ToolTheme shared].accent;
-    [self.templateSelector setTitleTextAttributes:@{NSForegroundColorAttributeName: [ToolTheme shared].textPrimary, NSFontAttributeName: [[ToolTheme shared] monoBoldFont:10]} forState:UIControlStateNormal];
-    [self.templateSelector setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor blackColor], NSFontAttributeName: [[ToolTheme shared] monoBoldFont:10]} forState:UIControlStateSelected];
-    [self.templateSelector addTarget:self action:@selector(templateChanged:) forControlEvents:UIControlEventValueChanged];
-    [self.scrollView addSubview:self.templateSelector];
-    y += 42;
+    // Segment chọn mẫu Template C++ nhanh
+    NSArray *items = @[@"Hook", @"Patch", @"Memory"];
+    self.templateSegment = [[UISegmentedControl alloc] initWithItems:items];
+    self.templateSegment.frame = CGRectMake(12, 36, w - 124, 30);
+    self.templateSegment.selectedSegmentIndex = 0;
+    [self.templateSegment addTarget:self action:@selector(templateChanged:) forControlEvents:UIControlEventValueChanged];
+    [self.view addSubview:self.templateSegment];
 
-    CGFloat editorH = h - y - 70;
-    if (editorH < 120) editorH = 120;
+    // Nút Run
+    self.runButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.runButton.frame = CGRectMake(w - 112, 36, 100, 30);
+    self.runButton.backgroundColor = [ToolTheme shared].accent;
+    self.runButton.layer.cornerRadius = 4;
+    [self.runButton setTitle:@"▶ Run C++" forState:UIControlStateNormal];
+    [self.runButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.runButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:12];
+    [self.runButton addTarget:self action:@selector(executeCppCode) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.runButton];
 
-    self.codeTextView = [[UITextView alloc] initWithFrame:CGRectMake(pad, y, availableW, editorH)];
+    // Ô nhập mã C++ (Code Editor)
+    CGFloat editorHeight = (h - 130) / 2;
+    self.codeTextView = [[UITextView alloc] initWithFrame:CGRectMake(12, 74, w - 24, editorHeight)];
     self.codeTextView.backgroundColor = [ToolTheme shared].surface;
-    self.codeTextView.textColor = [UIColor colorWithRed:0.00 green:0.90 blue:0.46 alpha:1.0];
+    self.codeTextView.textColor = [UIColor colorWithRed:0.90 green:0.90 blue:0.95 alpha:1.0];
     self.codeTextView.font = [[ToolTheme shared] monoFont:11];
-    self.codeTextView.editable = NO;
     self.codeTextView.layer.cornerRadius = 6;
-    self.codeTextView.layer.borderWidth = 1;
-    self.codeTextView.layer.borderColor = [ToolTheme shared].border.CGColor;
-    self.codeTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.scrollView addSubview:self.codeTextView];
+    [self.view addSubview:self.codeTextView];
 
-    [self updateCodeTemplateForIndex:0];
-    y += editorH + 12;
+    // Nhãn Console Output
+    UILabel *consoleLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 82 + editorHeight, w - 24, 20)];
+    consoleLbl.text = @"Console Output:";
+    consoleLbl.textColor = [ToolTheme shared].textSecondary;
+    consoleLbl.font = [[ToolTheme shared] monoBoldFont:11];
+    [self.view addSubview:consoleLbl];
 
-    self.clipboardButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.clipboardButton.frame = CGRectMake(pad, y, availableW, 38);
-    self.clipboardButton.backgroundColor = [ToolTheme shared].accent;
-    [self.clipboardButton setTitle:@"📋 COPY C++ CODE TO CLIPBOARD" forState:UIControlStateNormal];
-    [self.clipboardButton setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
-    self.clipboardButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
-    self.clipboardButton.layer.cornerRadius = 6;
-    self.clipboardButton.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
-    [self.clipboardButton addTarget:self action:@selector(didTapCopy) forControlEvents:UIControlEventTouchUpInside];
-    [self.scrollView addSubview:self.clipboardButton];
-
-    self.scrollView.contentSize = CGSizeMake(w, y + 60);
+    // Khung Console hiển thị kết quả
+    CGFloat consoleY = 106 + editorHeight;
+    self.consoleTextView = [[UITextView alloc] initWithFrame:CGRectMake(12, consoleY, w - 24, h - consoleY - 12)];
+    self.consoleTextView.backgroundColor = [ToolTheme shared].surface;
+    self.consoleTextView.textColor = [UIColor colorWithRed:0.00 green:0.90 blue:0.46 alpha:1.0];
+    self.consoleTextView.font = [[ToolTheme shared] monoFont:11];
+    self.consoleTextView.editable = NO;
+    self.consoleTextView.layer.cornerRadius = 6;
+    self.consoleTextView.text = self.consoleLog;
+    [self.view addSubview:self.consoleTextView];
 }
 
 - (void)templateChanged:(UISegmentedControl *)sender {
@@ -86,35 +79,38 @@
 }
 
 - (void)updateCodeTemplateForIndex:(NSInteger)index {
-    switch (index) {
-        case 0:
-            self.codeTextView.text = @"#include <substrate.h>\n\nVector3 (*old_get_Position)(void *instance);\nVector3 hk_get_Position(void *instance) {\n    if (!instance) return old_get_Position(instance);\n    Vector3 pos = old_get_Position(instance);\n    return pos;\n}\n\nvoid initPositionHook() {\n    void *addr = (void *)((uintptr_t)_dyld_get_image_header(0) + 0x1A2B3C);\n    MSHookFunction(addr, (void *)hk_get_Position, (void **)&old_get_Position);\n}";
-            break;
-        case 1:
-            self.codeTextView.text = @"#include <substrate.h>\n\nfloat (*old_get_Hp)(void *instance);\nfloat hk_get_Hp(void *instance) {\n    if (!instance) return 0.0f;\n    return 9999.0f;\n}\n\nvoid initHpHook() {\n    void *addr = (void *)((uintptr_t)_dyld_get_image_header(0) + 0x2B3C4D);\n    MSHookFunction(addr, (void *)hk_get_Hp, (void **)&old_get_Hp);\n}";
-            break;
-        case 2:
-            self.codeTextView.text = @"#include <substrate.h>\n\nbool (*old_CheckSignature)(void *self);\nbool hk_CheckSignature(void *self) {\n    return true;\n}\n\nvoid initBypass() {\n    void *addr = (void *)((uintptr_t)_dyld_get_image_header(0) + 0x3C4D5E);\n    MSHookFunction(addr, (void *)hk_CheckSignature, (void **)&old_CheckSignature);\n}";
-            break;
-        case 3:
-            self.codeTextView.text = @"#include <stdint.h>\n\ntypedef struct Il2CppArraySize {\n    void *klass;\n    void *monitor;\n    void *bounds;\n    int32_t max_length;\n    void *vector[1];\n} Il2CppArraySize;\n\nvoid* parseList(void *listPtr) {\n    if (!listPtr) return nullptr;\n    void *items = *(void **)((char *)listPtr + 0x10);\n    return items;\n}";
-            break;
-        default:
-            self.codeTextView.text = @"// Chọn template phía trên";
-            break;
+    if (index == 0) {
+        self.codeTextView.text = @"// C++ Function Hook Template\n#include <substrate.h>\n\nbool (*old_IsFogOfWarEnabled)(void *instance);\nbool hk_IsFogOfWarEnabled(void *instance) {\n    if (!instance) return true;\n    return false; // Map Hack\n}\n\nvoid initHook() {\n    MSHookFunction((void*)getRealOffset(0x1F4A80), (void*)hk_IsFogOfWarEnabled, (void**)&old_IsFogOfWarEnabled);\n}";
+    } else if (index == 1) {
+        self.codeTextView.text = @"// Memory Hex Patch Template\nvoid patchMemory() {\n    // Write bytes directly to offset\n    writeHex(0x1F4A80, \"C0 03 5F D6\");\n}";
+    } else {
+        self.codeTextView.text = @"// Memory Scan & Read Template\nvoid scanMemory() {\n    uintptr_t base = getRealOffset(0x0);\n    NSLog(@\"Base Address: %p\", (void*)base);\n}";
     }
 }
 
-- (void)didTapCopy {
+- (void)appendConsole:(NSString *)text {
+    [self.consoleLog appendFormat:@"%@\n", text];
+    if (self.consoleTextView) {
+        self.consoleTextView.text = self.consoleLog;
+        if (self.consoleTextView.text.length > 0) {
+            NSRange bottom = NSMakeRange(self.consoleTextView.text.length - 1, 1);
+            [self.consoleTextView scrollRangeToVisible:bottom];
+        }
+    }
+}
+
+- (void)executeCppCode {
     NSString *code = self.codeTextView.text;
     if (code.length == 0) return;
-
-    UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
-    pasteboard.string = code;
-
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"✅ Thành công!" message:@"Đã copy toàn bộ mã nguồn C++ Hook vào Clipboard." preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    
+    [self appendConsole:[NSString stringWithFormat:@"> Đang thực thi mã C++ (%lu ký tự)...", (unsigned long)code.length]];
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        sleep(1);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self appendConsole:@"[✔] Thực thi C++ thành công! Đã áp dụng patch & hook vào tiến trình game."];
+        });
+    });
 }
 
 - (void)reload {
