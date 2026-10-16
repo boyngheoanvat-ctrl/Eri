@@ -3,90 +3,55 @@
 @implementation ToolTheme
 
 + (instancetype)shared {
-    static ToolTheme *instance;
+    static ToolTheme *instance = nil;
     static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{ instance = [[ToolTheme alloc] init]; });
+    dispatch_once(&onceToken, ^{
+        instance = [[ToolTheme alloc] init];
+    });
     return instance;
 }
 
-#pragma mark - Background
-
 - (UIColor *)background {
-    return [UIColor colorWithRed:0.07 green:0.07 blue:0.09 alpha:1.0];
+    // Xám đậm đặc trưng ImGui Dark Theme (#1E1E1E)
+    return [UIColor colorWithRed:0.12 green:0.12 blue:0.12 alpha:0.95];
 }
 
 - (UIColor *)surface {
-    return [UIColor colorWithRed:0.11 green:0.11 blue:0.13 alpha:1.0];
+    // Xám khung panel (#252526)
+    return [UIColor colorWithRed:0.15 green:0.15 blue:0.16 alpha:1.0];
 }
 
 - (UIColor *)surfaceAlt {
-    return [UIColor colorWithRed:0.15 green:0.15 blue:0.18 alpha:1.0];
-}
-
-#pragma mark - Text
-
-- (UIColor *)textPrimary {
-    return [UIColor colorWithRed:0.92 green:0.92 blue:0.94 alpha:1.0];
-}
-
-- (UIColor *)textSecondary {
-    return [UIColor colorWithRed:0.65 green:0.65 blue:0.70 alpha:1.0];
-}
-
-- (UIColor *)textMuted {
-    return [UIColor colorWithRed:0.45 green:0.45 blue:0.50 alpha:1.0];
-}
-
-#pragma mark - Accent
-
-- (UIColor *)accent {
-    return [UIColor colorWithRed:0.26 green:0.59 blue:0.98 alpha:1.0];
-}
-
-- (UIColor *)accentSoft {
-    return [UIColor colorWithRed:0.26 green:0.59 blue:0.98 alpha:0.3];
-}
-
-- (UIColor *)success {
-    return [UIColor colorWithRed:0.40 green:0.80 blue:0.45 alpha:1.0];
-}
-
-- (UIColor *)warning {
-    return [UIColor colorWithRed:0.95 green:0.75 blue:0.30 alpha:1.0];
-}
-
-- (UIColor *)danger {
-    return [UIColor colorWithRed:0.90 green:0.35 blue:0.35 alpha:1.0];
-}
-
-#pragma mark - UI Elements
-
-- (UIColor *)divider {
-    return [UIColor colorWithRed:0.20 green:0.20 blue:0.24 alpha:1.0];
+    // Xám hover/element (#2D2D30)
+    return [UIColor colorWithRed:0.18 green:0.18 blue:0.19 alpha:1.0];
 }
 
 - (UIColor *)border {
-    return [UIColor colorWithRed:0.25 green:0.25 blue:0.30 alpha:1.0];
+    // Viền mảnh sắc nét (#3F3F46)
+    return [UIColor colorWithRed:0.25 green:0.25 blue:0.27 alpha:1.0];
 }
 
-- (UIColor *)selectedFill {
-    return [UIColor colorWithRed:0.26 green:0.59 blue:0.98 alpha:0.25];
+- (UIColor *)textPrimary {
+    // Trắng sáng tiêu chuẩn (#D4D4D4)
+    return [UIColor colorWithRed:0.83 green:0.83 blue:0.83 alpha:1.0];
 }
 
-- (UIColor *)mutedFill {
-    return [UIColor colorWithRed:0.18 green:0.18 blue:0.22 alpha:1.0];
+- (UIColor *)textMuted {
+    // Xám chữ phụ (#858585)
+    return [UIColor colorWithRed:0.52 green:0.52 blue:0.52 alpha:1.0];
 }
 
-#pragma mark - Fonts
+- (UIColor *)accent {
+    // Xanh lá ImGui Accent sắc nét (#00E676)
+    return [UIColor colorWithRed:0.00 green:0.90 blue:0.46 alpha:1.0];
+}
 
 - (UIFont *)monoFont:(CGFloat)size {
-    UIFont *f = [UIFont fontWithName:@"Menlo" size:size];
-    return f ?: [UIFont systemFontOfSize:size];
+    return [UIFont fontWithName:@"Menlo" size:size] ?: [UIFont systemFontOfSize:size];
 }
 
 - (UIFont *)monoBoldFont:(CGFloat)size {
-    UIFont *f = [UIFont fontWithName:@"Menlo-Bold" size:size];
-    return f ?: [UIFont boldSystemFontOfSize:size];
+    return [UIFont fontWithName:@"Menlo-Bold" size:size] ?: [UIFont boldSystemFontOfSize:size];
 }
 
 @end
