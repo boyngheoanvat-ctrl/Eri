@@ -10,6 +10,11 @@
 @property (nonatomic, strong) UIButton *stopButton;
 @property (nonatomic, strong) UIButton *clearButton;
 @property (nonatomic, strong) UIButton *pasteButton;
+
+// Biến lưu trạng thái ngầm để không bị mất khi ẩn menu
+@property (nonatomic, strong) NSString *savedScriptContent;
+@property (nonatomic, strong) NSString *savedConsoleText;
+@property (nonatomic, assign) BOOL isScriptRunning;
 @end
 
 @implementation LuaVC
@@ -17,13 +22,22 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
-    [self buildUI];
-    [self log:@"[Lua] Ready"];
-    if ([[LuaEngine shared] isAvailable]) {
-        [self log:@"[Lua] liblua OK"];
-    } else {
-        [self log:@"[Lua] liblua NOT available"];
+    
+    // Khởi tạo giá trị mặc định nếu chưa có
+    if (!self.savedScriptContent) {
+        self.savedScriptContent = @"-- Lua Script\n"
+                                  @"print(\"Hello from Lua!\")\n"
+                                  @"local x = 10 + 20\n"
+                                  @"print(\"x =\", x)\n"
+                                  @"for i = 1, 5 do\n"
+                                  @"  print(\"i =\", i)\n"
+                                  @"end";
     }
+    if (!self.savedConsoleText) {
+        self.savedConsoleText = @"-- Lua Console --\n";
+    }
+    
+    [self buildUI];
 }
 
 - (void)buildUI {
@@ -39,12 +53,11 @@
     CGFloat pad = 8;
     CGFloat y = 8;
     
-    // Tính toán lại chiều rộng 4 nút chuẩn xác theo chiều ngang khung chứa (trừ lề 2 bên và khoảng cách)
     CGFloat availableW = w - (pad * 5);
     CGFloat btnW = availableW / 4.0;
     CGFloat btnH = 36;
 
-    self.runButton = [self makeButton:@"Run" x:pad y:y w:btnW h:btnH
+    self.runButton = [self makeButton:@"▶️ Run" x:pad y:y w:btnW h:btnH
                                 color:[UIColor colorWithRed:0.20 green:0.70 blue:0.40 alpha:1.0]];
     [self.runButton addTarget:self action:@selector(runTapped)
              forControlEvents:UIControlEventTouchUpInside];
@@ -82,13 +95,8 @@
     self.editorView.layer.cornerRadius = 4;
     self.editorView.layer.borderWidth = 1;
     self.editorView.layer.borderColor = [ToolTheme shared].border.CGColor;
-    self.editorView.text = @"-- Lua Script\n"
-                           @"print(\"Hello from Lua!\")\n"
-                           @"local x = 10 + 20\n"
-                           @"print(\"x =\", x)\n"
-                           @"for i = 1, 5 do\n"
-                           @"  print(\"i =\", i)\n"
-                           @"end";
+    self.editorView.text = self.savedScriptContent;
+    self.editorView.delegate = self;
     self.editorView.autocorrectionType = UITextAutocorrectionTypeNo;
     self.editorView.autocapitalizationType = UITextAutocapitalizationTypeNone;
     self.editorView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
@@ -112,7 +120,7 @@
     self.consoleView.layer.cornerRadius = 4;
     self.consoleView.layer.borderWidth = 1;
     self.consoleView.layer.borderColor = [ToolTheme shared].border.CGColor;
-    self.consoleView.text = @"-- Lua Console --\n";
+    self.consoleView.text = self.savedConsoleText;
     self.consoleView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.scrollView addSubview:self.consoleView];
 }
@@ -130,6 +138,29 @@
     return b;
 }
 
+#pragma mark - State & UI Updates
+
+- (void)updateRunButtonState:(BOOL)isRunning {
+    self.isScriptRunning = isRunning;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (isRunning) {
+            [self.runButton setTitle:@"🟥 Đang chạy..." forState:UIControlStateNormal];
+            self.runButton.backgroundColor = [UIColor colorWithRed:0.80 green:0.20 blue:0.20 alpha:1.0]; // Màu đỏ
+        } else {
+            [self.runButton setTitle:@"▶️ Run" forState:UIControlStateNormal];
+            self.runButton.backgroundColor = [UIColor colorWithRed:0.20 green:0.70 blue:0.40 alpha:1.0]; // Màu xanh
+        }
+    });
+}
+
+#pragma mark - UITextViewDelegate
+
+- (void)textViewDidChange:(UITextView *)textView {
+    if (textView == self.editorView) {
+        self.savedScriptContent = textView.text;
+    }
+}
+
 #pragma mark - Actions
 
 - (void)runTapped {
@@ -138,12 +169,14 @@
 
     [self.editorView resignFirstResponder];
     [self log:@"[Lua] Running script..."];
+    [self updateRunButtonState:YES];
 
     __weak typeof(self) ws = self;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSString *result = [[LuaEngine shared] runScript:script];
         dispatch_async(dispatch_get_main_queue(), ^{
             [ws log:result];
+            [ws updateRunButtonState:NO];
         });
     });
 }
@@ -151,24 +184,30 @@
 - (void)stopTapped {
     [[LuaEngine shared] stop];
     [self log:@"[Lua] Stopped"];
+    [self updateRunButtonState:NO];
 }
 
 - (void)pasteTapped {
     NSString *clip = [UIPasteboard generalPasteboard].string;
     if (clip.length > 0) {
         self.editorView.text = clip;
+        self.savedScriptContent = clip;
         [self log:@"[Lua] Pasted from clipboard"];
     }
 }
 
 - (void)clearTapped {
-    self.consoleView.text = @"-- Lua Console --\n";
+    self.savedConsoleText = @"-- Lua Console --\n";
+    self.consoleView.text = self.savedConsoleText;
 }
 
 - (void)setScriptContent:(NSString *)content {
     if (content && content.length > 0) {
+        self.savedScriptContent = content;
         dispatch_async(dispatch_get_main_queue(), ^{
-            self.editorView.text = content;
+            if (self.editorView) {
+                self.editorView.text = content;
+            }
             [self log:@"[Lua AI] Đã nhận script mới từ AI Chat!"];
         });
     }
@@ -176,12 +215,21 @@
 
 - (void)log:(NSString *)text {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *current = self.consoleView.text ?: @"";
-        self.consoleView.text = [current stringByAppendingFormat:@"%@\n", text];
+        NSString *current = self.consoleView.text ?: @"-- Lua Console --\n";
+        self.savedConsoleText = [current stringByAppendingFormat:@"%@\n", text];
+        self.consoleView.text = self.savedConsoleText;
         [self.consoleView scrollRangeToVisible:NSMakeRange(self.consoleView.text.length - 1, 1)];
     });
 }
 
-- (void)reload {}
+- (void)reload {
+    if (self.editorView && self.savedScriptContent) {
+        self.editorView.text = self.savedScriptContent;
+    }
+    if (self.consoleView && self.savedConsoleText) {
+        self.consoleView.text = self.savedConsoleText;
+    }
+    [self updateRunButtonState:self.isScriptRunning];
+}
 
 @end
