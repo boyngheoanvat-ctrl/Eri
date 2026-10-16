@@ -22,6 +22,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    // Thiết kế khung cửa sổ chính mang phong cách ImGui Window
     self.view.backgroundColor = [ToolTheme shared].background;
     self.view.layer.cornerRadius = 4.0;
     self.view.layer.borderWidth = 1.0;
@@ -37,6 +38,7 @@
     if (totalW <= 50) totalW = 550;
     if (totalH <= 50) totalH = 340;
     
+    // 1. ImGui Title Bar
     UIView *titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, 26)];
     titleBar.backgroundColor = [ToolTheme shared].surfaceAlt;
     titleBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
@@ -54,6 +56,7 @@
     titleSep.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [titleBar addSubview:titleSep];
     
+    // 2. Navigation Rail (Tab bên trái)
     CGFloat railW = 90;
     CGFloat railY = 26;
     CGFloat railH = totalH - railY;
@@ -68,6 +71,7 @@
     railSep.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleLeftMargin;
     [self.railView addSubview:railSep];
     
+    // 3. Content Area
     CGFloat contentX = railW;
     CGFloat contentY = railY;
     CGFloat contentW = totalW - railW;
@@ -78,6 +82,7 @@
     self.contentArea.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.contentArea];
     
+    // 4. Khởi tạo danh sách các Tab VC
     self.childViewControllersList = @[
         [[ESPVC alloc] init],
         [[DumperVC alloc] init],
@@ -95,7 +100,14 @@
     
     for (NSInteger i = 0; i < titles.count; i++) {
         ToolRailButton *btn = [[ToolRailButton alloc] initWithFrame:CGRectMake(6, btnY, railW - 12, btnH)];
-        [btn setTitle:titles[i] forState:UIControlStateNormal];
+        
+        // Kiểm tra an toàn phương thức gán tiêu đề tương thích với custom ToolRailButton
+        if ([btn respondsToSelector:@selector(setTitle:forState:)]) {
+            [btn setTitle:titles[i] forState:UIControlStateNormal];
+        } else if ([btn respondsToSelector:@selector(setTitle:)]) {
+            [btn setTitle:titles[i]];
+        }
+        
         btn.tag = i;
         [btn addTarget:self action:@selector(didSelectTab:) forControlEvents:UIControlEventTouchUpInside];
         [self.railView addSubview:btn];
