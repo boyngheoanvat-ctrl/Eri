@@ -5,6 +5,7 @@
 #import <mach-o/nlist.h>
 #include <string.h>
 #include <stdio.h>
+#import <mach/mach.h>
 
 #pragma mark - Auto symbol finder
 
@@ -27,7 +28,6 @@ static void *find_sym(void *handle, const char *baseName) {
     p = dlsym(RTLD_DEFAULT, baseName);
     if (p) return p;
 
-    // Duyệt symbol table UnityFramework
     uint32_t count = _dyld_image_count();
     for (uint32_t i = 0; i < count; i++) {
         const char *imgName = _dyld_get_image_name(i);
@@ -62,8 +62,6 @@ static void *find_sym(void *handle, const char *baseName) {
                     if (strstr(nm, baseName)) {
                         uint64_t va = nl[k].n_value + slide;
                         void *fnPtr = (void *)(uintptr_t)va;
-                        NSLog(@"[IL2CPPResolver] Found '%s' as '%s' @ %p",
-                              baseName, nm, fnPtr);
                         return fnPtr;
                     }
                 }
@@ -103,10 +101,7 @@ static void *find_sym(void *handle, const char *baseName) {
     };
     for (int i = 0; paths[i]; i++) {
         self.handle = dlopen(paths[i], RTLD_NOW);
-        if (self.handle) {
-            NSLog(@"[IL2CPPResolver] Opened: %s", paths[i]);
-            break;
-        }
+        if (self.handle) break;
     }
 
     if (!self.handle) {
@@ -117,10 +112,7 @@ static void *find_sym(void *handle, const char *baseName) {
                          strstr(name, "il2cpp") ||
                          strstr(name, "GameAssembly"))) {
                 self.handle = dlopen(name, RTLD_NOW);
-                if (self.handle) {
-                    NSLog(@"[IL2CPPResolver] Opened via dyld: %s", name);
-                    break;
-                }
+                if (self.handle) break;
             }
         }
     }
@@ -129,6 +121,12 @@ static void *find_sym(void *handle, const char *baseName) {
 }
 
 - (BOOL)isResolved { return self.handle != NULL; }
+
+- (uint64_t)il2cppBase {
+    uintptr_t slide = _dyld_get_image_vmaddr_slide(0);
+    const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(0);
+    return (uint64_t)((uintptr_t)header + slide);
+}
 
 #pragma mark - Thread attach
 
@@ -146,7 +144,6 @@ static void *find_sym(void *handle, const char *baseName) {
     thread_attach_t ta = (thread_attach_t)find_sym(self.handle, "il2cpp_thread_attach");
     if (ta) {
         ta(domain);
-        NSLog(@"[IL2CPPResolver] Attached thread %@", [NSThread currentThread]);
     }
 }
 
@@ -159,12 +156,24 @@ static void *find_sym(void *handle, const char *baseName) {
     return fn ? fn() : NULL;
 }
 
-- (Il2CppImage *)assembly_get_image:(Il2CppAssembly *)assembly {
+- (const Il2CppAssembly **)domain_get_assemblies:(const Il2CppDomain *)domain count:(size_t *)count {
+    if (!domain) return NULL;
+    typedef const Il2CppAssembly **(*fn_t)(const Il2CppDomain *, size_t *);
+    fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_domain_get_assemblies");
+    if (fn) return fn(domain, count);
+    if (domain->assemblies && count) {
+        *count = domain->assembly_count;
+        return domain->assemblies;
+    }
+    return NULL;
+}
+
+- (Il2CppImage *)assembly_get_image:(const Il2CppAssembly *)assembly {
     if (!assembly) return NULL;
     typedef Il2CppImage *(*fn_t)(const Il2CppAssembly *);
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_assembly_get_image");
     if (fn) return fn(assembly);
-    return NULL;
+    return assembly->image;
 }
 
 - (const char *)image_get_name:(Il2CppImage *)image {
@@ -389,6 +398,46 @@ static void *find_sym(void *handle, const char *baseName) {
     fn_t fn = (fn_t)find_sym(self.handle, "il2cpp_type_get_name");
     if (fn) return fn(type);
     return NULL;
+}
+
+#pragma mark - Memory Writing & Offsets
+
++ (uintptr_t)getRealOffset:(uintptr_t)offset {
+    uintptr_t slide = _dyld_get_image_vmaddr_slide(0);
+    const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(0);
+    return (uintptr_t)header + slide + offset;
+}
+
++ (BOOL)writeFloat:(uintptr_t)address value:(float)value {
+    mach_port_t task = mach_task_self();
+    vm_prot_t oldProt;
+    kern_return_t kr = vm_protect(task, (vm_address_t)address & ~(vm_page_size - 1), vm_page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+    if (kr != KERN_SUCCESS) return NO;
+    
+    *(float *)address = value;
+    
+    vm_protect(task, (vm_address_t)address & ~(vm_page_size - 1), vm_page_size, FALSE, oldProt);
+    return YES;
+}
+
++ (BOOL)writeInt32:(uintptr_t)address value:(int32_t)value {
+    mach_port_t task = mach_task_self();
+    vm_prot_t oldProt;
+    kern_return_t kr = vm_protect(task, (vm_address_t)address & ~(vm_page_size - 1), vm_page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+    if (kr != KERN_SUCCESS) return NO;
+    
+    *(int32_t *)address = value;
+    
+    vm_protect(task, (vm_address_t)address & ~(vm_page_size - 1), vm_page_size, FALSE, oldProt);
+    return YES;
+}
+
++ (float)readFloat:(uintptr_t)address {
+    return *(float *)address;
+}
+
++ (int32_t)readInt32:(uintptr_t)address {
+    return *(int32_t *)address;
 }
 
 @end
