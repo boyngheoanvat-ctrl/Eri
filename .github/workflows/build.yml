@@ -81,12 +81,9 @@ jobs:
       - name: Build dylib with Lua
         run: |
           SDK=$HOME/sdks/iPhoneOS16.5.sdk
-          # Tự động quét toàn bộ file nguồn trong src/ kể cả các thư mục con (ai, c, dump, memory, esp, lua, core)
+          # Tự động quét toàn bộ file nguồn .mm, .m, .cpp, .c trong src/
           SRC=$(find src -name "*.mm" -o -name "*.m" -o -name "*.cpp" -o -name "*.c" | tr '\n' ' ')
           echo "Sources: $SRC"
-          
-          # Tự động lấy tất cả các thư mục con để thêm vào đường dẫn include (-I)
-          INCLUDE_DIRS=$(find src -type d -exec echo -I{} ;)
           
           clang++ \
             -target arm64-apple-ios14.0 \
@@ -99,7 +96,9 @@ jobs:
             -framework CoreGraphics \
             -framework QuartzCore \
             -install_name @rpath/libtool.dylib \
-            -I. -Isrc $INCLUDE_DIRS \
+            -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
+            -Isrc/memory -Isrc/dump -Isrc/lua -Isrc/esp \
+            -Isrc/c \
             -Ilibs \
             -Llibs \
             -llua \
