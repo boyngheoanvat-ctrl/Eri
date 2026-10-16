@@ -104,7 +104,7 @@
     } else {
         [[ESPOverlay shared] show];
     }
-    
+     
     [self updateOverlayConfig];
 }
 
