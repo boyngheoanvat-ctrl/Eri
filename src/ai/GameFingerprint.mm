@@ -27,7 +27,6 @@
         
         NSString *lowerConcept = concept.lowercaseString;
         
-        // Sử dụng IL2CPPResolver để phân giải an toàn, tránh lỗi undefined symbol lúc link
         IL2CPPResolver *r = [IL2CPPResolver shared];
         if (!r || ![r resolve]) {
             NSLog(@"[GameFingerprint] IL2CPPResolver not resolved yet.");
@@ -48,12 +47,12 @@
         
         NSInteger foundCount = 0;
         
-        // Duyệt qua từng Assembly và Class trong game thông qua Resolver
         for (size_t i = 0; i < assemblyCount; i++) {
             const Il2CppAssembly *asm_ = assemblies[i];
             if (!asm_) continue;
             
-            Il2CppImage *image = [r assembly_get_image:asm_];
+            // Ép kiểu tường minh (Il2CppAssembly *) tránh lỗi strict type checking của Clang
+            Il2CppImage *image = [r assembly_get_image:(Il2CppAssembly *)asm_];
             if (!image) continue;
             
             size_t classCount = [r image_get_class_count:image];
@@ -76,7 +75,6 @@
                     if (!methodName) continue;
                     NSString *methodNameStr = [NSString stringWithUTF8String:methodName];
                     
-                    // Kiểm tra xem tên class hoặc tên method có chứa keyword người dùng tìm không
                     if ([clsNameStr.lowercaseString containsString:lowerConcept] || 
                         [methodNameStr.lowercaseString containsString:lowerConcept]) {
                         
