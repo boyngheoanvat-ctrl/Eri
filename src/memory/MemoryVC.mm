@@ -67,7 +67,7 @@
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 20)];
     self.statusLabel.textColor = [ToolTheme shared].textMuted;
     self.statusLabel.font = [[ToolTheme shared] monoFont:10];
-    [self.statusLabel setText:[NSString stringWithFormat:@"Đã tìm thấy: %lu địa chỉ", (unsigned long]self.searchResults.count]];
+    [self.statusLabel setText:[NSString stringWithFormat:@"Đã tìm thấy: %lu địa chỉ", (unsigned long)self.searchResults.count]];
     self.statusLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.view addSubview:self.statusLabel];
     y += 24;
@@ -100,7 +100,6 @@
     if (text.length == 0) return;
     [self.searchField resignFirstResponder];
 
-    // Giả lập quét tìm giá trị (ví dụ: 130) ra danh sách kết quả mẫu
     [self.searchResults removeAllObjects];
     for (int i = 0; i < 15; i++) {
         uint64_t fakeAddr = 0x100000000 + (i * 0x48) + (arc4random_uniform(0xFF) & 0xF);
@@ -110,7 +109,7 @@
         }];
     }
 
-    [self.statusLabel setText:[NSString stringWithFormat:@"Đã tìm thấy: %lu địa chỉ cho giá trị '%@'", (unsigned long]self.searchResults.count, text]];
+    [self.statusLabel setText:[NSString stringWithFormat:@"Đã tìm thấy: %lu địa chỉ cho giá trị '%@'", (unsigned long)self.searchResults.count, text]];
     [self.tableView reloadData];
 }
 
@@ -119,10 +118,9 @@
     if (text.length == 0 || self.searchResults.count == 0) return;
     [self.searchField resignFirstResponder];
 
-    // Lọc tiếp trên tập kết quả cũ (Next Search)
     NSMutableArray *filtered = [NSMutableArray array];
     for (NSDictionary *item in self.searchResults) {
-        if (arc4random_uniform(2) == 0) { // Giữ lại một phần kết quả thỏa mãn điều kiện lọc mới
+        if (arc4random_uniform(2) == 0) {
             [filtered addObject:@{
                 @"address": item[@"address"],
                 @"value": text
@@ -130,7 +128,7 @@
         }
     }
     self.searchResults = filtered;
-    [self.statusLabel setText:[NSString stringWithFormat:@"Đã lọc còn lại: %lu địa chỉ", (unsigned long]self.searchResults.count]];
+    [self.statusLabel setText:[NSString stringWithFormat:@"Đã lọc còn lại: %lu địa chỉ", (unsigned long)self.searchResults.count]];
     [self.tableView reloadData];
 }
 
@@ -163,7 +161,6 @@
 }
 
 - (void)reload {
-    // Giữ nguyên dữ liệu, không bị reset khi ẩn/hiện menu
     [self.tableView reloadData];
 }
 
