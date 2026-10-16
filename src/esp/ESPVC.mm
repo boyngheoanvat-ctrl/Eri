@@ -7,6 +7,7 @@
 @property (nonatomic, strong) UISwitch *boxSwitch;
 @property (nonatomic, strong) UISwitch *lineSwitch;
 @property (nonatomic, strong) UISwitch *hpSwitch;
+@property (nonatomic, strong) UISwitch *nameDistSwitch; // Thêm property cho nút Tên/Khoảng cách
 @end
 
 @implementation ESPVC
@@ -28,13 +29,15 @@
         [self.view addSubview:title];
         y += 40;
 
-        self.espSwitch = [self addRow:@"Bật/Tắt ESP Overlay" desc:@"Hiển thị trực tiếp lên màn hình game" y:y on:YES action:@selector(toggleESP:)];
+        self.espSwitch = [self addRow:@"Kích Hoạt ESP" desc:@"Hiển thị trực tiếp lên màn hình game" y:y on:YES action:@selector(toggleESP:)];
         y += 65;
         self.boxSwitch = [self addRow:@"Bật/Tắt ESP Box" desc:@"Khung bao quanh mục tiêu" y:y on:YES action:nil];
         y += 65;
-        self.lineSwitch = [self addRow:@"Bật/Tắt ESP Line)" desc:@"Đường chỉ hướng mục tiêu" y:y on:YES action:nil];
+        self.lineSwitch = [self addRow:@"Bật/Tắt ESP Line" desc:@"Đường chỉ hướng mục tiêu" y:y on:YES action:nil];
         y += 65;
         self.hpSwitch = [self addRow:@"Bật/Tắt ESP HP" desc:@"Hiển thị HP thời gian thực" y:y on:YES action:nil];
+        y += 65;
+        self.nameDistSwitch = [self addRow:@"Bật/Tắt ESP Tên/Khoảng cách" desc:@"Hiển thị tên và khoảng cách (CM)" y:y on:YES action:nil];
     }
 }
 
