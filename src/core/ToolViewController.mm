@@ -48,7 +48,7 @@
     [titleBar addGestureRecognizer:moveGesture];
     
     self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 0, totalW - 20, 26)];
-    self.titleLabel.text = @"  IL2CPP Tool v1.1.23 [ BY @Eri Nguyễn, F4CK CHEAT ]";
+    self.titleLabel.text = @" [ MOD BY @Eri Nguyễn ]";
     self.titleLabel.textColor = [ToolTheme shared].accent;
     self.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
     self.titleLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
