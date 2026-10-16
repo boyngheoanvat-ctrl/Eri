@@ -5,6 +5,7 @@
 #import "AIESPTool.h"
 #import "GameFingerprint.h"
 #import "ToolTheme.h"
+#import "AICHookGenerator.h"
 
 static const CGFloat kInputBarHeight = 50;
 
@@ -174,6 +175,34 @@ static const CGFloat kInputBarHeight = 50;
     [self.tableView reloadData];
     [self scrollToBottomAnimated:YES];
 
+    NSString *lowerText = text.lowercaseString;
+    if ([lowerText containsString:@"hack map"] || [lowerText containsString:@"tầm nhìn"] || [lowerText containsString:@"zoom"] || [lowerText containsString:@"fog of war"]) {
+        self.isWaiting = YES;
+        self.sendButton.enabled = NO;
+        self.sendButton.alpha = 0.5;
+        [self.spinner startAnimating];
+        
+        [[AICHookGenerator shared] generateMapHackForQuery:text completion:^(AICHookGeneratorResult *result) {
+            self.isWaiting = NO;
+            self.sendButton.enabled = YES;
+            self.sendButton.alpha = 1.0;
+            [self.spinner stopAnimating];
+            
+            NSString *aiAnswer = [NSString stringWithFormat:
+                @"🎯 [AI Map Hack Generator Found]\n"
+                @"- Target Offset: %@\n\n"
+                @"=== C++ HOOK CODE (src/c/) ===\n"
+                @"%@\n\n"
+                @"=== LUA SCRIPT (hot-reload) ===\n"
+                @"%@", result.offsetAddress, result.cppCode, result.luaCode];
+            
+            [self.items addObject:@{@"type": @"ai", @"text": aiAnswer}];
+            [self.tableView reloadData];
+            [self scrollToBottomAnimated:YES];
+        }];
+        return;
+    }
+
     self.isWaiting = YES;
     self.currentAIResponse = [NSMutableString string];
     self.sendButton.enabled = NO;
@@ -216,7 +245,6 @@ static const CGFloat kInputBarHeight = 50;
             game = @"Unknown";
         }
 
-        // Tích hợp tri thức dump.cs và các nhóm chức năng vào System Prompt
         NSString *sysPrompt = [NSString stringWithFormat:
             @"Ban la AI agent hack game IL2CPP iOS. Tra loi tieng Viet ngan gon, chinh xac.\n"
             @"Game hien tai: %@\n"
