@@ -225,13 +225,6 @@ static uint64_t g_il2cpp_base = 0;
     return asm_;
 }
 
-- (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(int *)count {
-    size_t sz = 0;
-    const Il2CppAssembly **asm_ = [self domain_get_assemblies:domain count:&sz];
-    if (count) *count = (int)sz;
-    return asm_;
-}
-
 #pragma mark - Image
 
 - (Il2CppImage *)assembly_get_image:(Il2CppAssembly *)assembly {
