@@ -102,6 +102,7 @@ struct Il2CppClass {
 - (void)attachCurrentThread;
 
 - (Il2CppDomain *)domain_get;
+- (const Il2CppAssembly **)domain_get_assemblies:(Il2CppDomain *)domain count:(size_t *)count; // Bổ sung
 - (Il2CppImage  *)assembly_get_image:(Il2CppAssembly *)assembly;
 - (const char   *)image_get_name:(Il2CppImage *)image;
 - (size_t        )image_get_class_count:(Il2CppImage *)image;
@@ -118,6 +119,7 @@ struct Il2CppClass {
 
 - (const char *)method_get_name:(MethodInfo *)m;
 - (uint32_t   )method_get_token:(MethodInfo *)m;
+- (uint32_t   )method_get_flags:(MethodInfo *)m; // Bổ sung
 - (void      *)method_get_pointer:(MethodInfo *)m;
 - (const char *)method_get_return_type:(MethodInfo *)method;
 
@@ -129,5 +131,9 @@ struct Il2CppClass {
 - (const char *)property_get_name:(PropertyInfo *)p;
 
 - (const char *)type_get_name:(Il2CppType *)type;
+
+// Bổ sung cho CHookVC
++ (uintptr_t)getRealOffset:(uintptr_t)offset;
++ (BOOL)writeInt32:(uintptr_t)address value:(int32_t)value;
 
 @end
