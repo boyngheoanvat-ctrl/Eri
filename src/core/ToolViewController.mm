@@ -7,6 +7,7 @@
 #import "MethodCallerVC.h"
 #import "LuaVC.h"
 #import "AIChatVC.h"
+#import "CHookVC.h" // Thêm header module C++ Hook trong src/c/
 
 @interface ToolViewController ()
 @property (nonatomic, strong) UIView *contentArea;
@@ -82,21 +83,22 @@
     self.contentArea.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.contentArea];
     
-    // 4. Khởi tạo danh sách các Tab VC
+    // 4. Khởi tạo danh sách các Tab VC (Bổ sung CHookVC cho src/c/)
     self.childViewControllersList = @[
         [[ESPVC alloc] init],
         [[DumperVC alloc] init],
         [[MemoryVC alloc] init],
         [[MethodCallerVC alloc] init],
         [[LuaVC alloc] init],
-        [[AIChatVC alloc] init]
+        [[AIChatVC alloc] init],
+        [[CHookVC alloc] init] // Thêm tab C++ Hook
     ];
     
-    NSArray *titles = @[@"ESP", @"Dump", @"Mem", @"Call", @"Lua", @"AI"];
+    NSArray *titles = @[@"ESP", @"Dump", @"Mem", @"Call", @"Lua", @"AI", @"C++"];
     self.railButtons = [NSMutableArray array];
     
-    CGFloat btnH = 38;
-    CGFloat btnY = 8;
+    CGFloat btnH = 34; // Tinh chỉnh chiều cao nút một chút cho vừa khít 7 tab
+    CGFloat btnY = 6;
     
     for (NSInteger i = 0; i < titles.count; i++) {
         ToolRailButton *btn = [[ToolRailButton alloc] initWithFrame:CGRectMake(6, btnY, railW - 12, btnH)];
@@ -113,7 +115,7 @@
         [self.railView addSubview:btn];
         [self.railButtons addObject:btn];
         
-        btnY += btnH + 6;
+        btnY += btnH + 4;
     }
     
     [self selectTab:0];
