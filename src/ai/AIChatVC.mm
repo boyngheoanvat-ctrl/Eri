@@ -39,7 +39,7 @@ static const CGFloat kInputBarHeight = 50;
     [self buildUI];
     [self setupKeyboardObservers];
 
-    NSString *welcome = @"AI Agent ready.\nHoi: hack map, hack speed, tim class, hoac viet code C++...";
+    NSString *welcome = @"AI Agent & Ghidra ready.\nHỏi: phân tích Ghidra, hack map, viết code C++/Lua...";
     [self.items addObject:@{@"type": @"ai", @"text": welcome}];
     [self.tableView reloadData];
 
@@ -98,7 +98,7 @@ static const CGFloat kInputBarHeight = 50;
     self.inputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 30)];
     self.inputField.leftViewMode = UITextFieldViewModeAlways;
     self.inputField.attributedPlaceholder = [[NSAttributedString alloc]
-        initWithString:@"Hỏi hoặc yêu cầu viết code C++..."
+        initWithString:@"Hỏi Ghidra, C++, Lua..."
             attributes:@{NSForegroundColorAttributeName: [ToolTheme shared].textMuted}];
     self.inputField.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.inputField addTarget:self action:@selector(sendTapped)
@@ -192,7 +192,7 @@ static const CGFloat kInputBarHeight = 50;
         if ([type isEqualToString:@"user"]) {
             [history addObject:@{@"role": @"user", @"content": item[@"text"]}];
         } else if ([type isEqualToString:@"ai"]) {
-            [history addObject:@{@"role": @"assistant", @"content": item[@"text"]}];
+            [history addObject:@{@"role": <<"assistant", @"content": item[@"text"]}];
         }
     }
 
@@ -212,9 +212,12 @@ static const CGFloat kInputBarHeight = 50;
             game = @"Unknown";
         }
 
+        // Cập nhật System Prompt hỗ trợ tích hợp Ghidra, C++ và Lua
         NSString *sysPrompt = [NSString stringWithFormat:
-            @"Bạn là AI agent hack game IL2CPP iOS. Trả lời tiếng Việt ngắn gọn, chính xác.\n"
-            @"Hỗ trợ viết mã C++ / Objective-C++ hook, patch bộ nhớ, đóng băng giá trị khi được yêu cầu.\n"
+            @"Bạn là AI agent hack game IL2CPP iOS và Reverse Engineer chuyên nghiệp dùng Ghidra.\n"
+            @"- Khi cần phân tích mã lệnh tĩnh, dịch ngược hàm hoặc offset, hãy sử dụng tool `analyze_ghidra`.\n"
+            @"- Khi người dùng yêu cầu đưa mã qua tab Lua, hãy đặt toàn bộ mã nguồn trong thẻ ```lua ... ```.\n"
+            @"- Khi người dùng yêu cầu đưa mã qua tab C++, hãy đặt toàn bộ mã nguồn trong thẻ ```cpp ... ```.\n"
             @"Game hiện tại: %@\n", game];
 
         NSMutableArray *messages = [NSMutableArray array];
@@ -306,7 +309,7 @@ static const CGFloat kInputBarHeight = 50;
     });
 }
 
-#pragma mark - Table & C++ Syntax Highlighting Helpers
+#pragma mark - Table & Syntax Highlighting Helpers
 
 - (NSInteger)tableView:(UITableView *)tv numberOfRowsInSection:(NSInteger)s {
     return self.items.count;
@@ -350,7 +353,7 @@ static const CGFloat kInputBarHeight = 50;
     [attr addAttribute:NSFontAttributeName value:[[ToolTheme shared] monoFont:11] range:NSMakeRange(0, full.length)];
 
     if (!isUser && !isError) {
-        NSArray *keywords = @[@"void", @"bool", @"int", @"uint64_t", @"float", @"double", @"char", @"const", @"return", @"if", @"else", @"for", @"while", @"struct", @"class", @"#import", @"#include", @"auto", @"static", @"true", @"false", @"nullptr"];
+        NSArray *keywords = @[@"void", @"bool", @"int", @"uint64_t", @"float", @"double", @"char", @"const", @"return", @"if", @"else", @"for", @"while", @"struct", @"class", @"#import", @"#include", @"auto", @"static", @"true", @"false", @"nullptr", @"local", @"function", @"end", @"print", @"then", @"do"];
         NSString *lowerStr = full.lowercaseString;
         for (NSString *kw in keywords) {
             NSRange range = [lowerStr rangeOfString:kw];
