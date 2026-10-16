@@ -27,7 +27,7 @@
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *activeModules;
 @end
 
-// Chuyển các biến static ra ngoài @interface
+// Biến static quản lý cửa sổ ImGui độc lập vĩnh viễn trên hệ thống
 static ImGuiWindow *sharedImGuiWindow = nil;
 static UIView *sharedImGuiContainerView = nil;
 
@@ -51,6 +51,10 @@ static UIView *sharedImGuiContainerView = nil;
 - (void)buildUI {
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
+    if (w <= 0 || h <= 0) {
+        w = 400; // Giá trị phòng ngừa an toàn tránh khung 0
+        h = 300;
+    }
     
     self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
     self.scrollView.backgroundColor = [UIColor clearColor];
@@ -289,7 +293,9 @@ static UIView *sharedImGuiContainerView = nil;
     if (content && content.length > 0) {
         self.savedScriptContent = content;
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (self.editorView) self.editorView.text = content;
+            if ([self isViewLoaded] && self.editorView) {
+                self.editorView.text = content;
+            }
             [self log:@"[Lua AI] Đã nhận script mới từ AI Chat!"];
         });
     }
@@ -297,6 +303,7 @@ static UIView *sharedImGuiContainerView = nil;
 
 - (void)log:(NSString *)text {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (![self isViewLoaded] || !self.consoleView) return;
         NSString *current = self.consoleView.text ?: @"-- Lua Console --\n";
         self.savedConsoleText = [current stringByAppendingFormat:@"%@\n", text];
         self.consoleView.text = self.savedConsoleText;
@@ -305,6 +312,7 @@ static UIView *sharedImGuiContainerView = nil;
 }
 
 - (void)reload {
+    if (![self isViewLoaded]) return;
     if (self.editorView && self.savedScriptContent) self.editorView.text = self.savedScriptContent;
     if (self.consoleView && self.savedConsoleText) self.consoleView.text = self.savedConsoleText;
 }
