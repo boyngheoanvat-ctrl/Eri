@@ -20,7 +20,7 @@
         CGFloat w = CGRectGetWidth(self.view.bounds);
         CGFloat y = 16;
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
-        title.text = @"Lua Scripting & Automation";
+        title.text = @"Lua Scripting";
         title.textColor = [ToolTheme shared].textPrimary;
         title.font = [[ToolTheme shared] monoBoldFont:16];
         [self.view addSubview:title];
