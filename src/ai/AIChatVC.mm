@@ -8,7 +8,7 @@
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UITextField *inputField;
 @property (nonatomic, strong) UIButton *sendButton;
-@property (nonatomic, strong) UIButton *copyButton;
+@property (nonatomic, strong, getter=customCopyButton, setter=setCustomCopyButton:) UIButton *copyButton;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *messages;
 @property (nonatomic, assign) BOOL isWaitingResponse;
 @end
@@ -20,7 +20,7 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.messages) {
         self.messages = [NSMutableArray arrayWithArray:@[
-            @{@"role": @"assistant", @"content": @"Hi Người Anh Em !!!"}
+            @{@"role": @"assistant", @"content": @"[AI & Ghidra Suite Ready] Chào ngài, hệ thống phân tích tĩnh RVA đã sẵn sàng."}
         ]];
     }
     [self buildUI];
@@ -47,7 +47,7 @@
         [self.view addSubview:bottomBar];
 
         self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 8, w - 170, 38)];
-        self.inputField.placeholder = @"Nhập câu hỏi bạn muốn hỏi !!!";
+        self.inputField.placeholder = @"Nhập câu hỏi mà bạn muốn hỏi AI";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
         self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -87,7 +87,7 @@
         self.isWaitingResponse = YES;
         NSMutableArray *apiMessages = [NSMutableArray array];
         for (NSDictionary *m in self.messages) {
-            if ([m[@"content"] isEqualToString:@"[Đang phân tích..]"]) continue;
+            if ([m[@"content"] isEqualToString:@"[Đang phân tích...]"]) continue;
             [apiMessages addObject:@{@"role": m[@"role"], @"content": m[@"content"]}];
         }
         [[AIProvider shared] sendMessages:apiMessages tools:@[] delegate:self];
