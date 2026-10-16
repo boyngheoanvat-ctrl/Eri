@@ -1,7 +1,5 @@
 #import "ESPOverlay.h"
-#import "ESPClassFinder.h"
 #import "ToolTheme.h"
-#import "IL2CPPResolver.h"
 #import <CoreGraphics/CoreGraphics.h>
 #import <QuartzCore/QuartzCore.h>
 
@@ -25,8 +23,7 @@
         CGFloat centerY = CGRectGetHeight(rect) / 2.0;
         CGContextSetStrokeColorWithColor(context, [ToolTheme shared].accent.CGColor);
         CGContextSetLineWidth(context, 2.0);
-        CGRect circleRect = CGRectMake(centerX - 80, centerY - 80, 160, 160);
-        CGContextStrokeEllipseInRect(context, circleRect);
+        CGContextStrokeEllipseInRect(context, CGRectMake(centerX - 80, centerY - 80, 160, 160));
     }
 }
 @end
@@ -40,7 +37,6 @@
 @interface ESPOverlay ()
 @property (nonatomic, strong) ESPOverlayWindow *overlayWindow;
 @property (nonatomic, strong) ESPOverlayView *overlayView;
-@property (nonatomic, strong, readwrite) NSMutableArray<ESPTargetClass *> *mutableTargets;
 @property (nonatomic, strong) CADisplayLink *displayLink;
 @end
 
@@ -54,7 +50,7 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
-        _enabled = NO; _mutableTargets = [NSMutableArray array];
+        _enabled = NO;
         @autoreleasepool {
             UIScreen *screen = [UIScreen mainScreen];
             self.overlayWindow = [[ESPOverlayWindow alloc] initWithFrame:screen.bounds];
@@ -76,6 +72,6 @@
 - (void)show { self.enabled = YES; self.overlayWindow.hidden = NO; self.displayLink.paused = NO; }
 - (void)hide { self.enabled = NO; self.overlayWindow.hidden = YES; self.displayLink.paused = YES; }
 - (void)toggle { if (self.enabled) [self hide]; else [self show]; }
-- (void)reload { @autoreleasepool { [self.mutableTargets removeAllObjects]; } }
+- (void)reload {}
 - (void)updateESP { @autoreleasepool { if (self.overlayView) [self.overlayView setNeedsDisplay]; } }
 @end
