@@ -6,7 +6,6 @@
 
 + (instancetype)shared;
 
-// Search
 - (NSArray<MemoryResult *> *)searchValue:(NSString *)value
                                     type:(MemValueType)type
                                    limit:(NSInteger)limit;
@@ -16,18 +15,17 @@
                                         type:(MemValueType)type
                                        limit:(NSInteger)limit;
 
-// Read
 - (NSString *)readValueAt:(vm_address_t)addr type:(MemValueType)type;
 
-// Write
 - (BOOL)writeValue:(NSString *)value at:(vm_address_t)addr type:(MemValueType)type;
 
-// Edit all — sửa nhiều địa chỉ
 - (NSInteger)editAll:(NSArray<MemoryResult *> *)results
                value:(NSString *)value
                 type:(MemValueType)type;
 
-// Region info
 - (NSString *)regionInfoAt:(vm_address_t)addr;
+
+// Khai báo phương thức đóng băng giá trị (Freeze Engine)
+- (void)freezeAddress:(vm_address_t)addr value:(NSString *)value type:(MemValueType)type shouldFreeze:(BOOL)freeze;
 
 @end
