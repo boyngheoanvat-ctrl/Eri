@@ -8,6 +8,7 @@
 #import "ESPVC.h"
 
 @interface ToolViewController ()
+@property (nonatomic, strong) UIView *headerView;
 @property (nonatomic, strong) UIView *sidebarView;
 @property (nonatomic, strong) UIView *contentView;
 @property (nonatomic, strong) NSArray *tabButtons;
@@ -31,6 +32,7 @@
     
     [self setupViewControllers];
     [self setupLayout];
+    [self setupGestures];
 }
 
 - (void)setupViewControllers {
@@ -39,20 +41,38 @@
     self.memoryVC = [[MemoryVC alloc] init];
     self.methodCallerVC = [[MethodCallerVC alloc] init];
     self.luaVC = [[LuaVC alloc] init];
-    self.espVC = [[ESPVC alloc] init]; // Sửa đúng cú pháp [[ESPVC alloc] init]
+    self.espVC = [[ESPVC alloc] init];
 }
 
 - (void)setupLayout {
     CGFloat totalW = CGRectGetWidth(self.view.bounds);
     CGFloat totalH = CGRectGetHeight(self.view.bounds);
+    if (totalW <= 0) totalW = 500;
+    if (totalH <= 0) totalH = 320;
+    
+    CGFloat headerH = 36;
     CGFloat sidebarW = 72;
     
-    self.sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, 40, sidebarW, totalH - 40)];
+    // 1. Thanh tiêu đề (Đã bỏ nút X)
+    self.headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, headerH)];
+    self.headerView.backgroundColor = [ToolTheme shared].surfaceAlt;
+    self.headerView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
+    [self.view addSubview:self.headerView];
+    
+    UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 6, 300, 24)];
+    titleLbl.text = @"Mod By Eri Nguyễn (Chạm 2 ngón để ẩn)";
+    titleLbl.textColor = [ToolTheme shared].textPrimary;
+    titleLbl.font = [[ToolTheme shared] monoBoldFont:11];
+    [self.headerView addSubview:titleLbl];
+    
+    // 2. Sidebar chứa nút tab
+    self.sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, headerH, sidebarW, totalH - headerH)];
     self.sidebarView.backgroundColor = [ToolTheme shared].surfaceAlt;
     self.sidebarView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleRightMargin;
     [self.view addSubview:self.sidebarView];
     
-    self.contentView = [[UIView alloc] initWithFrame:CGRectMake(sidebarW, 40, totalW - sidebarW, totalH - 40)];
+    // 3. Content View
+    self.contentView = [[UIView alloc] initWithFrame:CGRectMake(sidebarW, headerH, totalW - sidebarW, totalH - headerH)];
     self.contentView.backgroundColor = [UIColor clearColor];
     self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.contentView];
@@ -60,9 +80,9 @@
     NSArray *titles = @[@"AI", @"Dump", @"Mem", @"Call", @"Lua", @"ESP"];
     NSMutableArray *buttons = [NSMutableArray array];
     
-    CGFloat btnH = 46;
+    CGFloat btnH = 42;
     CGFloat spacing = 6;
-    CGFloat startY = 10;
+    CGFloat startY = 8;
     
     for (int i = 0; i < titles.count; i++) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -81,6 +101,27 @@
     self.tabButtons = buttons;
     
     [self selectTab:0];
+}
+
+#pragma mark - Gestures (Chạm 2 ngón tay để ẩn menu)
+
+- (void)setupGestures {
+    UITapGestureRecognizer *twoFingerTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTwoFingerTap:)];
+    twoFingerTap.numberOfTouchesRequired = 2; // Ép buộc 2 ngón tay
+    twoFingerTap.numberOfTapsRequired = 1;    // Chạm 1 lần bằng 2 ngón
+    [self.view addGestureRecognizer:twoFingerTap];
+}
+
+- (void)handleTwoFingerTap:(UITapGestureRecognizer *)gesture {
+    if (gesture.state == UIGestureRecognizerStateEnded) {
+        // Trạng thái chạm 2 ngón thành công -> Ẩn menu chính
+        [UIView animateWithDuration:0.25 animations:^{
+            self.view.alpha = 0.0;
+        } completion:^(BOOL finished) {
+            self.view.window.hidden = YES;
+            self.view.alpha = 1.0;
+        }];
+    }
 }
 
 - (void)didTapTabButton:(UIButton *)sender {
@@ -121,9 +162,8 @@
     }
 }
 
-// Bổ sung phương thức reload theo yêu cầu của ToolViewController.h
 - (void)reload {
-    if (self.contentView.subviews.count > 0) {
+    if ([self isViewLoaded] && self.contentView.subviews.count > 0) {
         UIViewController *currentVC = self.childViewControllers.lastObject;
         if (currentVC && [currentVC respondsToSelector:@selector(reload)]) {
             [currentVC performSelector:@selector(reload)];
