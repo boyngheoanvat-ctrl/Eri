@@ -8,69 +8,126 @@
 #import "ESPVC.h"
 
 @interface ToolViewController ()
-@property (nonatomic, strong) UIView *contentContainer;
-@property (nonatomic, strong) NSArray *viewControllers;
-@property (nonatomic, assign) NSInteger currentIndex;
+@property (nonatomic, strong) UIView *sidebarView;
+@property (nonatomic, strong) UIView *contentView;
+@property (nonatomic, strong) NSArray *tabButtons;
+@property (nonatomic, assign) NSInteger currentTabIndex;
+
+@property (nonatomic, strong) AIChatVC *aiVC;
+@property (nonatomic, strong) DumperVC *dumperVC;
+@property (nonatomic, strong) MemoryVC *memoryVC;
+@property (nonatomic, strong) MethodCallerVC *methodCallerVC;
+@property (nonatomic, strong) LuaVC *luaVC;
+@property (nonatomic, strong) ESPVC *espVC;
 @end
 
 @implementation ToolViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [ToolTheme shared].background;
+    self.view.backgroundColor = [UIColor colorWithRed:0.08 green:0.10 blue:0.14 alpha:0.95];
+    self.view.layer.cornerRadius = 12;
+    self.view.clipsToBounds = YES;
     
-    // Khởi tạo các tab chức năng
-    self.viewControllers = @[
-        [[AIChatVC alloc] init],
-        [[DumperVC alloc] init],
-        [[MemoryVC alloc] init],
-        [[MethodCallerVC alloc] init],
-        [[LuaVC alloc] init],
-        [[ESPVC.alloc] init]
-    ];
+    [self setupViewControllers];
+    [self setupLayout];
+}
+
+- (void)setupViewControllers {
+    self.aiVC = [[AIChatVC alloc] init];
+    self.dumperVC = [[DumperVC alloc] init];
+    self.memoryVC = [[MemoryVC alloc] init];
+    self.methodCallerVC = [[MethodCallerVC alloc] init];
+    self.luaVC = [[LuaVC alloc] init];
+    self.espVC = [[ESPVC alloc] init]; // Sửa đúng cú pháp [[ESPVC alloc] init]
+}
+
+- (void)setupLayout {
+    CGFloat totalW = CGRectGetWidth(self.view.bounds);
+    CGFloat totalH = CGRectGetHeight(self.view.bounds);
+    CGFloat sidebarW = 72;
     
-    [self setupMainLayout];
+    self.sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, 40, sidebarW, totalH - 40)];
+    self.sidebarView.backgroundColor = [ToolTheme shared].surfaceAlt;
+    self.sidebarView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleRightMargin;
+    [self.view addSubview:self.sidebarView];
+    
+    self.contentView = [[UIView alloc] initWithFrame:CGRectMake(sidebarW, 40, totalW - sidebarW, totalH - 40)];
+    self.contentView.backgroundColor = [UIColor clearColor];
+    self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.view addSubview:self.contentView];
+    
+    NSArray *titles = @[@"AI", @"Dump", @"Mem", @"Call", @"Lua", @"ESP"];
+    NSMutableArray *buttons = [NSMutableArray array];
+    
+    CGFloat btnH = 46;
+    CGFloat spacing = 6;
+    CGFloat startY = 10;
+    
+    for (int i = 0; i < titles.count; i++) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+        btn.frame = CGRectMake(6, startY + (i * (btnH + spacing)), sidebarW - 12, btnH);
+        btn.backgroundColor = (i == 0) ? [ToolTheme shared].accent : [ToolTheme shared].surface;
+        [btn setTitle:titles[i] forState:UIControlStateNormal];
+        [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        btn.titleLabel.font = [[ToolTheme shared] monoBoldFont:11];
+        btn.layer.cornerRadius = 6;
+        btn.tag = i;
+        [btn addTarget:self action:@selector(didTapTabButton:) forControlEvents:UIControlEventTouchUpInside];
+        btn.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        [self.sidebarView addSubview:btn];
+        [buttons addObject:btn];
+    }
+    self.tabButtons = buttons;
+    
     [self selectTab:0];
 }
 
-- (void)setupMainLayout {
-    CGFloat w = CGRectGetWidth(self.view.bounds);
-    CGFloat h = CGRectGetHeight(self.view.bounds);
-    
-    // Đảm bảo lề trên (dưới thanh tiêu đề "Mod By Eri Nguyễn") và lề xung quanh an toàn tuyệt đối
-    CGFloat topBarH = 44.0;
-    CGFloat padding = 8.0; // Khoảng cách đệm an toàn bốn phía trái, phải, trên, dưới
-    
-    CGFloat containerX = 65.0; // Vị trí sau thanh menu dọc bên trái
-    CGFloat containerY = topBarH + padding;
-    CGFloat containerW = w - containerX - padding;
-    CGFloat containerH = h - containerY - padding;
-    
-    self.contentContainer = [[UIView alloc] initWithFrame:CGRectMake(containerX, containerY, containerW, containerH)];
-    self.contentContainer.backgroundColor = [UIColor clearColor];
-    self.contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:self.contentContainer];
+- (void)didTapTabButton:(UIButton *)sender {
+    [self selectTab:sender.tag];
 }
 
 - (void)selectTab:(NSInteger)index {
-    if (index < 0 || index >= self.viewControllers.count) return;
-    self.currentIndex = index;
+    self.currentTabIndex = index;
     
-    // Xóa view cũ an toàn
-    for (UIView *sub in self.contentContainer.subviews) {
+    for (int i = 0; i < self.tabButtons.count; i++) {
+        UIButton *b = self.tabButtons[i];
+        b.backgroundColor = (i == index) ? [ToolTheme shared].accent : [ToolTheme shared].surface;
+    }
+    
+    for (UIView *sub in self.contentView.subviews) {
         [sub removeFromSuperview];
     }
     
-    UIViewController *vc = self.viewControllers[index];
-    vc.view.frame = self.contentContainer.bounds;
-    vc.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    UIViewController *targetVC = nil;
+    switch (index) {
+        case 0: targetVC = self.aiVC; break;
+        case 1: targetVC = self.dumperVC; break;
+        case 2: targetVC = self.memoryVC; break;
+        case 3: targetVC = self.methodCallerVC; break;
+        case 4: targetVC = self.luaVC; break;
+        case 5: targetVC = self.espVC; break;
+        default: targetVC = self.aiVC; break;
+    }
     
-    [self addChildViewController:vc];
-    [self.contentContainer addSubview:vc.view];
-    [vc didMoveToParentViewController:self];
+    [self addChildViewController:targetVC];
+    targetVC.view.frame = self.contentView.bounds;
+    targetVC.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.contentView addSubview:targetVC.view];
+    [targetVC didMoveToParentViewController:self];
     
-    if ([vc respondsToSelector:@selector(reload)]) {
-        [vc performSelector:@selector(reload)];
+    if ([targetVC respondsToSelector:@selector(reload)]) {
+        [targetVC performSelector:@selector(reload)];
+    }
+}
+
+// Bổ sung phương thức reload theo yêu cầu của ToolViewController.h
+- (void)reload {
+    if (self.contentView.subviews.count > 0) {
+        UIViewController *currentVC = self.childViewControllers.lastObject;
+        if (currentVC && [currentVC respondsToSelector:@selector(reload)]) {
+            [currentVC performSelector:@selector(reload)];
+        }
     }
 }
 
