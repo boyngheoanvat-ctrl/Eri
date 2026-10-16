@@ -1,6 +1,7 @@
 #import "MemoryVC.h"
 #import "ToolTheme.h"
 #import "IL2CPPResolver.h"
+#import <mach/mach.h>
 
 @interface MemoryVC () <UITextFieldDelegate, UITableViewDataSource, UITableViewDelegate>
 @property (nonatomic, strong) UITextField *searchField;
@@ -42,7 +43,7 @@
         y += 42;
 
         self.searchField = [[UITextField alloc] initWithFrame:CGRectMake(16, y, w - 32, 40)];
-        self.searchField.placeholder = @"Nhập giá trị cần tìm hoặc giá trị sửa...";
+        self.searchField.placeholder = @"Nhập giá trị cần tìm (vd: 100, 9999)...";
         self.searchField.backgroundColor = [ToolTheme shared].surface;
         self.searchField.textColor = [ToolTheme shared].textPrimary;
         self.searchField.font = [[ToolTheme shared] monoFont:12];
@@ -91,21 +92,50 @@
     return btn;
 }
 
+// Quét bộ nhớ thật thực tế qua vm_region và vm_read_overwrite
 - (void)didTapNewSearch {
     @autoreleasepool {
         NSString *valStr = self.searchField.text;
         if (valStr.length == 0) return;
         [self.searchField resignFirstResponder];
         [self.foundAddresses removeAllObjects];
-        uintptr_t base = (uintptr_t)[IL2CPPResolver shared].il2cppBase;
-        for (int i = 0; i < 20; i++) {
-            uintptr_t simulatedAddr = base + (i * 0x1000) + 0x120;
-            [self.foundAddresses addObject:@{
-                @"address": [NSString stringWithFormat:@"%p", (void*)simulatedAddr],
-                @"value": valStr
-            }];
+
+        int targetVal = valStr.intValue;
+        mach_port_t task = mach_task_self();
+        vm_address_t address = 0;
+        vm_size_t size = 0;
+        mach_msg_type_number_t infoCnt = VM_REGION_BASIC_INFO_COUNT_64;
+        vm_region_basic_info_data_64_t info;
+        mach_port_t object_name;
+
+        int maxResults = 50; // Giới hạn kết quả tìm kiếm thực tế để mượt mà
+        while (1) {
+            kern_return_t kr = vm_region_64(task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &infoCnt, &object_name);
+            if (kr != KERN_SUCCESS) break;
+
+            if ((info.protection & VM_PROT_READ) && (info.protection & VM_PROT_WRITE) && !(info.inheritance == VM_INHERIT_SHARE)) {
+                vm_address_t cur = address;
+                vm_address_t end = address + size;
+                // Quét từng khối memory hợp lệ
+                while (cur < end - sizeof(int)) {
+                    int readVal = 0;
+                    vm_size_t outSize = 0;
+                    kern_return_t readKr = vm_read_overwrite(task, cur, sizeof(int), (vm_address_t)&readVal, &outSize);
+                    if (readKr == KERN_SUCCESS && readVal == targetVal) {
+                        [self.foundAddresses addObject:@{
+                            @"address": [NSString stringWithFormat:@"%p", (void*)cur],
+                            @"value": [NSString stringWithFormat:@"%d", readVal]
+                        }];
+                        if (self.foundAddresses.count >= maxResults) break;
+                    }
+                    cur += 4; // Bước nhảy 4 bytes cho Dword
+                }
+            }
+            if (self.foundAddresses.count >= maxResults) break;
+            address += size;
         }
-        self.statusLabel.text = [NSString stringWithFormat:@"Tìm thấy: %lu kết quả", (unsigned long)self.foundAddresses.count];
+
+        self.statusLabel.text = [NSString stringWithFormat:@"Tìm thấy: %lu kết quả thực tế", (unsigned long)self.foundAddresses.count];
         [self.resultsTable reloadData];
     }
 }
@@ -115,11 +145,22 @@
         NSString *valStr = self.searchField.text;
         if (valStr.length == 0 || self.foundAddresses.count == 0) return;
         [self.searchField resignFirstResponder];
+
+        int targetVal = valStr.intValue;
         NSMutableArray *filtered = [NSMutableArray array];
+        mach_port_t task = mach_task_self();
+
         for (NSDictionary *item in self.foundAddresses) {
-            NSMutableDictionary *newItem = [NSMutableDictionary dictionaryWithDictionary:item];
-            newItem[@"value"] = valStr;
-            [filtered addObject:newItem];
+            uintptr_t addr = strtoull([item[@"address"] UTF8String], NULL, 16);
+            int readVal = 0;
+            vm_size_t outSize = 0;
+            kern_return_t readKr = vm_read_overwrite(task, addr, sizeof(int), (vm_address_t)&readVal, &outSize);
+            if (readKr == KERN_SUCCESS && readVal == targetVal) {
+                [filtered addObject:@{
+                    @"address": item[@"address"],
+                    @"value": [NSString stringWithFormat:@"%d", readVal]
+                }];
+            }
         }
         self.foundAddresses = filtered;
         self.statusLabel.text = [NSString stringWithFormat:@"Lọc còn lại: %lu kết quả", (unsigned long)self.foundAddresses.count];
@@ -129,18 +170,34 @@
 
 - (void)didTapEditAll {
     @autoreleasepool {
-        NSString *newVal = self.searchField.text;
-        if (newVal.length == 0 || self.foundAddresses.count == 0) return;
+        NSString *newValStr = self.searchField.text;
+        if (newValStr.length == 0 || self.foundAddresses.count == 0) return;
         [self.searchField resignFirstResponder];
+
+        int newVal = newValStr.intValue;
+        mach_port_t task = mach_task_self();
+
+        for (NSDictionary *item in self.foundAddresses) {
+            uintptr_t addr = strtoull([item[@"address"] UTF8String], NULL, 16);
+            vm_prot_t oldProt;
+            kern_return_t kr = vm_protect(task, addr & ~(vm_page_size - 1), vm_page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+            if (kr == KERN_SUCCESS) {
+                *(int *)addr = newVal;
+                vm_protect(task, addr & ~(vm_page_size - 1), vm_page_size, FALSE, oldProt);
+            }
+        }
+
+        // Cập nhật lại giá trị hiển thị trên UI
         NSMutableArray *updatedList = [NSMutableArray array];
         for (NSDictionary *item in self.foundAddresses) {
-            NSMutableDictionary *newItem = [NSMutableDictionary dictionaryWithDictionary:item];
-            newItem[@"value"] = newVal;
-            [updatedList addObject:newItem];
+            [updatedList addObject:@{
+                @"address": item[@"address"],
+                @"value": newValStr
+            }];
         }
         self.foundAddresses = updatedList;
         [self.resultsTable reloadData];
-        self.statusLabel.text = [NSString stringWithFormat:@"Đã sửa hàng loạt thành công: %@", newVal];
+        self.statusLabel.text = [NSString stringWithFormat:@"Đã ghi đè thành công giá trị: %@", newValStr];
     }
 }
 
