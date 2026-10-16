@@ -93,7 +93,7 @@
         [[CHookVC alloc] init]
     ];
     
-    NSArray *titles = @[@"Tools", @"Dumper", @"Memory", @"Call", @"Scripting", @"AI", @"C++"];
+    NSArray *titles = @[@"Esp", @"Dumper", @"Memory", @"Call", @"Scripting", @"AI", @"C++"];
     self.tabButtons = [NSMutableArray array];
     
     CGFloat startX = 8;
