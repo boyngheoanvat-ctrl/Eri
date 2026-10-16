@@ -6,9 +6,8 @@
 #import "MethodCallerVC.h"
 #import "LuaVC.h"
 #import "ESPVC.h"
-#import "ToolWindow.h"
 
-@interface ToolViewController () <UIGestureRecognizerDelegate>
+@interface ToolViewController ()
 @property (nonatomic, strong) UIView *headerView;
 @property (nonatomic, strong) UIView *sidebarView;
 @property (nonatomic, strong) UIView *contentView;
@@ -19,7 +18,7 @@
 @property (nonatomic, strong) DumperVC *dumperVC;
 @property (nonatomic, strong) MemoryVC *memoryVC;
 @property (nonatomic, strong) MethodCallerVC *methodCallerVC;
-@property (nonatomic, strong, readwrite) LuaVC *luaVC; // Redeclare readwrite để tương thích với readonly ở .h
+@property (nonatomic, strong) LuaVC *luaVC;
 @property (nonatomic, strong) ESPVC *espVC;
 @end
 
@@ -33,7 +32,6 @@
     
     [self setupViewControllers];
     [self setupLayout];
-    [self setupGestures];
 }
 
 - (void)setupViewControllers {
@@ -54,26 +52,23 @@
     CGFloat headerH = 36;
     CGFloat sidebarW = 72;
     
-    // Thanh tiêu đề phía trên
     self.headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, headerH)];
     self.headerView.backgroundColor = [ToolTheme shared].surfaceAlt;
     self.headerView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:self.headerView];
     
     UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 6, totalW - 24, 24)];
-    titleLbl.text = @"Mod By Eri Nguyễn (Chạm 3 ngón để ẩn/hiện Menu Mod)";
+    titleLbl.text = @"Mod By Eri Nguyễn (3 ngón hiện, 2 ngón ẩn)";
     titleLbl.textColor = [ToolTheme shared].textPrimary;
     titleLbl.font = [[ToolTheme shared] monoBoldFont:11];
     titleLbl.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.headerView addSubview:titleLbl];
     
-    // Sidebar chọn tab bên trái
     self.sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, headerH, sidebarW, totalH - headerH)];
     self.sidebarView.backgroundColor = [ToolTheme shared].surfaceAlt;
     self.sidebarView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleRightMargin;
     [self.view addSubview:self.sidebarView];
     
-    // Vùng chứa nội dung các tab bên phải
     self.contentView = [[UIView alloc] initWithFrame:CGRectMake(sidebarW, headerH, totalW - sidebarW, totalH - headerH)];
     self.contentView.backgroundColor = [UIColor clearColor];
     self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -103,28 +98,6 @@
     self.tabButtons = buttons;
     
     [self selectTab:0];
-}
-
-#pragma mark - Gestures (Chạm 3 ngón tay để ẩn/hiện menu)
-
-- (void)setupGestures {
-    UITapGestureRecognizer *threeFingerTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleThreeFingerTap:)];
-    threeFingerTap.numberOfTouchesRequired = 3;
-    threeFingerTap.numberOfTapsRequired = 1;
-    threeFingerTap.cancelsTouchesInView = NO;
-    threeFingerTap.delegate = self;
-    [self.view addGestureRecognizer:threeFingerTap];
-}
-
-- (void)handleThreeFingerTap:(UITapGestureRecognizer *)gesture {
-    if (gesture.state == UIGestureRecognizerStateEnded) {
-        NSLog(@"[ToolViewController] 3-finger tap detected");
-        [[ToolWindow shared] toggle];
-    }
-}
-
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
-    return YES;
 }
 
 - (void)didTapTabButton:(UIButton *)sender {
