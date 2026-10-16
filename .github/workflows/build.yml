@@ -1,4 +1,4 @@
-name: Build ToolKit
+Name: Build ToolKit
 
 on:
   push:
@@ -49,6 +49,7 @@ jobs:
           SDK=$HOME/sdks/iPhoneOS16.5.sdk
           cd $HOME/lua-5.4.6/src
 
+          # KHÔNG define LUA_USE_POSIX / LUA_USE_DLOPEN (đã có trong luaconf.h)
           SRC="lapi.c lauxlib.c lbaselib.c lcode.c lcorolib.c lctype.c ldblib.c \
                ldebug.c ldo.c ldump.c lfunc.c lgc.c linit.c liolib.c llex.c \
                lmathlib.c lmem.c loadlib.c lobject.c lopcodes.c loslib.c \
@@ -67,7 +68,12 @@ jobs:
             fi
           done
 
+          # SỬA: dùng llvm-ar thay vì xcrun ar
+          ls -la *.o | head
           llvm-ar rcs liblua.a *.o
+          ls -la liblua.a
+
+          # Copy vào project
           mkdir -p $GITHUB_WORKSPACE/libs
           cp liblua.a $GITHUB_WORKSPACE/libs/
           cp *.h $GITHUB_WORKSPACE/libs/
@@ -81,10 +87,8 @@ jobs:
       - name: Build dylib with Lua
         run: |
           SDK=$HOME/sdks/iPhoneOS16.5.sdk
-          # Tự động tìm tất cả các tệp mã nguồn trong thư mục src/
-          SRC=$(find src -type f \( -name "*.mm" -o -name "*.m" -o -name "*.cpp" -o -name "*.c" \) | tr '\n' ' ')
+          SRC=$(find src -name "*.mm" | tr '\n' ' ')
           echo "Sources: $SRC"
-          
           clang++ \
             -target arm64-apple-ios14.0 \
             -dynamiclib \
@@ -98,7 +102,6 @@ jobs:
             -install_name @rpath/libtool.dylib \
             -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
             -Isrc/memory -Isrc/dump -Isrc/lua -Isrc/esp \
-            -Isrc/c \
             -Ilibs \
             -Llibs \
             -llua \
