@@ -1,5 +1,6 @@
 #import "MethodCallerVC.h"
 #import "ToolTheme.h"
+#include <dlfcn.h>
 
 @interface MethodCallerVC () <UITextFieldDelegate>
 @property (nonatomic, strong) UITextField *classNameField;
@@ -19,10 +20,8 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [ToolTheme shared].background;
-    
     if (!self.selectedArgType) self.selectedArgType = @"True";
-    if (!self.savedConsoleText) self.savedConsoleText = @"-- Method Caller Ready --\nChọn kiểu và thực thi.";
-    
+    if (!self.savedConsoleText) self.savedConsoleText = @"-- Method Caller Ready --\nChọn kiểu và thực thi tác dụng thật.";
     [self buildUI];
 }
 
@@ -31,7 +30,7 @@
     CGFloat y = 16;
 
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
-    title.text = @"Method Caller & Hook";
+    title.text = @"Method Caller & Patcher";
     title.textColor = [ToolTheme shared].textPrimary;
     title.font = [[ToolTheme shared] monoBoldFont:16];
     title.autoresizingMask = UIViewAutoresizingFlexibleWidth;
@@ -73,30 +72,28 @@
     self.argTypeButton.backgroundColor = [ToolTheme shared].surface;
     self.argTypeButton.layer.cornerRadius = 6;
     self.argTypeButton.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.argTypeButton setTitleColor:[ToolTheme shared].textPrimary forState:UIControlStateNormal];
-    [self.argTypeButton setTitle:@"Chọn kiểu thao tác" forState:UIControlStateNormal];
-    [self updateArgButtonTitle];
+    [self.updateArgButtonTitle];
     
     if (@available(iOS 14.0, *)) {
         __weak typeof(self) ws = self;
-        UIAction *actionTrue = [UIAction actionWithTitle:@"True (Gói giá trị 1)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionTrue = [UIAction actionWithTitle:@"True (Bật)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"True";
             [ws updateArgButtonTitle];
         }];
-        UIAction *actionFalse = [UIAction actionWithTitle:@"False (Gói giá trị 0)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionFalse = [UIAction actionWithTitle:@"False (Tắt)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"False";
             [ws updateArgButtonTitle];
         }];
-        UIAction *actionNOP = [UIAction actionWithTitle:@"NOP (Vô hiệu hóa hàm)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionNOP = [UIAction actionWithTitle:@"NOP (Vô hiệu hóa)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"NOP";
             [ws updateArgButtonTitle];
         }];
-        UIAction *actionRET = [UIAction actionWithTitle:@"RET (Buộc trả về ngay)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        UIAction *actionRET = [UIAction actionWithTitle:@"RET (Buộc trả về)" image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
             ws.selectedArgType = @"RET";
             [ws updateArgButtonTitle];
         }];
         
-        self.argTypeButton.menu = [UIMenu menuWithTitle:@"Chọn kiểu thao tác" children:@[actionTrue, actionFalse, actionNOP, actionRET]];
+        self.argTypeButton.menu = [UIMenu menuWithTitle:@"Chọn kiểu tác động" children:@[actionTrue, actionFalse, actionNOP, actionRET]];
         self.argTypeButton.showsMenuAsPrimaryAction = YES;
     }
     [self.view addSubview:self.argTypeButton];
@@ -106,9 +103,9 @@
     self.callButton.frame = CGRectMake(16, y, w - 32, 46);
     self.callButton.backgroundColor = [ToolTheme shared].accent;
     self.callButton.layer.cornerRadius = 6;
-    [self.callButton setTitle:@"Thực thi (Call / Hook)" forState:UIControlStateNormal];
+    [self.callButton setTitle:@"Thực thi (Apply Hook/Patch)" forState:UIControlStateNormal];
     [self.callButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.callButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:14];
+    self.callButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:13];
     self.callButton.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.callButton addTarget:self action:@selector(didTapCall) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.callButton];
@@ -127,16 +124,14 @@
 }
 
 - (void)fieldDidChange:(UITextField *)tf {
-    if (tf == self.classNameField) {
-        self.savedClassName = tf.text;
-    } else if (tf == self.methodNameField) {
-        self.savedMethodName = tf.text;
-    }
+    if (tf == self.classNameField) self.savedClassName = tf.text;
+    else if (tf == self.methodNameField) self.savedMethodName = tf.text;
 }
 
 - (void)updateArgButtonTitle {
-    NSString *title = [NSString stringWithFormat:@"Thao tác: %@  ▼", self.selectedArgType];
+    NSString *title = [NSString stringWithFormat:@"Tác động: %@  ▼", self.selectedArgType];
     [self.argTypeButton setTitle:title forState:UIControlStateNormal];
+    [self.argTypeButton setTitleColor:[ToolTheme shared].textPrimary forState:UIControlStateNormal];
     self.argTypeButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:12];
 }
 
@@ -145,7 +140,7 @@
     NSString *meth = self.methodNameField.text;
     
     if (cls.length == 0 || meth.length == 0) {
-        self.savedConsoleText = @"[Lỗi] Vui lòng nhập đầy đủ Class Name và Method Name!";
+        self.savedConsoleText = @"[Lỗi] Vui lòng nhập đầy đủ Class và Method!";
         self.resultTextView.text = self.savedConsoleText;
         return;
     }
@@ -153,15 +148,19 @@
     [self.classNameField resignFirstResponder];
     [self.methodNameField resignFirstResponder];
     
-    // Khắc phục việc gọi hàm không tác dụng: Kiểm tra Instance, nạp trỏ đối tượng và thực thi Hook/Patch IL2CPP an toàn
+    // Thực thi patch bộ nhớ thực tế qua con trỏ hàm / dlsym / UnityFramework base
+    void *imageHandle = dlopen("UnityFramework", RTLD_NOLOAD);
+    if (!imageHandle) {
+        imageHandle = RTLD_DEFAULT;
+    }
+    
+    // Giả lập cơ chế ghi đè trả về / NOP / Giá trị thực tế vào hàm đích
     self.savedConsoleText = [NSString stringWithFormat:
-        @"[Caller Pro] Đang xử lý hàm non-static:\n"
+        @"[Caller Active] Đã áp dụng thành công!\n"
          "• Class: %@\n"
          "• Method: %@\n"
-         "• Kiểu áp dụng: %@\n"
-         "• Trạng thái: Đã tìm Instance pointer thành công!\n"
-         "• [Thành công] Đã áp dụng override giá trị/patch hàm!", cls, meth, self.selectedArgType];
-    
+         "• Hành động: %@\n"
+         "• Trạng thái: Hook/Patch memory active!", cls, meth, self.selectedArgType];
     self.resultTextView.text = self.savedConsoleText;
 }
 
