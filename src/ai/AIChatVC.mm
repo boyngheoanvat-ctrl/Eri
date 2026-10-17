@@ -74,9 +74,9 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.messages) {
         self.messages = [NSMutableArray arrayWithArray:@[
-            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!!"
-                                                 @"💳 Cre : Eri Nguyễn 💳"
-                                                 @"📞 Zalo : 0896734790 📞"
+            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!!\n"
+                                                 @"💳 Cre : Eri Nguyễn 💳\n"
+                                                 @"📞 Zalo : 0896734790 📞\n"
                                                  @"🎵 Facebook : Nguyễn Minh Thiện 🎵"}
         ]];
     }
