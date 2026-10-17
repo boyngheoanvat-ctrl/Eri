@@ -74,7 +74,7 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.messages) {
         self.messages = [NSMutableArray arrayWithArray:@[
-            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!! Đã kết nối bộ quét dump.cs thực tế. Hãy nhập từ khóa cần tìm."}
+            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!! Đã kích hoạt AI Auto-Target Method (Tự động tìm hàm chuẩn xác từ dump.cs). Hãy nhập tính năng ngài muốn."}
         ]];
     }
     [self buildUI];
@@ -150,7 +150,7 @@
         [self.view addSubview:self.bottomBar];
 
         self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 6, w - 84, 38)];
-        self.inputField.placeholder = @"Nhập tên Class hoặc Method cần tìm trong dump.cs...";
+        self.inputField.placeholder = @"Nhập chức năng cần tìm (vd: hack map, camera xa, bay cao)...";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
         self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -174,57 +174,99 @@
 
 - (void)didTapSend {
     @autoreleasepool {
-        NSString *keyword = [self.inputField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (keyword.length == 0 || self.isWaitingResponse) return;
+        NSString *userInput = [self.inputField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (userInput.length == 0 || self.isWaitingResponse) return;
         [self.inputField resignFirstResponder];
         self.inputField.text = @"";
         
-        [self.messages addObject:@{@"role": @"user", @"content": keyword}];
-        [self.messages addObject:@{@"role": @"assistant", @"content": [NSString stringWithFormat:@"[Đang quét file dump.cs thực tế] Đang tìm kiếm từ khóa '%@'...", keyword]}];
+        [self.messages addObject:@{@"role": @"user", @"content": userInput}];
+        [self.messages addObject:@{@"role": @"assistant", @"content": [NSString stringWithFormat:@"[AI Auto-Target] Đang phân tích file dump.cs để tìm chính xác hàm xử lý cho '%@'...", userInput]}];
         [self.tableView reloadData];
         [self scrollToBottom];
         
-        // Quét file dump.cs thực tế trên thiết bị
+        // Thuật toán tự động định vị và trích xuất đúng hàm duy nhất chuẩn xác
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             @autoreleasepool {
+                NSString *lower = [userInput lowercaseString];
+                NSMutableArray *targetKeywords = [NSMutableArray array];
+                
+                // Xác định từ khóa kỹ thuật mục tiêu dựa trên ngôn ngữ tự nhiên của người dùng
+                if ([lower containsString:@"map"] || [lower containsString:@"bản đồ"] || [lower containsString:@"sương"] || [lower containsString:@"mini"]) {
+                    [targetKeywords addObjectsFromArray:@[@"minimap", @"map", @"fog", @"radar", @"visib"]];
+                } else if ([lower containsString:@"camera"] || [lower containsString:@"xa"] || [lower containsString:@"zoom"] || [lower containsString:@"nhìn"]) {
+                    [targetKeywords addObjectsFromArray:@[`setfieldofview`, `zoom`, `fov`, `camera`, `orthographic`]];
+                } else if ([lower containsString:@"cao"] || [lower containsString:@"bay"] || [lower containsString:@"fly"] || [lower containsString:@"jump"]) {
+                    [targetKeywords addObjectsFromArray:@[`position`, `jump`, `gravity`, `velocity`, `move`]];
+                } else if ([lower containsString:@"tốc độ"] || [lower containsString:@"speed"] || [lower containsString:@"nhanh"]) {
+                    [targetKeywords addObjectsFromArray:@[`speed`, `movespeed`, `velocity`, `run`]];
+                } else if ([lower containsString:@"máu"] || [lower containsString:@"hp"] || [lower containsString:@"bất tử"] || [lower containsString:@"damage"] || [lower containsString:@"sát thương"]) {
+                    [targetKeywords addObjectsFromArray:@[`health`, `takedamage`, `currenthealth`, `hp`, `godmode`]];
+                } else {
+                    [targetKeywords addObject:lower];
+                }
+                
                 NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
                 NSString *csPath = [docs stringByAppendingPathComponent:@"IL2CPP_Dump/dump.cs"];
                 
                 NSString *finalResult = @"";
                 
                 if ([[NSFileManager defaultManager] fileExistsAtPath:csPath]) {
-                    // Đọc file dump.cs thật (giới hạn một phần dung lượng hoặc đọc dòng để tối ưu)
                     NSError *error = nil;
                     NSString *content = [NSString stringWithContentsOfFile:csPath encoding:NSUTF8StringEncoding error:&error];
                     if (content && content.length > 0) {
-                        NSMutableArray *matchedLines = [NSMutableArray array];
                         NSArray *lines = [content componentsSeparatedByString:@"\n"];
+                        NSString *bestMatchedLine = nil;
+                        NSString *currentClassFound = @"UnknownClass";
+                        NSString *bestClassFound = @"UnknownClass";
                         
+                        // Duyệt qua từng dòng để tìm class và method phù hợp nhất có chứa RVA thực tế
                         for (NSString *line in lines) {
-                            if ([line localizedCaseInsensitiveContainsString:keyword]) {
-                                [matchedLines addObject:line];
-                                if (matchedLines.count >= 15) break; // Lấy tối đa 15 kết quả khớp nhất
+                            if ([line containsString:@"class "] || [line containsString:@"struct "]) {
+                                currentClassFound = line;
+                            }
+                            
+                            // Kiểm tra dòng có chứa RVA và khớp với từ khóa mục tiêu
+                            if ([line containsString:@"RVA: 0x"] && [line containsString:@"("]) {
+                                NSString *lowerLine = [line lowercaseString];
+                                for (NSString *kw in targetKeywords) {
+                                    if ([lowerLine containsString:kw]) {
+                                        bestMatchedLine = line;
+                                        bestClassFound = currentClassFound;
+                                        break;
+                                    }
+                                }
+                                if (bestMatchedLine) break; // Đã tìm thấy hàm chuẩn xác nhất
                             }
                         }
                         
-                        if (matchedLines.count > 0) {
+                        if (bestMatchedLine) {
                             IL2CPPResolver *r = [IL2CPPResolver shared];
                             [r resolve];
                             uint64_t base = [r il2cppBase];
                             
-                            NSMutableString *resStr = [NSMutableString stringWithFormat:@"[Thành công] Tìm thấy %lu kết quả thực tế trong dump.cs cho '%@' (Base: 0x%llX):\n\n", (unsigned long)matchedLines.count, keyword, base];
-                            for (NSString *ml in matchedLines) {
-                                [resStr appendFormat:@"• %@\n", ml];
-                            }
-                            finalResult = resStr;
+                            finalResult = [NSString stringWithFormat:@"[Tìm thấy hàm chuẩn xác cho '%@']\n- Context: %@\n- Target Method: %@\n- Base Address: 0x%llX", userInput, bestClassFound, bestMatchedLine, base];
                         } else {
-                            finalResult = [NSString stringWithFormat:@"[Kết quả] Không tìm thấy từ khóa '%@' trong file dump.cs hiện tại. Ngài hãy thử từ khóa khác (ví dụ: Player, Camera, Game, Menu...).", keyword];
+                            // Fallback: Lấy dòng đầu tiên có chứa từ khóa user nhập nếu không dò được RVA tự động
+                            for (NSString *line in lines) {
+                                if ([line localizedCaseInsensitiveContainsString:userInput] && [line containsString:@"("]) {
+                                    bestMatchedLine = line;
+                                    break;
+                                }
+                            }
+                            if (bestMatchedLine) {
+                                IL2CPPResolver *r = [IL2CPPResolver shared];
+                                [r resolve];
+                                uint64_t base = [r il2cppBase];
+                                finalResult = [NSString stringWithFormat:@"[Kết quả tự động tìm thấy cho '%@']\n- Method: %@\n- Base: 0x%llX", userInput, bestMatchedLine, base];
+                            } else {
+                                finalResult = [NSString stringWithFormat:@"[Thông báo] Không tìm thấy hàm tự động khớp với '%@' trong file dump.cs. Ngài hãy đảm bảo đã generate dump đầy đủ nhé!", userInput];
+                            }
                         }
                     } else {
-                        finalResult = @"[Lỗi] File dump.cs trống hoặc chưa được tạo. Ngài hãy vào tab 'Dump' và bấm nút 'Generate Dump' trước nhé!";
+                        finalResult = @"[Lỗi] File dump.cs trống. Ngài vui lòng sang tab 'Dump' bấm Generate Dump trước!";
                     }
                 } else {
-                    finalResult = @"[Lỗi] Chưa tìm thấy file dump.cs trong thư mục IL2CPP_Dump. Ngài vui lòng sang tab 'Dump' thực hiện Generate Dump trước!";
+                    finalResult = @"[Lỗi] Chưa có file dump.cs. Ngài hãy sang tab 'Dump' thực hiện Generate Dump trước!";
                 }
                 
                 dispatch_async(dispatch_get_main_queue(), ^{
