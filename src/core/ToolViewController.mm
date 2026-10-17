@@ -35,8 +35,8 @@
 - (void)setupImGuiLayout {
     CGFloat totalW = CGRectGetWidth(self.view.bounds);
     CGFloat totalH = CGRectGetHeight(self.view.bounds);
-    if (totalW <= 50) totalW = 600;
-    if (totalH <= 50) totalH = 360;
+    if (totalW <= 50) totalW = 600; // <--- Sửa (chiều rộng mặc định)
+    if (totalH <= 50) totalH = 300; // <--- Sửa (chiều cao mặc định)
     
     // 1. Title Bar (Kéo di chuyển cửa sổ)
     UIView *titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, 26)];
