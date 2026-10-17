@@ -195,26 +195,31 @@
             return;
         }
         
-        [self.messages addObject:@{@"role": @"assistant", @"content": [NSString stringWithFormat:@"[Đang tra cứu mã cho '%@'] Đang lọc bỏ namespace hệ thống và quét code logic game...", userInput]}];
+        [self.messages addObject:@{@"role": @"assistant", @"content": [NSString stringWithFormat:@"[Adaptive Scan] Đang phân tích động file dump.cs cho yêu cầu '%@'...", userInput]}];
         [self.tableView reloadData];
         [self scrollToBottom];
         
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             @autoreleasepool {
-                NSMutableArray *targetKeywords = [NSMutableArray array];
+                // Phân tích linh hoạt ý định người dùng thành tập hợp từ khóa ngữ nghĩa rộng
+                NSMutableArray *semanticKeywords = [NSMutableArray array];
                 
-                if ([lower containsString:@"map"] || [lower containsString:@"bản đồ"] || [lower containsString:@"sương"] || [lower containsString:@"mini"] || [lower containsString:@"địch"]) {
-                    [targetKeywords addObjectsFromArray:@[@"minimap", @"minibox", @"mapcontroller", @"mapmanager", @"worldmap", @"battlemap", @"radar", @"fogofwar", @"reveal"]];
-                } else if ([lower containsString:@"camera"] || [lower containsString:@"xa"] || [lower containsString:@"zoom"] || [lower containsString:@"nhìn"]) {
-                    [targetKeywords addObjectsFromArray:@[@"setfieldofview", @"zoom", @"fov", @"cameracontroller", @"camera"]];
+                if ([lower containsString:@"map"] || [lower containsString:@"bản đồ"] || [lower containsString:@"sương"] || [lower containsString:@"mini"] || [lower containsString:@"địch"] || [lower containsString:@"sight"] || [lower containsString:@"nhìn"]) {
+                    [semanticKeywords addObjectsFromArray:@[@"sight", @"reveal", @"fog", @"map", @"radar", @"visib", @"entity", @"actor", @"target"]];
+                } else if ([lower containsString:@"camera"] || [lower containsString:@"xa"] || [lower containsString:@"zoom"]) {
+                    [semanticKeywords addObjectsFromArray:@[@"fov", @"fieldofview", @"zoom", @"camera", @"ortho"]];
                 } else if ([lower containsString:@"cao"] || [lower containsString:@"bay"] || [lower containsString:@"fly"] || [lower containsString:@"jump"]) {
-                    [targetKeywords addObjectsFromArray:@[@"position", @"jump", @"gravity", @"velocity", @"move", @"playercontroller"]];
+                    [semanticKeywords addObjectsFromArray:@[@"position", @"jump", @"gravity", @"velocity", @"move", @"transform"]];
                 } else if ([lower containsString:@"tốc độ"] || [lower containsString:@"speed"] || [lower containsString:@"nhanh"]) {
-                    [targetKeywords addObjectsFromArray:@[@"speed", @"movespeed", @"velocity", @"run"]];
-                } else if ([lower containsString:@"máu"] || [lower containsString:@"hp"] || [lower containsString:@"bất tử"] || [lower containsString:@"damage"] || [lower containsString:@"sát thương"]) {
-                    [targetKeywords addObjectsFromArray:@[@"health", @"takedamage", @"currenthealth", @"hp", @"godmode"]];
+                    [semanticKeywords addObjectsFromArray:@[@"speed", @"velocity", @"run", @"move"]];
+                } else if ([lower containsString:@"máu"] || [lower containsString:@"hp"] || [lower containsString:@"bất tử"] || [lower containsString:@"damage"]) {
+                    [semanticKeywords addObjectsFromArray:@[@"health", @"takedamage", @"hp", @"damage", @"god"]];
                 } else {
-                    [targetKeywords addObject:lower];
+                    // Tự tách từ khóa người dùng nhập để quét đa năng mọi game
+                    NSArray *tokens = [userInput componentsSeparatedByString:@" "];
+                    for (NSString *t in tokens) {
+                        if (t.length > 1) [semanticKeywords addObject:[t lowercaseString]];
+                    }
                 }
                 
                 NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
@@ -227,59 +232,86 @@
                     NSString *content = [NSString stringWithContentsOfFile:csPath encoding:NSUTF8StringEncoding error:&error];
                     if (content && content.length > 0) {
                         NSArray *lines = [content componentsSeparatedByString:@"\n"];
-                        NSString *bestMatchedLine = nil;
-                        NSString *bestClassFound = @"UnknownClass";
-                        NSString *currentNamespace = @"";
-                        NSString *currentClassFound = @"UnknownClass";
+                        
+                        NSMutableArray *matchedCandidates = [NSMutableArray array];
+                        NSString *currentNamespace = @"GlobalNamespace";
+                        NSString *currentClass = @"UnknownClass";
                         
                         for (NSString *line in lines) {
                             if ([line hasPrefix:@"namespace "]) {
-                                currentNamespace = line;
+                                currentNamespace = [[line stringByReplacingOccurrencesOfString:@"namespace " withString:@""] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                             }
                             if ([line containsString:@"class "] || [line containsString:@"struct "]) {
-                                currentClassFound = line;
+                                currentClass = line;
                             }
                             
                             NSString *lowerNs = [currentNamespace lowercaseString];
-                            NSString *lowerCls = [currentClassFound lowercaseString];
+                            NSString *lowerCls = [currentClass->description lowercaseString];
                             
-                            if ([lowerNs containsString:@"system"] || 
-                                [lowerNs containsString:@"mono"] || 
-                                [lowerNs containsString:@"unityengine"] || 
-                                [lowerNs containsString:@"unityeditor"] ||
-                                [lowerNs containsString:@"interopservices"] ||
-                                [lowerNs containsString:@"runtime"] ||
-                                [lowerNs containsString:@"collections"] ||
-                                [lowerCls containsString:@"normalization"] ||
-                                [lowerCls containsString:@"unicode"] ||
+                            // Loại bỏ triệt để thư viện hệ thống .NET/Mono/Unity chuẩn để tool có thể dùng trên bất kỳ game Unity nào
+                            if ([lowerNs hasPrefix:@"system"] || 
+                                [lowerNs hasPrefix:@"mono"] || 
+                                [lowerNs hasPrefix:@"unityengine"] || 
+                                [lowerNs hasPrefix:@"unityeditor"] ||
+                                [lowerNs hasPrefix:@"interopservices"] ||
+                                [lowerNs hasPrefix:@"nunit"] ||
                                 [lowerCls containsString:@"<>c"] ||
-                                [lowerCls containsString:@"<module>"] ||
-                                [lowerCls containsString:@"__"] ||
-                                [lowerCls containsString:@"anonymous"]) {
+                                [lowerCls containsString:@"<module>"]) {
                                 continue;
                             }
                             
+                            // Nếu tìm thấy dòng phương thức có RVA
                             if ([line containsString:@"RVA: 0x"] && [line containsString:@"("]) {
                                 NSString *lowerLine = [line lowercaseString];
-                                for (NSString *kw in targetKeywords) {
-                                    if ([lowerLine containsString:kw]) {
-                                        bestMatchedLine = line;
-                                        bestClassFound = [NSString stringWithFormat:@"%@ -> %@", currentNamespace, currentClassFound];
-                                        break;
+                                NSInteger score = 0;
+                                
+                                for (NSString *kw in semanticKeywords) {
+                                    if ([lowerLine containsString:kw] || [lowerCls containsString:kw]) {
+                                        score += 2; // Khớp tên hàm hoặc class
                                     }
                                 }
-                                if (bestMatchedLine) break;
+                                
+                                if (score > 0) {
+                                    NSDictionary *matchInfo = @{
+                                        @"score": @(score),
+                                        @"namespace": currentNamespace,
+                                        @"class": currentClass,
+                                        @"method": line
+                                    };
+                                    [matchedCandidates addObject:matchInfo];
+                                }
                             }
                         }
                         
-                        if (bestMatchedLine) {
+                        // Sắp xếp các kết quả theo điểm số phù hợp nhất (Score cao nhất lên đầu)
+                        [matchedCandidates sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
+                            NSNumber *s1 = obj1[@"score"];
+                            NSNumber *s2 = obj2[@"score"];
+                            return [s2 compare:s1];
+                        }];
+                        
+                        if (matchedCandidates.count > 0) {
                             IL2CPPResolver *r = [IL2CPPResolver shared];
                             [r resolve];
                             uint64_t base = [r il2cppBase];
                             
-                            finalResult = [NSString stringWithFormat:@"[Tìm thấy mã game chuẩn xác cho '%@']\n- Context: %@\n- Method: %@\n- Base Address: 0x%llX", userInput, bestClassFound, bestMatchedLine, base];
+                            // Lấy kết quả có điểm số cao nhất chuẩn xác nhất
+                            NSDictionary *best = matchedCandidates.firstObject;
+                            
+                            NSMutableString *resStr = [NSMutableString stringWithFormat:@"[Adaptive Scan - Tìm thấy hàm tối ưu cho '%@']\n", userInput];
+                            [resStr appendFormat:@"- Namespace: %@\n", best[@"namespace"]];
+                            [resStr appendFormat:@"- Class: %@\n", best[@"class"]];
+                            [resStr appendFormat:@"- Method: %@\n", best[@"method"]];
+                            [resStr appendFormat:@"- Base Address: 0x%llX\n", base];
+                            
+                            // Nếu có thêm kết quả phụ tiềm năng, liệt kê ngắn gọn để ngài tham khảo
+                            if (matchedCandidates.count > 1) {
+                                [resStr appendString:@"\n(Các hàm dự phòng tiềm năng khác đã được lọc tự động)."];
+                            }
+                            
+                            finalResult = resStr;
                         } else {
-                            finalResult = [NSString stringWithFormat:@"[Thông báo] Không tìm thấy hàm logic game phù hợp cho '%@'. Ngài hãy kiểm tra lại tính năng nhé!", userInput];
+                            finalResult = [NSString stringWithFormat:@"[Thông báo] Không tìm thấy hàm logic phù hợp cho '%@' trong game này. Ngài hãy đảm bảo đã generate file dump.cs của tựa game hiện tại nhé!", userInput];
                         }
                     } else {
                         finalResult = @"[Lỗi] File dump.cs trống. Ngài vui lòng sang tab 'Dump' bấm Generate Dump trước!";
@@ -339,7 +371,7 @@
     UILabel *lbl = [[UILabel alloc] init];
     lbl.font = [[ToolTheme shared] monoFont:11];
     lbl.numberOfLines = 0;
-    lbl.text = [NSString stringWithFormat:@"[%@]: %@", [role isEqualToString:@"user"] ? @"Ngài" : @"AI", content];
+    lbl.text = [NSString stringWithFormat:@"[%@]: %@", [role isEqualToString:"user"] ? @"Ngài" : @"AI", content];
     CGSize size = [lbl sizeThatFits:CGSizeMake(maxW, CGFLOAT_MAX)];
 
     return size.height + ([role isEqualToString:@"assistant"] ? 40 : 16);
