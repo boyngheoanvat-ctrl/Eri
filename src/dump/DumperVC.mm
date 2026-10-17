@@ -5,6 +5,7 @@
 #import <dlfcn.h>
 
 @interface DumperVC ()
+@property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIButton *dumpButton;
 @property (nonatomic, strong) UISwitch *genScriptSwitch;
 @property (nonatomic, strong) UISwitch *genHeaderSwitch;
@@ -25,22 +26,68 @@
     [self buildUI];
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    CGFloat w = CGRectGetWidth(self.view.bounds);
+    CGFloat h = CGRectGetHeight(self.view.bounds);
+    if (w <= 50) w = 400;
+    
+    self.scrollView.frame = CGRectMake(0, 0, w, h);
+    self.scrollView.contentSize = CGSizeMake(w, 540);
+    
+    for (UIView *subview in self.scrollView.subviews) {
+        if ([subview isKindOfClass:[UIView class]] && subview != self.scrollView.subviews.firstObject && subview != self.dumpButton) {
+            CGRect f = subview.frame;
+            f.size.width = w - 32;
+            subview.frame = f;
+            
+            for (UIView *inner in subview.subviews) {
+                if ([inner isKindOfClass:[UISwitch class]]) {
+                    CGRect sf = inner.frame;
+                    sf.origin.x = f.size.width - sf.size.width - 20;
+                    inner.frame = sf;
+                } else if ([inner isKindOfClass:[UILabel class]]) {
+                    CGRect lf = inner.frame;
+                    lf.size.width = f.size.width - 100;
+                    inner.frame = lf;
+                }
+            }
+        }
+    }
+    if (self.dumpButton) {
+        CGRect bf = self.dumpButton.frame;
+        bf.size.width = w - 32;
+        self.dumpButton.frame = bf;
+    }
+}
+
 - (void)buildUI {
     CGFloat w = CGRectGetWidth(self.view.bounds);
+    CGFloat h = CGRectGetHeight(self.view.bounds);
+    if (w <= 50) w = 400;
+
+    self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
+    self.scrollView.backgroundColor = [UIColor clearColor];
+    self.scrollView.showsVerticalScrollIndicator = YES;
+    self.scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.view addSubview:self.scrollView];
+
     CGFloat y = 16;
 
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
     title.text = @"IL2CPP Dumper (Anti-Hidden/Encrypted Lib)";
     title.textColor = [ToolTheme shared].textPrimary;
     title.font = [[ToolTheme shared] monoBoldFont:16];
-    [self.view addSubview:title];
+    title.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.scrollView addSubview:title];
     y += 36;
 
     UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 18)];
     sub.text = @"Dump đầy đủ: dump.cs + il2cpp.h + script.json + strings.txt";
     sub.textColor = [ToolTheme shared].textMuted;
     sub.font = [[ToolTheme shared] monoFont:10];
-    [self.view addSubview:sub];
+    sub.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.scrollView addSubview:sub];
     y += 30;
 
     self.genScriptSwitch = [self addRow:@"script.json" desc:@"IDA/Ghidra helper" y:y];
@@ -57,16 +104,18 @@
     [self.dumpButton setTitle:@"Generate Dump" forState:UIControlStateNormal];
     [self.dumpButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.dumpButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:14];
+    self.dumpButton.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.dumpButton addTarget:self action:@selector(startDump)
               forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.dumpButton];
+    [self.scrollView addSubview:self.dumpButton];
     y += 56;
 
     self.progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
     self.progressView.frame = CGRectMake(16, y, w - 32, 4);
     self.progressView.progressTintColor = [ToolTheme shared].accent;
     self.progressView.hidden = YES;
-    [self.view addSubview:self.progressView];
+    self.progressView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.scrollView addSubview:self.progressView];
     y += 14;
 
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 18)];
@@ -74,7 +123,8 @@
     self.statusLabel.textColor = [ToolTheme shared].success;
     self.statusLabel.font = [[ToolTheme shared] monoFont:11];
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    [self.view addSubview:self.statusLabel];
+    self.statusLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.scrollView addSubview:self.statusLabel];
     y += 26;
 
     self.debugLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 80)];
@@ -82,46 +132,56 @@
     self.debugLabel.textColor = [UIColor yellowColor];
     self.debugLabel.font = [[ToolTheme shared] monoFont:9];
     self.debugLabel.numberOfLines = 0;
-    [self.view addSubview:self.debugLabel];
+    self.debugLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.scrollView addSubview:self.debugLabel];
     y += 84;
 
-    self.resultLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 100)];
+    self.resultLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 120)];
     self.resultLabel.text = @"";
     self.resultLabel.textColor = [ToolTheme shared].textSecondary;
     self.resultLabel.font = [[ToolTheme shared] monoFont:10];
     self.resultLabel.numberOfLines = 0;
-    [self.view addSubview:self.resultLabel];
+    self.resultLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.scrollView addSubview:self.resultLabel];
+    y += 140;
+
+    self.scrollView.contentSize = CGSizeMake(w, y);
 
     self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.spinner.color = [ToolTheme shared].accent;
-    self.spinner.center = self.view.center;
+    self.spinner.center = CGPointMake(w / 2.0, h / 2.0);
     self.spinner.hidesWhenStopped = YES;
     [self.view addSubview:self.spinner];
 }
 
 - (UISwitch *)addRow:(NSString *)title desc:(NSString *)desc y:(CGFloat)y {
     CGFloat w = CGRectGetWidth(self.view.bounds);
+    if (w <= 50) w = 400;
+    
     UIView *row = [[UIView alloc] initWithFrame:CGRectMake(16, y, w - 32, 52)];
     row.backgroundColor = [ToolTheme shared].surface;
     row.layer.cornerRadius = 6;
-    [self.view addSubview:row];
+    row.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.scrollView addSubview:row];
 
-    UILabel *t = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, w - 100, 18)];
+    UILabel *t = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, w - 120, 18)];
     t.text = title;
     t.textColor = [ToolTheme shared].textPrimary;
     t.font = [[ToolTheme shared] monoBoldFont:12];
+    t.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [row addSubview:t];
 
-    UILabel *d = [[UILabel alloc] initWithFrame:CGRectMake(12, 28, w - 100, 16)];
+    UILabel *d = [[UILabel alloc] initWithFrame:CGRectMake(12, 28, w - 120, 16)];
     d.text = desc;
     d.textColor = [ToolTheme shared].textMuted;
     d.font = [[ToolTheme shared] monoFont:10];
+    d.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [row addSubview:d];
 
-    // Fix vị trí X chuẩn xác nằm sát lề phải của row
-    UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(CGRectGetWidth(row.bounds) - 75, 11, 51, 31)];
+    UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(CGRectGetWidth(row.bounds) - 71, 11, 51, 31)];
     sw.onTintColor = [ToolTheme shared].accent;
     sw.on = YES;
+    sw.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
     [row addSubview:sw];
     return sw;
 }
@@ -432,6 +492,7 @@
                                                 [params appendFormat:@"%@ %@", pType, pName];
                                             }
 
+                                            // Định dạng chuẩn Ghidra RVA yêu cầu
                                             [csContent appendFormat:@"    %@%@ %@(%@); // RVA: 0x%llX Offset: 0x%llX VA: 0x%llX Token: 0x%X\n",
                                              mod, retType, methodName, params, rva, rva, va, token];
 
