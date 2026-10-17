@@ -42,7 +42,7 @@
     self.contentLbl.text = [NSString stringWithFormat:@"[%@]: %@", [role isEqualToString:@"user"] ? @"Ngài" : @"AI", text];
     self.contentLbl.textColor = [role isEqualToString:@"user"] ? [ToolTheme shared].accent : [ToolTheme shared].textPrimary;
 
-    CGFloat padding = 16;
+    CGFloat padding = 12;
     CGFloat maxW = width - (padding * 2);
     CGSize size = [self.contentLbl sizeThatFits:CGSizeMake(maxW, CGFLOAT_MAX)];
     
@@ -50,7 +50,7 @@
 
     if ([role isEqualToString:@"assistant"]) {
         self.actionCopyButton.hidden = NO;
-        self.actionCopyButton.frame = CGRectMake(width - 70 - padding, 8 + size.height + 4, 60, 24);
+        self.actionCopyButton.frame = CGRectMake(width - 65 - padding, 8 + size.height + 4, 56, 22);
     } else {
         self.actionCopyButton.hidden = YES;
     }
@@ -86,28 +86,31 @@
         if (w <= 50) w = 450;
         if (h <= 50) h = 300;
 
-        CGFloat topOffset = 45; // Chiều cao của thanh tab bar phía trên
-        CGFloat bottomH = 50;   // Chiều cao thanh nhập liệu
-        CGFloat tableH = h - topOffset - bottomH;
+        // Tương ứng với bố cục Side Rail bên trái (chiều rộng sidebar ~75pt)
+        CGFloat leftOffset = 75;
+        CGFloat chatW = w - leftOffset;
+        CGFloat bottomH = 50;
+        CGFloat topMargin = 35; // Khoảng cách từ đỉnh cửa sổ xuống vùng chat
 
-        // Khởi tạo UITableView nằm ngay dưới tab bar và phía trên thanh chat
-        self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, topOffset, w, MAX(100, tableH)) style:UITableViewStylePlain];
+        // UITableView nằm bên phải sidebar, chiếm toàn bộ không gian còn lại trừ thanh bottomBar ở đáy
+        CGFloat tableH = h - topMargin - bottomH - 10;
+        self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(leftOffset, topMargin, chatW, MAX(100, tableH)) style:UITableViewStylePlain];
         self.tableView.backgroundColor = [UIColor clearColor];
         self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
         self.tableView.dataSource = self;
         self.tableView.delegate = self;
         [self.view addSubview:self.tableView];
 
-        // Ghim bottomBar luôn nằm sát đáy khung view
-        self.bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, h - bottomH, w, bottomH)];
+        // Thanh nhập liệu và nút Gửi nằm ngay đáy, căn chỉnh theo vùng chat bên phải sidebar
+        self.bottomBar = [[UIView alloc] initWithFrame:CGRectMake(leftOffset, h - bottomH - 8, chatW, bottomH)];
         self.bottomBar.backgroundColor = [ToolTheme shared].surface;
         [self.view addSubview:self.bottomBar];
 
-        self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 6, w - 84, 38)];
+        self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(10, 6, chatW - 75, 38)];
         self.inputField.placeholder = @"Nhập câu hỏi bạn muốn hỏi AI ở đây";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
-        self.inputField.font = [[ToolTheme shared] monoFont:12];
+        self.inputField.font = [[ToolTheme shared] monoFont:11];
         self.inputField.layer.cornerRadius = 6;
         self.inputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 8, 38)];
         self.inputField.leftViewMode = UITextFieldViewModeAlways;
@@ -115,7 +118,7 @@
         [self.bottomBar addSubview:self.inputField];
 
         self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        self.sendButton.frame = CGRectMake(w - 68, 6, 56, 38);
+        self.sendButton.frame = CGRectMake(chatW - 60, 6, 52, 38);
         self.sendButton.backgroundColor = [ToolTheme shared].accent;
         self.sendButton.layer.cornerRadius = 6;
         [self.sendButton setTitle:@"Gửi" forState:UIControlStateNormal];
@@ -190,7 +193,7 @@
     NSDictionary *m = self.messages[indexPath.row];
     NSString *role = m[@"role"];
     NSString *content = m[@"content"];
-    CGFloat maxW = CGRectGetWidth(tableView.bounds) - 32;
+    CGFloat maxW = CGRectGetWidth(tableView.bounds) - 24;
     
     UILabel *lbl = [[UILabel alloc] init];
     lbl.font = [[ToolTheme shared] monoFont:11];
@@ -198,7 +201,7 @@
     lbl.text = [NSString stringWithFormat:@"[%@]: %@", [role isEqualToString:@"user"] ? @"Ngài" : @"AI", content];
     CGSize size = [lbl sizeThatFits:CGSizeMake(maxW, CGFLOAT_MAX)];
 
-    return size.height + ([role isEqualToString:@"assistant"] ? 40 : 16);
+    return size.height + ([role isEqualToString:@"assistant"] ? 36 : 16);
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField *)textField { [self didTapSend]; return YES; }
