@@ -86,33 +86,36 @@
         if (w <= 50) w = 450;
         if (h <= 50) h = 300;
 
-        CGFloat bottomH = 60;
-        CGFloat tableH = h - bottomH - 45;
+        CGFloat topOffset = 45; // Chiều cao của thanh tab bar phía trên
+        CGFloat bottomH = 50;   // Chiều cao thanh nhập liệu
+        CGFloat tableH = h - topOffset - bottomH;
 
-        self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 45, w, tableH) style:UITableViewStylePlain];
+        // Khởi tạo UITableView nằm ngay dưới tab bar và phía trên thanh chat
+        self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, topOffset, w, MAX(100, tableH)) style:UITableViewStylePlain];
         self.tableView.backgroundColor = [UIColor clearColor];
         self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
         self.tableView.dataSource = self;
         self.tableView.delegate = self;
         [self.view addSubview:self.tableView];
 
-        self.bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, h - bottomH - 10, w, bottomH)];
+        // Ghim bottomBar luôn nằm sát đáy khung view
+        self.bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, h - bottomH, w, bottomH)];
         self.bottomBar.backgroundColor = [ToolTheme shared].surface;
         [self.view addSubview:self.bottomBar];
 
-        self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 10, w - 90, 40)];
+        self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 6, w - 84, 38)];
         self.inputField.placeholder = @"Nhập câu hỏi bạn muốn hỏi AI ở đây";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
         self.inputField.font = [[ToolTheme shared] monoFont:12];
         self.inputField.layer.cornerRadius = 6;
-        self.inputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 8, 40)];
+        self.inputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 8, 38)];
         self.inputField.leftViewMode = UITextFieldViewModeAlways;
         self.inputField.delegate = self;
         [self.bottomBar addSubview:self.inputField];
 
         self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        self.sendButton.frame = CGRectMake(w - 72, 10, 60, 40);
+        self.sendButton.frame = CGRectMake(w - 68, 6, 56, 38);
         self.sendButton.backgroundColor = [ToolTheme shared].accent;
         self.sendButton.layer.cornerRadius = 6;
         [self.sendButton setTitle:@"Gửi" forState:UIControlStateNormal];
