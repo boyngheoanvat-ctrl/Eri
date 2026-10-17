@@ -74,7 +74,7 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.messages) {
         self.messages = [NSMutableArray arrayWithArray:@[
-            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!! Đã nâng cấp bộ lọc chống class ẩn (<>c). Trợ lý đã sẵn sàng."}
+            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!!"}
         ]];
     }
     [self buildUI];
