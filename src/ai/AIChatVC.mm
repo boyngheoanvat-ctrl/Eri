@@ -201,7 +201,6 @@
         
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             @autoreleasepool {
-                // Phân tích linh hoạt ý định người dùng thành tập hợp từ khóa ngữ nghĩa rộng
                 NSMutableArray *semanticKeywords = [NSMutableArray array];
                 
                 if ([lower containsString:@"map"] || [lower containsString:@"bản đồ"] || [lower containsString:@"sương"] || [lower containsString:@"mini"] || [lower containsString:@"địch"] || [lower containsString:@"sight"] || [lower containsString:@"nhìn"]) {
@@ -215,7 +214,6 @@
                 } else if ([lower containsString:@"máu"] || [lower containsString:@"hp"] || [lower containsString:@"bất tử"] || [lower containsString:@"damage"]) {
                     [semanticKeywords addObjectsFromArray:@[@"health", @"takedamage", @"hp", @"damage", @"god"]];
                 } else {
-                    // Tự tách từ khóa người dùng nhập để quét đa năng mọi game
                     NSArray *tokens = [userInput componentsSeparatedByString:@" "];
                     for (NSString *t in tokens) {
                         if (t.length > 1) [semanticKeywords addObject:[t lowercaseString]];
@@ -246,9 +244,8 @@
                             }
                             
                             NSString *lowerNs = [currentNamespace lowercaseString];
-                            NSString *lowerCls = [currentClass->description lowercaseString];
+                            NSString *lowerCls = [currentClass lowercaseString];
                             
-                            // Loại bỏ triệt để thư viện hệ thống .NET/Mono/Unity chuẩn để tool có thể dùng trên bất kỳ game Unity nào
                             if ([lowerNs hasPrefix:@"system"] || 
                                 [lowerNs hasPrefix:@"mono"] || 
                                 [lowerNs hasPrefix:@"unityengine"] || 
@@ -260,14 +257,13 @@
                                 continue;
                             }
                             
-                            // Nếu tìm thấy dòng phương thức có RVA
                             if ([line containsString:@"RVA: 0x"] && [line containsString:@"("]) {
                                 NSString *lowerLine = [line lowercaseString];
                                 NSInteger score = 0;
                                 
                                 for (NSString *kw in semanticKeywords) {
                                     if ([lowerLine containsString:kw] || [lowerCls containsString:kw]) {
-                                        score += 2; // Khớp tên hàm hoặc class
+                                        score += 2;
                                     }
                                 }
                                 
@@ -283,7 +279,6 @@
                             }
                         }
                         
-                        // Sắp xếp các kết quả theo điểm số phù hợp nhất (Score cao nhất lên đầu)
                         [matchedCandidates sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
                             NSNumber *s1 = obj1[@"score"];
                             NSNumber *s2 = obj2[@"score"];
@@ -295,7 +290,6 @@
                             [r resolve];
                             uint64_t base = [r il2cppBase];
                             
-                            // Lấy kết quả có điểm số cao nhất chuẩn xác nhất
                             NSDictionary *best = matchedCandidates.firstObject;
                             
                             NSMutableString *resStr = [NSMutableString stringWithFormat:@"[Adaptive Scan - Tìm thấy hàm tối ưu cho '%@']\n", userInput];
@@ -304,14 +298,9 @@
                             [resStr appendFormat:@"- Method: %@\n", best[@"method"]];
                             [resStr appendFormat:@"- Base Address: 0x%llX\n", base];
                             
-                            // Nếu có thêm kết quả phụ tiềm năng, liệt kê ngắn gọn để ngài tham khảo
-                            if (matchedCandidates.count > 1) {
-                                [resStr appendString:@"\n(Các hàm dự phòng tiềm năng khác đã được lọc tự động)."];
-                            }
-                            
                             finalResult = resStr;
                         } else {
-                            finalResult = [NSString stringWithFormat:@"[Thông báo] Không tìm thấy hàm logic phù hợp cho '%@' trong game này. Ngài hãy đảm bảo đã generate file dump.cs của tựa game hiện tại nhé!", userInput];
+                            finalResult = [NSString stringWithFormat:@"[Thông báo] Không tìm thấy hàm logic phù hợp cho '%@' trong game này.", userInput];
                         }
                     } else {
                         finalResult = @"[Lỗi] File dump.cs trống. Ngài vui lòng sang tab 'Dump' bấm Generate Dump trước!";
@@ -371,7 +360,7 @@
     UILabel *lbl = [[UILabel alloc] init];
     lbl.font = [[ToolTheme shared] monoFont:11];
     lbl.numberOfLines = 0;
-    lbl.text = [NSString stringWithFormat:@"[%@]: %@", [role isEqualToString:"user"] ? @"Ngài" : @"AI", content];
+    lbl.text = [NSString stringWithFormat:@"[%@]: %@", [role isEqualToString:@"user"] ? @"Ngài" : @"AI", content];
     CGSize size = [lbl sizeThatFits:CGSizeMake(maxW, CGFLOAT_MAX)];
 
     return size.height + ([role isEqualToString:@"assistant"] ? 40 : 16);
