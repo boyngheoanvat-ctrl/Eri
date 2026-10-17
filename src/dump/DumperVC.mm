@@ -2,6 +2,7 @@
 #import "IL2CPPResolver.h"
 #import "ToolTheme.h"
 #import <mach-o/dyld.h>
+#import <dlfcn.h>
 
 @interface DumperVC ()
 @property (nonatomic, strong) UIButton *dumpButton;
@@ -29,7 +30,7 @@
     CGFloat y = 16;
 
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
-    title.text = @"IL2CPP Dumper";
+    title.text = @"IL2CPP Dumper (Anti-Hidden/Encrypted Lib)";
     title.textColor = [ToolTheme shared].textPrimary;
     title.font = [[ToolTheme shared] monoBoldFont:16];
     [self.view addSubview:title];
@@ -179,10 +180,30 @@
         };
 
         @try {
-            [ws dbg:@"STEP 1: start"];
+            [ws dbg:@"STEP 1: start (Bypass Hidden/Encrypted Lib)"];
 
             IL2CPPResolver *r = [IL2CPPResolver shared];
-            if (!r || ![r resolve]) { fail(@"Loi: IL2CPP not resolved"); return; }
+            if (!r || ![r resolve]) {
+                // Cơ chế dự phòng khi game ẩn hoặc đổi tên lib il2cpp: quét toàn bộ dylib đang load
+                [ws dbg:@"Detecting hidden/encrypted library via brute-force dyld scan..."];
+                uint32_t count = _dyld_image_count();
+                for (uint32_t i = 0; i < count; i++) {
+                    const char *imgName = _dyld_get_image_name(i);
+                    if (imgName) {
+                        void *h = dlopen(imgName, RTLD_LAZY | RTLD_NOLOAD);
+                        if (h) {
+                            if (dlsym(h, "il2cpp_domain_get") || dlsym(h, "_il2cpp_domain_get")) {
+                                [ws dbg:[NSString stringWithFormat:@"Found hidden lib at: %s", imgName]];
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (![r resolve]) {
+                    fail(@"Loi: IL2CPP not resolved (Encrypted/Hidden)");
+                    return;
+                }
+            }
             [ws dbg:@"STEP 2: resolved"];
 
             uint64_t il2cppBase = [r il2cppBase];
