@@ -74,7 +74,7 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.messages) {
         self.messages = [NSMutableArray arrayWithArray:@[
-            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!!"}
+            @{@"role": @"assistant", @"content": @"Chào người anh em tôi là tool do Eri Nguyễn tạo ra"}
         ]];
     }
     [self buildUI];
@@ -150,7 +150,7 @@
         [self.view addSubview:self.bottomBar];
 
         self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 6, w - 84, 38)];
-        self.inputField.placeholder = @"Nhập câu hỏi bạn muốn hỏi vào đây";
+        self.inputField.placeholder = @"Nhập đoạn chat ở đây...";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
         self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -183,17 +183,16 @@
         
         NSString *lower = [userInput lowercaseString];
         
-        // Xử lý giao tiếp / chào hỏi
         BOOL isGreeting = [lower containsString:@"hi"] || [lower containsString:@"hello"] || [lower containsString:@"chào"] || [lower containsString:@"hướng dẫn"] || [lower containsString:@"giúp"];
         if (isGreeting && userInput.length < 15) {
-            NSString *reply = @"Chào người anh em !/n Tôi là tool do Eri Nguyễn tạo ra.";
+            NSString *reply = @"cre : Eri Nguyễn/n Nguyễn Minh Thiện/n Zalo 0896734790";
             [self.messages addObject:@{@"role": @"assistant", @"content": reply}];
             [self.tableView reloadData];
             [self scrollToBottom];
             return;
         }
         
-        [self.messages addObject:@{@"role": @"assistant", @"content": [NSString stringWithFormat:@"[Đang tra cứu mã cho '%@'] Đang lọc bỏ thư viện hệ thống và class ẩn...", userInput]}];
+        [self.messages addObject:@{@"role": @"assistant", @"content": [NSString stringWithFormat:@"[Đang tra cứu mã cho '%@'] Đang lọc bỏ namespace hệ thống và quét code logic game...", userInput]}];
         [self.tableView reloadData];
         [self scrollToBottom];
         
@@ -202,9 +201,9 @@
                 NSMutableArray *targetKeywords = [NSMutableArray array];
                 
                 if ([lower containsString:@"map"] || [lower containsString:@"bản đồ"] || [lower containsString:@"sương"] || [lower containsString:@"mini"] || [lower containsString:@"địch"]) {
-                    [targetKeywords addObjectsFromArray:@[@"minimap", @"map", @"radar", @"fog", @"minimapcontroller", @"visib", @"reveal"]];
+                    [targetKeywords addObjectsFromArray:@[@"minimap", @"minibox", @"mapcontroller", @"mapmanager", @"worldmap", @"battlemap", @"radar", @"fogofwar", @"reveal"]];
                 } else if ([lower containsString:@"camera"] || [lower containsString:@"xa"] || [lower containsString:@"zoom"] || [lower containsString:@"nhìn"]) {
-                    [targetKeywords addObjectsFromArray:@[@"setfieldofview", @"zoom", @"fov", @"camera", @"cameracontroller"]];
+                    [targetKeywords addObjectsFromArray:@[@"setfieldofview", @"zoom", @"fov", @"cameracontroller", @"camera"]];
                 } else if ([lower containsString:@"cao"] || [lower containsString:@"bay"] || [lower containsString:@"fly"] || [lower containsString:@"jump"]) {
                     [targetKeywords addObjectsFromArray:@[@"position", @"jump", @"gravity", @"velocity", @"move", @"playercontroller"]];
                 } else if ([lower containsString:@"tốc độ"] || [lower containsString:@"speed"] || [lower containsString:@"nhanh"]) {
@@ -227,25 +226,33 @@
                         NSArray *lines = [content componentsSeparatedByString:@"\n"];
                         NSString *bestMatchedLine = nil;
                         NSString *bestClassFound = @"UnknownClass";
+                        NSString *currentNamespace = @"";
                         NSString *currentClassFound = @"UnknownClass";
                         
                         for (NSString *line in lines) {
+                            if ([line hasPrefix:@"namespace "]) {
+                                currentNamespace = line;
+                            }
                             if ([line containsString:@"class "] || [line containsString:@"struct "]) {
                                 currentClassFound = line;
                             }
                             
-                            NSString *lowerClass = [currentClassFound lowercaseString];
+                            NSString *lowerNs = [currentNamespace lowercaseString];
+                            NSString *lowerCls = [currentClassFound lowercaseString];
                             
-                            // CHẶN TRIỆT ĐỂ: mscorlib, System, Mono, Unity core và các class ẩn (<>c, __, Module, Anonymous)
-                            if ([lowerClass containsString:@"mscorlib"] || 
-                                [lowerClass containsString:@"system."] || 
-                                [lowerClass containsString:@"mono."] || 
-                                [lowerClass containsString:@"mscompat"] ||
-                                [lowerClass containsString:@"unityengine."] ||
-                                [lowerClass containsString:@"<>c"] ||
-                                [lowerClass containsString:@"<module>"] ||
-                                [lowerClass containsString:@"__"] ||
-                                [lowerClass containsString:@"anonymous"]) {
+                            if ([lowerNs containsString:@"system"] || 
+                                [lowerNs containsString:@"mono"] || 
+                                [lowerNs containsString:@"unityengine"] || 
+                                [lowerNs containsString:@"unityeditor"] ||
+                                [lowerNs containsString:@"interopservices"] ||
+                                [lowerNs containsString:@"runtime"] ||
+                                [lowerNs containsString:@"collections"] ||
+                                [lowerCls containsString:@"normalization"] ||
+                                [lowerCls containsString:@"unicode"] ||
+                                [lowerCls containsString:@"<>c"] ||
+                                [lowerCls containsString:@"<module>"] ||
+                                [lowerCls containsString:@"__"] ||
+                                [lowerCls containsString:@"anonymous"]) {
                                 continue;
                             }
                             
@@ -254,7 +261,7 @@
                                 for (NSString *kw in targetKeywords) {
                                     if ([lowerLine containsString:kw]) {
                                         bestMatchedLine = line;
-                                        bestClassFound = currentClassFound;
+                                        bestClassFound = [NSString stringWithFormat:@"%@ -> %@", currentNamespace, currentClassFound];
                                         break;
                                     }
                                 }
@@ -267,9 +274,9 @@
                             [r resolve];
                             uint64_t base = [r il2cppBase];
                             
-                            finalResult = [NSString stringWithFormat:@"[Tìm thấy mã chuẩn xác cho '%@']\n- Class: %@\n- Method: %@\n- Base Address: 0x%llX", userInput, bestClassFound, bestMatchedLine, base];
+                            finalResult = [NSString stringWithFormat:@"[Tìm thấy mã game chuẩn xác cho '%@']\n- Context: %@\n- Method: %@\n- Base Address: 0x%llX", userInput, bestClassFound, bestMatchedLine, base];
                         } else {
-                            finalResult = [NSString stringWithFormat:@"[Thông báo] Không tìm thấy hàm logic game phù hợp cho '%@' (Đã tự động loại bỏ thư viện hệ thống và class ẩn). Ngài hãy kiểm tra lại tên tính năng nhé!", userInput];
+                            finalResult = [NSString stringWithFormat:@"[Thông báo] Không tìm thấy hàm logic game phù hợp cho '%@'. Ngài hãy kiểm tra lại tính năng nhé!", userInput];
                         }
                     } else {
                         finalResult = @"[Lỗi] File dump.cs trống. Ngài vui lòng sang tab 'Dump' bấm Generate Dump trước!";
