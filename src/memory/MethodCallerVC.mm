@@ -5,7 +5,7 @@
 @interface MethodCallerVC () <UITextFieldDelegate, UIPickerViewDelegate, UIPickerViewDataSource>
 @property (nonatomic, strong) UITextField *classNameField;
 @property (nonatomic, strong) UITextField *methodNameField;
-@property (nonatomic, strong) UITextField *actionTypeField; // Thay nút thành field chọn kiểu True/False/Nop/Ret kèm mũi tên
+@property (nonatomic, strong) UITextField *actionTypeField;
 @property (nonatomic, strong) UIButton *applyButton;
 @property (nonatomic, strong) UITextView *outputView;
 @property (nonatomic, strong) NSArray *actionOptions;
@@ -56,7 +56,6 @@
         [self.view addSubview:self.methodNameField];
         y += 46;
 
-        // Trường chọn kiểu True / False / Nop / Ret kèm icon mũi tên xuống
         self.actionTypeField = [[UITextField alloc] initWithFrame:CGRectMake(16, y, w - 32, 38)];
         self.actionTypeField.text = @"  True (Bật / Trả về 1)";
         self.actionTypeField.backgroundColor = [ToolTheme shared].surface;
@@ -64,7 +63,6 @@
         self.actionTypeField.font = [[ToolTheme shared] monoBoldFont:12];
         self.actionTypeField.layer.cornerRadius = 6;
         
-        // Thêm mũi tên ở bên phải
         UILabel *arrowLbl = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 30, 38)];
         arrowLbl.text = @"▼";
         arrowLbl.textColor = [ToolTheme shared].accent;
@@ -79,7 +77,6 @@
         [self.view addSubview:self.actionTypeField];
         y += 46;
 
-        // Nút thực thi Patch
         self.applyButton = [UIButton buttonWithType:UIButtonTypeSystem];
         self.applyButton.frame = CGRectMake(16, y, w - 32, 42);
         self.applyButton.backgroundColor = [ToolTheme shared].accent;
@@ -115,7 +112,7 @@
     }
 }
 
-#pni mark - UIPickerView DataSource & Delegate
+#pragma mark - UIPickerView DataSource & Delegate
 - (NSInteger)numberOfComponentsInPickerView:(UIPickerView *)pickerView { return 1; }
 - (NSInteger)pickerView:(UIPickerView *)pickerView numberOfRowsInComponent:(NSInteger)section { return self.actionOptions.count; }
 - (NSString *)pickerView:(UIPickerView *)pickerView titleForRow:(NSInteger)row forComponent:(NSInteger)section { return self.actionOptions[row]; }
