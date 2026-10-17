@@ -24,7 +24,6 @@
         CGFloat w = CGRectGetWidth(self.view.bounds);
         CGFloat h = CGRectGetHeight(self.view.bounds);
 
-        // Đưa vào UIScrollView để cuộn xem đầy đủ các tùy chọn ESP
         self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
         self.scrollView.backgroundColor = [UIColor clearColor];
         self.scrollView.showsVerticalScrollIndicator = YES;
@@ -49,7 +48,6 @@
         self.nameDistSwitch = [self addRow:@"Bật/Tắt ESP Tên/Khoảng cách" desc:@"Hiển thị tên và khoảng cách (CM)" y:y on:YES action:nil];
         y += 80;
 
-        // Cập nhật contentSize để cuộn thoải mái
         self.scrollView.contentSize = CGSizeMake(w, y);
     }
 }
@@ -74,7 +72,8 @@
         d.font = [[ToolTheme shared] monoFont:10];
         [row addSubview:d];
 
-        UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(CGRectGetWidth(row.bounds) - 60, 11, 51, 31)];
+        // Fix vị trí X chuẩn xác nằm sát lề phải của row
+        UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(CGRectGetWidth(row.bounds) - 75, 11, 51, 31)];
         sw.onTintColor = [ToolTheme shared].accent;
         sw.on = on;
         if (action) [sw addTarget:self action:action forControlEvents:UIControlEventValueChanged];
