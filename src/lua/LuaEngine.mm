@@ -92,9 +92,9 @@ static int l_create_window(lua_State *L) {
         titleLbl.font = [UIFont boldSystemFontOfSize:13];
         [floatingContainer addSubview:titleLbl];
 
-        // Nút thu nhỏ / đóng menu (X)
+        // Nút thu nhỏ / đóng menu (X) - Đã sửa lỗi ngoặc ở đây
         UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-        closeBtn.frame = CGRectMake(width - 34, 8, 26, 26];
+        closeBtn.frame = CGRectMake(width - 34, 8, 26, 26);
         [closeBtn setTitle:@"✕" forState:UIControlStateNormal];
         [closeBtn setTitleColor:[UIColor redColor] forState:UIControlStateNormal];
         [closeBtn addTarget:[LuaEngine shared] action:@selector(closeFloatingMenu) forControlEvents:UIControlEventTouchUpInside];
@@ -149,11 +149,10 @@ static int l_add_toggle(lua_State *L) {
     
     NSString *toggleName = [NSString stringWithUTF8String:name];
 
-    // Lưu lại hàm callback Lua để gọi khi bật/tắt
     if (!luaCallbacks) luaCallbacks = [NSMutableDictionary dictionary];
     
-    lua_pushvalue(L, 2); // Đẩy hàm callback lên đỉnh stack
-    int ref = luaL_ref(L, LUA_REGISTRYINDEX); // Lưu vào registry
+    lua_pushvalue(L, 2); 
+    int ref = luaL_ref(L, LUA_REGISTRYINDEX); 
     [luaCallbacks setObject:@(ref) forKey:toggleName];
 
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -190,13 +189,11 @@ static int l_add_toggle(lua_State *L) {
 
 // 4. Hiển thị Menu: UI.Show()
 static int l_show_window(lua_State *L) {
-    // Đã hiển thị ngay khi tạo window
     return 0;
 }
 
 // 5. Hàm giả lập gg.setValues để patch RVA
 static int l_gg_set_values(lua_State *L) {
-    // Đọc bảng table truyền vào từ Lua
     if (lua_istable(L, 1)) {
         lua_pushnil(L);
         while (lua_next(L, 1) != 0) {
@@ -209,13 +206,9 @@ static int l_gg_set_values(lua_State *L) {
                 uint32_t val = (uint32_t)lua_tointeger(L, -1);
                 lua_pop(L, 1);
 
-                // Thực hiện ghi đè bộ nhớ tại địa chỉ VA
                 if (addr > 0) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        // Ghi giá trị vào vùng nhớ game
                         uint32_t *targetPtr = (uint32_t *)addr;
-                        // Cấp quyền ghi bộ nhớ nếu cần
-                        // vm_protect...
                         @try {
                             *targetPtr = val;
                             NSLog(@"[LuaPatch] Đã ghi thành công giá trị 0x%X vào địa chỉ 0x%llX", val, addr);
@@ -266,9 +259,9 @@ static int l_gg_toast(lua_State *L) {
     if (!refNum) return;
 
     lua_State *L = self.L;
-    lua_rawgeti(L, LUA_REGISTRYINDEX, refNum.intValue); // Lấy hàm callback từ registry
+    lua_rawgeti(L, LUA_REGISTRYINDEX, refNum.intValue); 
     
-    lua_pushboolean(L, sender.isOn); // Truyền trạng thái true/false vào hàm
+    lua_pushboolean(L, sender.isOn); 
 
     if (lua_pcall(L, 1, 0, 0) != 0) {
         const char *err = lua_tostring(L, -1);
@@ -305,7 +298,6 @@ static int l_gg_toast(lua_State *L) {
     lua_pushinteger(L, 4); lua_setfield(L, -2, "TYPE_DWORD");
     lua_setglobal(L, "gg");
 
-    // Chạy script Lua của ngài
     int status = luaL_dostring(L, script.UTF8String);
 
     NSString *result;
