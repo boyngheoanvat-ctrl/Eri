@@ -118,7 +118,8 @@
     d.font = [[ToolTheme shared] monoFont:10];
     [row addSubview:d];
 
-    UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(CGRectGetWidth(row.bounds) - 60, 11, 51, 31)];
+    // Fix vị trí X chuẩn xác nằm sát lề phải của row
+    UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(CGRectGetWidth(row.bounds) - 75, 11, 51, 31)];
     sw.onTintColor = [ToolTheme shared].accent;
     sw.on = YES;
     [row addSubview:sw];
@@ -184,7 +185,6 @@
 
             IL2CPPResolver *r = [IL2CPPResolver shared];
             if (!r || ![r resolve]) {
-                // Cơ chế dự phòng khi game ẩn hoặc đổi tên lib il2cpp: quét toàn bộ dylib đang load
                 [ws dbg:@"Detecting hidden/encrypted library via brute-force dyld scan..."];
                 uint32_t count = _dyld_image_count();
                 for (uint32_t i = 0; i < count; i++) {
@@ -432,7 +432,6 @@
                                                 [params appendFormat:@"%@ %@", pType, pName];
                                             }
 
-                                            // Định dạng chuẩn Ghidra RVA yêu cầu
                                             [csContent appendFormat:@"    %@%@ %@(%@); // RVA: 0x%llX Offset: 0x%llX VA: 0x%llX Token: 0x%X\n",
                                              mod, retType, methodName, params, rva, rva, va, token];
 
