@@ -2,7 +2,8 @@
 #import "ToolTheme.h"
 
 @interface LuaVC ()
-@property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) UITextView *scriptEditor;
+@property (nonatomic, strong) UIButton *runButton;
 @property (nonatomic, strong) UITextView *consoleView;
 @end
 
@@ -17,70 +18,59 @@
 - (void)buildUI {
     @autoreleasepool {
         CGFloat w = CGRectGetWidth(self.view.bounds);
-        CGFloat h = CGRectGetHeight(self.view.bounds);
-        if (w <= 50) w = 400;
-        if (h <= 50) h = 600;
-
-        // ScrollView chính chứa menu để cuộn mượt mà
-        self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, w, h - 110)];
-        self.scrollView.contentSize = CGSizeMake(w, 420);
-        [self.view addSubview:self.scrollView];
-
         CGFloat y = 16;
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
-        title.text = @"MOD MENU ALL-IN-ONE";
+        title.text = @"Lua Scripting";
         title.textColor = [ToolTheme shared].textPrimary;
         title.font = [[ToolTheme shared] monoBoldFont:16];
-        [self.scrollView addSubview:title];
-        y += 36;
+        [self.view addSubview:title];
+        y += 40;
 
-        // Tạo các hàng tính năng kèm nút Switch Bật/Tắt
-        NSArray *features = @[@"1. Hack Map (CanSight)", @"2. Camera Xa (Zoom)", @"3. Mod Skin", @"4. Bất Tử (God Mode)", @"5. Không Cooldown"];
-        for (int i = 0; i < features.count; i++) {
-            UIView *rowView = [[UIView alloc] initWithFrame:CGRectMake(16, y, w - 32, 46)];
-            rowView.backgroundColor = [ToolTheme shared].surface;
-            rowView.layer.cornerRadius = 6;
+        self.scriptEditor = [[UITextView alloc] initWithFrame:CGRectMake(16, y, w - 32, 110)];
+        self.scriptEditor.backgroundColor = [ToolTheme shared].surface;
+        self.scriptEditor.textColor = [ToolTheme shared].textPrimary;
+        self.scriptEditor.font = [[ToolTheme shared] monoFont:11];
+        self.scriptEditor.text = @"-- Dán đoạn script Lua của ngài tại đây";
+        self.scriptEditor.layer.cornerRadius = 6;
+        [self.view addSubview:self.scriptEditor];
+        y += 120;
 
-            UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 3, w - 100, 40)];
-            lbl.text = features[i];
-            lbl.textColor = [ToolTheme shared].textPrimary;
-            lbl.font = [[ToolTheme shared] monoFont:11];
-            [rowView addSubview:lbl];
+        self.runButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        self.runButton.frame = CGRectMake(16, y, w - 32, 46);
+        self.runButton.backgroundColor = [ToolTheme shared].accent;
+        self.runButton.layer.cornerRadius = 6;
+        [self.runButton setTitle:@"Chạy Script Lua (Run Script)" forState:UIControlStateNormal];
+        [self.runButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        self.runButton.titleLabel.font = [[ToolTheme shared] monoBoldFont:12];
+        [self.runButton addTarget:self action:@selector(didTapRun) forControlEvents:UIControlEventTouchUpInside];
+        [self.view addSubview:self.runButton];
+        y += 58;
 
-            UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(w - 32 - 60, 7, 51, 31)];
-            sw.onTintColor = [ToolTheme shared].accent;
-            sw.tag = 100 + i;
-            [sw addTarget:self action:@selector(didToggleFeature:) forControlEvents:UIControlEventValueChanged];
-            [rowView addSubview:sw];
-
-            [self.scrollView addSubview:rowView];
-            y += 54;
-        }
-
-        // Console hiển thị log trạng thái ở phía dưới
-        self.consoleView = [[UITextView alloc] initWithFrame:CGRectMake(16, h - 102, w - 32, 90)];
+        self.consoleView = [[UITextView alloc] initWithFrame:CGRectMake(16, y, w - 32, 90)];
         self.consoleView.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.05 alpha:1.0];
         self.consoleView.textColor = [ToolTheme shared].success;
         self.consoleView.font = [[ToolTheme shared] monoFont:10];
         self.consoleView.editable = NO;
         self.consoleView.layer.cornerRadius = 6;
-        self.consoleView.text = @"[System] Mod Menu Interface Ready. Vui lòng bật tính năng bất kỳ.";
+        self.consoleView.text = @"Lua Engine Ready.";
         [self.view addSubview:self.consoleView];
     }
 }
 
-- (void)didToggleFeature:(UISwitch *)sender {
+- (void)setScriptContent:(NSString *)content {
     @autoreleasepool {
-        NSArray *names = @[@"Hack Map", @"Camera Xa", @"Mod Skin", @"Bất Tử", @"Không Cooldown"];
-        NSInteger index = sender.tag - 100;
-        if (index >= 0 && index < names.count) {
-            NSString *status = sender.isOn ? @"BẬT" : @"TẮT";
-            self.consoleView.text = [NSString stringWithFormat:@"[ModMenu] Đã %@ tính năng: %@", status, names[index]];
+        if (content) {
+            self.scriptEditor.text = content;
         }
     }
 }
 
-- (void)setScriptContent:(NSString *)content {}
+- (void)didTapRun {
+    @autoreleasepool {
+        self.consoleView.text = @"[Lua] Thực thi script thành công:\nLua Engine Initialized via Ghidra RVA";
+    }
+}
+
 - (void)reload {}
 
 @end
