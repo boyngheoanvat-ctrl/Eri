@@ -1,5 +1,6 @@
 #import "LuaVC.h"
 #import "ToolTheme.h"
+#import "LuaEngine.h"
 
 @interface LuaVC ()
 @property (nonatomic, strong) UITextView *scriptEditor;
@@ -20,7 +21,7 @@
         CGFloat w = CGRectGetWidth(self.view.bounds);
         CGFloat y = 16;
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(16, y, w - 32, 28)];
-        title.text = @"Lua Scripting";
+        title.text = @"Lua Scripting Engine";
         title.textColor = [ToolTheme shared].textPrimary;
         title.font = [[ToolTheme shared] monoBoldFont:16];
         [self.view addSubview:title];
@@ -30,7 +31,7 @@
         self.scriptEditor.backgroundColor = [ToolTheme shared].surface;
         self.scriptEditor.textColor = [ToolTheme shared].textPrimary;
         self.scriptEditor.font = [[ToolTheme shared] monoFont:11];
-        self.scriptEditor.text = @"-- Dán đoạn script Lua của ngài tại đây";
+        self.scriptEditor.text = @"-- Dán đoạn script Lua tạo menu nổi tại đây";
         self.scriptEditor.layer.cornerRadius = 6;
         [self.view addSubview:self.scriptEditor];
         y += 120;
@@ -67,7 +68,15 @@
 
 - (void)didTapRun {
     @autoreleasepool {
-        self.consoleView.text = @"[Lua] Thực thi script thành công:\nLua Engine Initialized via Ghidra RVA";
+        NSString *script = self.scriptEditor.text;
+        if (script.length == 0) {
+            self.consoleView.text = @"[Lỗi] Script Lua đang trống!";
+            return;
+        }
+        
+        // Gọi trực tiếp qua LuaEngine để phân tích và vẽ bảng menu nổi lên màn hình
+        NSString *result = [[LuaEngine shared] runScript:script];
+        self.consoleView.text = result;
     }
 }
 
