@@ -1,11 +1,8 @@
 #import "ToolWindow.h"
 #import "ToolViewController.h"
 
-@interface ToolWindow () <UIGestureRecognizerDelegate>
+@interface ToolWindow ()
 @property (nonatomic, strong) ToolViewController *toolVC;
-@property (nonatomic, strong) UIView *resizeHandle;
-@property (nonatomic, assign) CGRect startFrame;
-@property (nonatomic, assign) CGPoint panStartCenter;
 @end
 
 @implementation ToolWindow
@@ -15,12 +12,6 @@
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         CGRect screen = [UIScreen mainScreen].bounds;
-        CGFloat initW = 480;
-        CGFloat initH = 300;
-        // Đặt vị trí xuất hiện ban đầu ở giữa màn hình (hoặc bất kỳ đâu tuỳ ý)
-        CGFloat initX = (CGRectGetWidth(screen) - initW) / 2.0;
-        CGFloat initY = (CGRectGetHeight(screen) - initH) / 2.0;
-        CGRect initialRect = CGRectMake(initX, initY, initW, initH);
 
         @try {
             if (@available(iOS 13.0, *)) {
@@ -32,112 +23,74 @@
                         break;
                     }
                 }
+
+                // Fallback: lấy bất kỳ UIWindowScene nào
                 if (!scene) {
                     for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
                         if ([s isKindOfClass:[UIWindowScene class]]) {
-                            scene = (UIScene *)s;
+                            scene = (UIWindowScene *)s;
                             break;
                         }
                     }
                 }
+
                 if (scene) {
                     instance = [[ToolWindow alloc] initWithWindowScene:scene];
                 } else {
-                    instance = [[ToolWindow alloc] initWithFrame:initialRect];
+                    instance = [[ToolWindow alloc] initWithFrame:screen];
                 }
             } else {
-                instance = [[ToolWindow alloc] initWithFrame:initialRect];
+                instance = [[ToolWindow alloc] initWithFrame:screen];
             }
         } @catch (NSException *e) {
+            NSLog(@"[ToolWindow] init scene crash: %@", e);
             instance = nil;
         }
 
+        // Fallback tuyệt đối
         if (!instance) {
-            instance = [[ToolWindow alloc] initWithFrame:initialRect];
+            instance = [[ToolWindow alloc] initWithFrame:screen];
         }
 
-        instance.frame = initialRect;
+        instance.frame = screen;
         instance.windowLevel = UIWindowLevelAlert + 100;
         instance.backgroundColor = [UIColor clearColor];
         instance.hidden = YES;
+        // KHÔNG tạo ToolViewController ở đây — lazy create trong show
+
+        NSLog(@"[ToolWindow] Created (no VC)");
     });
     return instance;
 }
 
 - (void)show {
+    // Lazy create VC lần đầu show — lúc này game đã init xong
     if (!self.toolVC) {
         @try {
             self.toolVC = [[ToolViewController alloc] init];
             self.rootViewController = self.toolVC;
-            
-            // 1. Thêm gesture kéo di chuyển toàn bộ menu (Drag Gesture cho cả view controller)
-            UIPanGestureRecognizer *movePan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleMovePan:)];
-            [self.toolVC.view addGestureRecognizer:movePan];
-            
-            // 2. Nút kéo phóng to/thu nhỏ ở góc phải dưới
-            CGFloat handleSize = 24;
-            self.resizeHandle = [[UIView alloc] initWithFrame:CGRectMake(CGRectGetWidth(self.bounds) - handleSize - 4,
-                                                                         CGRectGetHeight(self.bounds) - handleSize - 4,
-                                                                         handleSize, handleSize)];
-            self.resizeHandle.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.4 alpha:0.9];
-            self.resizeHandle.layer.cornerRadius = 4;
-            self.resizeHandle.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin;
-            
-            UIPanGestureRecognizer *resizePan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleResizePan:)];
-            [self.resizeHandle addGestureRecognizer:resizePan];
-            
-            [self.toolVC.view addSubview:self.resizeHandle];
-            [self.toolVC.view bringSubviewToFront:self.resizeHandle];
+            NSLog(@"[ToolWindow] VC created lazily");
         } @catch (NSException *e) {
+            NSLog(@"[ToolWindow] VC create crash: %@", e);
             return;
         }
-    } 
+    }
 
     self.hidden = NO;
     [self makeKeyAndVisible];
 
     @try {
         [self.toolVC reload];
-    } @catch (NSException *e) {}
-}
+    } @catch (NSException *e) {
+        NSLog(@"[ToolWindow] reload crash: %@", e);
+    }
 
-// Xử lý kéo di chuyển menu đi bất cứ đâu trên màn hình
-- (void)handleMovePan:(UIPanGestureRecognizer * _Nonnull)pan {
-    // Tránh xung đột khi người dùng đang kéo nút resize ở góc phải dưới
-    CGPoint loc = [pan locationInView:self.toolVC.view];
-    if (loc.x > CGRectGetWidth(self.bounds) - 45 && loc.y > CGRectGetHeight(self.bounds) - 45) {
-        return;
-    }
-    
-    if (pan.state == UIGestureRecognizerStateBegan) {
-        self.panStartCenter = self.center;
-    } else if (pan.state == UIGestureRecognizerStateChanged || pan.state == UIGestureRecognizerStateEnded) {
-        CGPoint translation = [pan translationInView:self.superview];
-        self.center = CGPointMake(self.panStartCenter.x + translation.x, self.panStartCenter.y + translation.y);
-    }
-}
-
-// Xử lý kéo thay đổi kích thước mượt mà không bị nhảy
-- (void)handleResizePan:(UIPanGestureRecognizer * _Nonnull)pan {
-    if (pan.state == UIGestureRecognizerStateBegan) {
-        self.startFrame = self.frame;
-    } else if (pan.state == UIGestureRecognizerStateChanged || pan.state == UIGestureRecognizerStateEnded) {
-        CGPoint translation = [pan translationInView:self];
-        CGRect newFrame = self.startFrame;
-        
-        newFrame.size.width = MAX(320, newFrame.size.width + translation.x);
-        newFrame.size.height = MAX(200, newFrame.size.height + translation.y);
-        
-        self.frame = newFrame;
-        
-        if (self.rootViewController) {
-            self.rootViewController.view.frame = self.bounds;
-        }
-    }
+    NSLog(@"[ToolWindow] SHOWN");
 }
 
 - (void)hide {
     self.hidden = YES;
+    NSLog(@"[ToolWindow] HIDDEN");
 }
 
 - (void)toggle {
@@ -145,6 +98,7 @@
     else [self hide];
 }
 
+// Cho phép touch xuyên qua khi panel ẩn
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     if (self.hidden) return nil;
     return [super hitTest:point withEvent:event];
