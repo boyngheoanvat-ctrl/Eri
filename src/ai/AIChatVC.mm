@@ -3,7 +3,6 @@
 #import "AITool.h"
 #import "ToolTheme.h"
 #import "IL2CPPResolver.h"
-#import "AIESPTool.h"
 
 @interface AIChatCell : UITableViewCell
 @property (nonatomic, strong) UILabel *contentLbl;
@@ -65,6 +64,7 @@
 @property (nonatomic, strong) UIButton *sendButton;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *messages;
 @property (nonatomic, assign) BOOL isWaitingResponse;
+@property (nonatomic, assign) CGFloat keyboardHeight;
 @end
 
 @implementation AIChatVC
@@ -78,27 +78,64 @@
         ]];
     }
     [self buildUI];
+    
+    // Đăng ký nhận thông báo bàn phím xuất hiện/ẩn để tự động đẩy khung chat lên
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    // Đảm bảo layout co giãn chuẩn xác theo kích thước cửa sổ khi kéo resize
+    [self updateLayoutWithKeyboardHeight:self.keyboardHeight];
+}
+
+- (void)updateLayoutWithKeyboardHeight:(CGFloat)kbHeight {
     CGFloat w = CGRectGetWidth(self.view.bounds);
     CGFloat h = CGRectGetHeight(self.view.bounds);
-    CGFloat bottomH = 50;
+    if (w <= 50) w = 400;
+    if (h <= 50) h = 300;
     
-    self.bottomBar.frame = CGRectMake(0, h - bottomH, w, bottomH);
-    self.tableView.frame = CGRectMake(0, 0, w, h - bottomH);
+    CGFloat bottomH = 50;
+    // Trừ đi chiều cao bàn phím nếu bàn phím đang hiển thị
+    CGFloat usableHeight = h - kbHeight;
+    
+    self.bottomBar.frame = CGRectMake(0, usableHeight - bottomH, w, bottomH);
+    self.tableView.frame = CGRectMake(0, 0, w, usableHeight - bottomH);
     
     self.inputField.frame = CGRectMake(12, 6, w - 84, 38);
     self.sendButton.frame = CGRectMake(w - 68, 6, 56, 38);
+}
+
+- (void)keyboardWillShow:(NSNotification *)notification {
+    NSDictionary *info = [notification userInfo];
+    CGRect kbRect = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    // Chuyển đổi khung bàn phím sang tọa độ của view
+    CGRect convertedKeyboardRect = [self.view convertRect:kbRect fromView:nil];
+    self.keyboardHeight = CGRectGetHeight(self.view.bounds) - CGRectGetMinY(convertedKeyboardRect);
+    if (self.keyboardHeight < 0) self.keyboardHeight = 250; // Giá trị fallback an toàn
+    
+    [UIView animateWithDuration:0.25 animations:^{
+        [self updateLayoutWithKeyboardHeight:self.keyboardHeight];
+        [self scrollToBottom];
+    }];
+}
+
+- (void)keyboardWillHide:(NSNotification *)notification {
+    self.keyboardHeight = 0;
+    [UIView animateWithDuration:0.25 animations:^{
+        [self updateLayoutWithKeyboardHeight:0];
+    }];
 }
 
 - (void)buildUI {
     @autoreleasepool {
         CGFloat w = CGRectGetWidth(self.view.bounds);
         CGFloat h = CGRectGetHeight(self.view.bounds);
-        if (w <= 50) w = 450;
+        if (w <= 50) w = 400;
         if (h <= 50) h = 300;
 
         CGFloat bottomH = 50;
@@ -112,6 +149,7 @@
 
         self.bottomBar = [[UIView alloc] initWithFrame:CGRectMake(0, h - bottomH, w, bottomH)];
         self.bottomBar.backgroundColor = [ToolTheme shared].surface;
+        self.bottomBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
         [self.view addSubview:self.bottomBar];
 
         self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 6, w - 84, 38)];
@@ -146,7 +184,6 @@
         
         [self.messages addObject:@{@"role": @"user", @"content": text}];
         
-        // Kiểm tra nếu ngài hỏi về hack map hoặc ESP, tự động gọi công cụ RVA thay vì để AI từ chối
         NSString *lowerText = [text lowercaseString];
         if ([lowerText containsString:@"hack map"] || [lowerText containsString:@"map"] || [lowerText containsString:@"esp"]) {
             [self.messages addObject:@{@"role": @"assistant", @"content": @"[Ghidra RVA Scanner] Đang quét các class Minimap, CameraGame và vị trí mục tiêu..."}];
