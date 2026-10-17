@@ -74,7 +74,7 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.messages) {
         self.messages = [NSMutableArray arrayWithArray:@[
-            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!! Trợ lý AI & RVA Scanner đã sẵn sàng. Ngài cần trao đổi hay tìm mã chức năng gì cứ nói nhé."}
+            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!! Đã nâng cấp bộ lọc chống class ẩn (<>c). Trợ lý đã sẵn sàng."}
         ]];
     }
     [self buildUI];
@@ -150,7 +150,7 @@
         [self.view addSubview:self.bottomBar];
 
         self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 6, w - 84, 38)];
-        self.inputField.placeholder = @"Nhập lời chào hoặc chức năng game cần tìm...";
+        self.inputField.placeholder = @"Nhập câu hỏi bạn muốn hỏi vào đây";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
         self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -183,18 +183,17 @@
         
         NSString *lower = [userInput lowercaseString];
         
-        // 1. XỬ LÝ GIAO TẾP / CHÀO HỎI
+        // Xử lý giao tiếp / chào hỏi
         BOOL isGreeting = [lower containsString:@"hi"] || [lower containsString:@"hello"] || [lower containsString:@"chào"] || [lower containsString:@"hướng dẫn"] || [lower containsString:@"giúp"];
         if (isGreeting && userInput.length < 15) {
-            NSString *reply = @"Chào người anh em! ToolKit đã sẵn sàng hỗ trợ ngài. Ngài muốn tìm hàm chức năng gì trong game cứ ra lệnh nhé!";
+            NSString *reply = @"Chào người anh em !/n Tôi là tool do Eri Nguyễn tạo ra.";
             [self.messages addObject:@{@"role": @"assistant", @"content": reply}];
             [self.tableView reloadData];
             [self scrollToBottom];
             return;
         }
         
-        // 2. XỬ LÝ TÌM MÃ / CHỨC NĂNG GAME
-        [self.messages addObject:@{@"role": @"assistant", @"content": [NSString stringWithFormat:@"[Đang tra cứu mã cho '%@'] Đang lọc bỏ thư viện hệ thống và quét file dump.cs thực tế...", userInput]}];
+        [self.messages addObject:@{@"role": @"assistant", @"content": [NSString stringWithFormat:@"[Đang tra cứu mã cho '%@'] Đang lọc bỏ thư viện hệ thống và class ẩn...", userInput]}];
         [self.tableView reloadData];
         [self scrollToBottom];
         
@@ -235,13 +234,18 @@
                                 currentClassFound = line;
                             }
                             
-                            // TUYỆT ĐỐI LOẠI BỎ mscorlib, System, Mono, UnityEngine.CoreModule[span_1](start_span)[span_1](end_span)
                             NSString *lowerClass = [currentClassFound lowercaseString];
+                            
+                            // CHẶN TRIỆT ĐỂ: mscorlib, System, Mono, Unity core và các class ẩn (<>c, __, Module, Anonymous)
                             if ([lowerClass containsString:@"mscorlib"] || 
                                 [lowerClass containsString:@"system."] || 
                                 [lowerClass containsString:@"mono."] || 
                                 [lowerClass containsString:@"mscompat"] ||
-                                [lowerClass containsString:@"unityengine.coremodule"]) {
+                                [lowerClass containsString:@"unityengine."] ||
+                                [lowerClass containsString:@"<>c"] ||
+                                [lowerClass containsString:@"<module>"] ||
+                                [lowerClass containsString:@"__"] ||
+                                [lowerClass containsString:@"anonymous"]) {
                                 continue;
                             }
                             
@@ -265,7 +269,7 @@
                             
                             finalResult = [NSString stringWithFormat:@"[Tìm thấy mã chuẩn xác cho '%@']\n- Class: %@\n- Method: %@\n- Base Address: 0x%llX", userInput, bestClassFound, bestMatchedLine, base];
                         } else {
-                            finalResult = [NSString stringWithFormat:@"[Thông báo] Không tìm thấy hàm logic game phù hợp cho '%@' (Đã tự động loại bỏ các thư viện mscorlib, System, Mono, UnityEngine.CoreModule)[span_2](start_span)[span_2](end_span). Ngài hãy kiểm tra lại tên tính năng nhé!", userInput];
+                            finalResult = [NSString stringWithFormat:@"[Thông báo] Không tìm thấy hàm logic game phù hợp cho '%@' (Đã tự động loại bỏ thư viện hệ thống và class ẩn). Ngài hãy kiểm tra lại tên tính năng nhé!", userInput];
                         }
                     } else {
                         finalResult = @"[Lỗi] File dump.cs trống. Ngài vui lòng sang tab 'Dump' bấm Generate Dump trước!";
