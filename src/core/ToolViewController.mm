@@ -1,387 +1,137 @@
 #import "ToolViewController.h"
-#import "ToolWindow.h"
 #import "ToolTheme.h"
-#import "ToolRailButton.h"
-#import "AIChatVC.h"
+#import "ESPVC.h"
 #import "DumperVC.h"
 #import "MemoryVC.h"
 #import "MethodCallerVC.h"
 #import "LuaVC.h"
-#import "ESPVC.h"
-#import "ESPOverlay.h"
+#import "AIChatVC.h"
+#import "CHookVC.h"
 
-@interface ToolViewController () <UIGestureRecognizerDelegate>
-@property (nonatomic, strong) UIView *backdrop;
-@property (nonatomic, strong) UIView *panel;
-@property (nonatomic, strong) UIView *titleBar;
-@property (nonatomic, strong) UILabel *titleLabel;
-@property (nonatomic, strong) UILabel *subtitleLabel;
-@property (nonatomic, strong) UIButton *closeButton;
-@property (nonatomic, strong) UIView *railView;
-@property (nonatomic, strong) UIStackView *railStack;
+@interface ToolViewController ()
+@property (nonatomic, strong) UIView *sidebarView;
 @property (nonatomic, strong) UIView *contentView;
-@property (nonatomic, strong) UIView *resizeHandle;
-
-@property (nonatomic, strong) ToolRailButton *aiButton;
-@property (nonatomic, strong) ToolRailButton *dumpButton;
-@property (nonatomic, strong) ToolRailButton *memoryButton;
-@property (nonatomic, strong) ToolRailButton *methodButton;
-@property (nonatomic, strong) ToolRailButton *luaButton;
-@property (nonatomic, strong) ToolRailButton *espButton;
-
-@property (nonatomic, strong) AIChatVC *aiVC;
-@property (nonatomic, strong) DumperVC *dumpVC;
-@property (nonatomic, strong) MemoryVC *memoryVC;
-@property (nonatomic, strong) MethodCallerVC *methodVC;
-@property (nonatomic, strong) LuaVC *luaVC;
-@property (nonatomic, strong) ESPVC *espVC;
-@property (nonatomic, strong) UIViewController *currentVC;
-@property (nonatomic, assign) NSInteger currentTab;
-
-@property (nonatomic, assign) CGSize dragStartSize;
-@property (nonatomic, assign) CGPoint dragStartPoint;
-@property (nonatomic, assign) BOOL isResizing;
+@property (nonatomic, strong) NSArray *controllers;
+@property (nonatomic, strong) NSArray *buttons;
+@property (nonatomic, assign) NSInteger currentIndex;
 @end
 
 @implementation ToolViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    NSLog(@"[ToolVC] viewDidLoad START");
+    self.view.backgroundColor = [ToolTheme shared].background;
+    self.view.layer.cornerRadius = 10;
+    self.view.layer.masksToBounds = YES;
 
-    self.view.frame = [UIScreen mainScreen].bounds;
-    self.view.backgroundColor = [UIColor clearColor];
+    // Khởi tạo các View Controller cho từng tab chức năng
+    self.controllers = @[
+        [[ESPVC alloc] init],
+        [[DumperVC alloc] init],
+        [[MemoryVC alloc] init],
+        [[MethodCallerVC alloc] init],
+        [[LuaVC alloc] init],
+        [[AIChatVC alloc] init],
+        [[CHookVC alloc] init]
+    ];
 
     [self buildUI];
-    NSLog(@"[ToolVC] after buildUI");
-
-    [self selectTab:0];
-    NSLog(@"[ToolVC] after selectTab:0");
-
-    NSLog(@"[ToolVC] viewDidLoad DONE");
+    [self switchTab:0];
 }
 
 - (void)buildUI {
-    CGRect screen = self.view.bounds;
-    if (CGRectIsEmpty(screen)) {
-        screen = [UIScreen mainScreen].bounds;
+    @autoreleasepool {
+        CGFloat w = CGRectGetWidth(self.view.bounds);
+        CGFloat h = CGRectGetHeight(self.view.bounds);
+
+        // Thanh Header phía trên
+        UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 40)];
+        header.backgroundColor = [ToolTheme shared].surface;
+        header.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        [self.view addSubview:header];
+
+        UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(12, 0, 200, 40)];
+        title.text = @"ToolKit - AI Agent";
+        title.textColor = [ToolTheme shared].textPrimary;
+        title.font = [[ToolTheme shared] monoBoldFont:13];
+        [header addSubview:title];
+
+        // Sidebar bên trái chứa các nút tab (Đã fix hoàn toàn lỗi font chữ)
+        CGFloat sidebarW = 75;
+        self.sidebarView = [[UIView alloc] initWithFrame:CGRectMake(0, 40, sidebarW, h - 40)];
+        self.sidebarView.backgroundColor = [ToolTheme shared].surfaceAlt;
+        self.sidebarView.autoresizingMask = UIViewAutoresizingFlexibleHeight;
+        [self.view addSubview:self.sidebarView];
+
+        NSArray *titles = @[@"ESP", @"Dump", @"Mem", @"Call", @"Lua", @"AI", @"C++"];
+        NSMutableArray *btnArray = [NSMutableArray array];
+        CGFloat btnH = 50;
+
+        for (NSInteger i = 0; i < titles.count; i++) {
+            UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+            btn.frame = CGRectMake(0, i * btnH, sidebarW, btnH);
+            [btn setTitle:titles[i] forState:UIControlStateNormal];
+            [btn setTitleColor:[ToolTheme shared].textPrimary forState:UIControlStateNormal];
+            btn.titleLabel.font = [[ToolTheme shared] monoBoldFont:12];
+            btn.tag = i;
+            [btn addTarget:self action:@selector(didTapTab:) forControlEvents:UIControlEventTouchUpInside];
+            [self.sidebarView addSubview:btn];
+            [btnArray addObject:btn];
+        }
+        self.buttons = btnArray;
+
+        // Vùng chứa nội dung chính của tab
+        self.contentView = [[UIView alloc] initWithFrame:CGRectMake(sidebarW, 40, w - sidebarW, h - 40)];
+        self.contentView.backgroundColor = [ToolTheme shared].background;
+        self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [self.view addSubview:self.contentView];
     }
-
-    self.backdrop = [[UIView alloc] initWithFrame:screen];
-    self.backdrop.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.5];
-    self.backdrop.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    UITapGestureRecognizer *bgTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(closeTapped)];
-    [self.backdrop addGestureRecognizer:bgTap];
-    [self.view addSubview:self.backdrop];
-
-    CGFloat panelW = MIN(screen.size.width - 40, 600);
-    CGFloat panelH = MIN(screen.size.height - 120, 500);
-    CGFloat panelX = (screen.size.width - panelW) / 2.0;
-    CGFloat panelY = (screen.size.height - panelH) / 2.0;
-
-    self.panel = [[UIView alloc] initWithFrame:CGRectMake(panelX, panelY, panelW, panelH)];
-    self.panel.backgroundColor = [ToolTheme shared].background;
-    self.panel.layer.cornerRadius = 12;
-    self.panel.layer.borderWidth = 1;
-    self.panel.layer.borderColor = [ToolTheme shared].border.CGColor;
-    self.panel.layer.masksToBounds = YES;
-    self.panel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin |
-                                   UIViewAutoresizingFlexibleRightMargin |
-                                   UIViewAutoresizingFlexibleTopMargin |
-                                   UIViewAutoresizingFlexibleBottomMargin;
-    [self.view addSubview:self.panel];
-
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
-    pan.delegate = self;
-    pan.cancelsTouchesInView = NO;
-    [self.panel addGestureRecognizer:pan];
-
-    self.titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, panelW, 36)];
-    self.titleBar.backgroundColor = [ToolTheme shared].surfaceAlt;
-    self.titleBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.panel addSubview:self.titleBar];
-
-    UIView *titleLine = [[UIView alloc] initWithFrame:CGRectMake(0, 35, panelW, 1)];
-    titleLine.backgroundColor = [ToolTheme shared].divider;
-    titleLine.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.titleBar addSubview:titleLine];
-
-    self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(12, 0, 80, 36)];
-    self.titleLabel.text = @"ToolKit";
-    self.titleLabel.textColor = [ToolTheme shared].textPrimary;
-    self.titleLabel.font = [[ToolTheme shared] monoBoldFont:13];
-    [self.titleBar addSubview:self.titleLabel];
-
-    self.subtitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(100, 0, panelW - 160, 36)];
-    self.subtitleLabel.text = @"";
-    self.subtitleLabel.textColor = [ToolTheme shared].textMuted;
-    self.subtitleLabel.font = [[ToolTheme shared] monoFont:10];
-    self.subtitleLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self.titleBar addSubview:self.subtitleLabel];
-
-    self.closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.closeButton.frame = CGRectMake(panelW - 36, 4, 28, 28);
-    self.closeButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
-    [self.closeButton setTitle:@"â" forState:UIControlStateNormal];
-    [self.closeButton setTitleColor:[ToolTheme shared].textPrimary forState:UIControlStateNormal];
-    self.closeButton.backgroundColor = [ToolTheme shared].mutedFill;
-    self.closeButton.layer.cornerRadius = 5;
-    self.closeButton.titleLabel.font = [UIFont boldSystemFontOfSize:12];
-    [self.closeButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.titleBar addSubview:self.closeButton];
-
-    CGFloat railW = 60;
-    CGFloat railH = panelH - 36;
-    self.railView = [[UIView alloc] initWithFrame:CGRectMake(0, 36, railW, railH)];
-    self.railView.backgroundColor = [ToolTheme shared].surface;
-    self.railView.autoresizingMask = UIViewAutoresizingFlexibleHeight;
-    [self.panel addSubview:self.railView];
-
-    UIView *railDivider = [[UIView alloc] initWithFrame:CGRectMake(railW - 1, 0, 1, railH)];
-    railDivider.backgroundColor = [ToolTheme shared].divider;
-    railDivider.autoresizingMask = UIViewAutoresizingFlexibleHeight;
-    [self.railView addSubview:railDivider];
-
-    CGFloat btnH = 46;
-    CGFloat spacing = 4;
-    CGFloat totalH = (btnH * 6) + (spacing * 5);
-    self.railStack = [[UIStackView alloc] initWithFrame:CGRectMake(0, 8, railW, totalH)];
-    self.railStack.axis = UILayoutConstraintAxisVertical;
-    self.railStack.spacing = spacing;
-    self.railStack.distribution = UIStackViewDistributionFillEqually;
-    self.railStack.alignment = UIStackViewAlignmentFill;
-    [self.railView addSubview:self.railStack];
-
-    self.aiButton = [self makeRailButton:@"AI" symbol:@"AI" tag:0];
-    [self.railStack addArrangedSubview:self.aiButton];
-    self.dumpButton = [self makeRailButton:@"Dump" symbol:@"â¼" tag:1];
-    [self.railStack addArrangedSubview:self.dumpButton];
-    self.memoryButton = [self makeRailButton:@"Mem" symbol:@"â¡" tag:2];
-    [self.railStack addArrangedSubview:self.memoryButton];
-    self.methodButton = [self makeRailButton:@"Call" symbol:@"â¶" tag:3];
-    [self.railStack addArrangedSubview:self.methodButton];
-    self.luaButton = [self makeRailButton:@"Lua" symbol:@"Î¼" tag:4];
-    [self.railStack addArrangedSubview:self.luaButton];
-    self.espButton = [self makeRailButton:@"ESP" symbol:@"â" tag:5];
-    [self.railStack addArrangedSubview:self.espButton];
-
-    self.contentView = [[UIView alloc] initWithFrame:CGRectMake(railW, 36, panelW - railW, panelH - 36)];
-    self.contentView.backgroundColor = [ToolTheme shared].background;
-    self.contentView.clipsToBounds = YES;
-    self.contentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.panel addSubview:self.contentView];
-
-    CGFloat handleSize = 28;
-    self.resizeHandle = [[UIView alloc] initWithFrame:
-        CGRectMake(panelW - handleSize, panelH - handleSize, handleSize, handleSize)];
-    self.resizeHandle.backgroundColor = [UIColor colorWithRed:0.30 green:0.70 blue:1.0 alpha:0.5];
-    self.resizeHandle.layer.cornerRadius = handleSize / 2.0;
-    self.resizeHandle.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin |
-                                          UIViewAutoresizingFlexibleTopMargin;
-    self.resizeHandle.userInteractionEnabled = YES;
-    [self.panel addSubview:self.resizeHandle];
-
-    UILabel *dotsLabel = [[UILabel alloc] initWithFrame:self.resizeHandle.bounds];
-    dotsLabel.text = @"â°";
-    dotsLabel.textColor = [UIColor whiteColor];
-    dotsLabel.font = [UIFont boldSystemFontOfSize:18];
-    dotsLabel.textAlignment = NSTextAlignmentCenter;
-    [self.resizeHandle addSubview:dotsLabel];
-
-    UIPanGestureRecognizer *resizePan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleResize:)];
-    [self.resizeHandle addGestureRecognizer:resizePan];
 }
 
-- (ToolRailButton *)makeRailButton:(NSString *)title symbol:(NSString *)symbol tag:(NSInteger)tag {
-    ToolRailButton *btn = [[ToolRailButton alloc] initWithTitle:title symbol:symbol];
-    btn.tag = tag;
-    [btn addTarget:self action:@selector(railButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    return btn;
+- (void)didTapTab:(UIButton *)sender {
+    [self switchTab:sender.tag];
 }
 
-- (void)railButtonTapped:(ToolRailButton *)sender {
-    [self selectTab:sender.tag];
-}
+- (void)switchTab:(NSInteger)index {
+    if (index < 0 || index >= self.controllers.count) return;
+    self.currentIndex = index;
 
-- (void)buildVCs {
-    // KhÃ´ng táº¡o gÃ¬ cáº£ â lazy create trong selectTab
-}
-
-- (void)selectTab:(NSInteger)index {
-    NSLog(@"[ToolVC] selectTab %ld START", (long)index);
-
-    if (self.currentVC) {
-        [self.currentVC.view removeFromSuperview];
-        [self.currentVC removeFromParentViewController];
-        self.currentVC = nil;
+    for (NSInteger i = 0; i < self.buttons.count; i++) {
+        UIButton *b = self.buttons[i];
+        if (i == index) {
+            b.backgroundColor = [ToolTheme shared].accent;
+            [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        } else {
+            b.backgroundColor = [UIColor clearColor];
+            [b setTitleColor:[ToolTheme shared].textPrimary forState:UIControlStateNormal];
+        }
     }
 
-    UIViewController *newVC = nil;
-
-    if (index == 0) {
-        if (!self.aiVC) {
-            @try { self.aiVC = [[AIChatVC alloc] init]; }
-            @catch (NSException *e) { NSLog(@"[ToolVC] AIChatVC crash: %@", e); return; }
-        }
-        newVC = self.aiVC;
-        self.subtitleLabel.text = @"AI Agent";
-    }
-    else if (index == 1) {
-        if (!self.dumpVC) {
-            @try { self.dumpVC = [[DumperVC alloc] init]; }
-            @catch (NSException *e) { NSLog(@"[ToolVC] DumperVC crash: %@", e); return; }
-        }
-        newVC = self.dumpVC;
-        self.subtitleLabel.text = @"IL2CPP Dumper";
-    }
-    else if (index == 2) {
-        if (!self.memoryVC) {
-            @try { self.memoryVC = [[MemoryVC alloc] init]; }
-            @catch (NSException *e) { NSLog(@"[ToolVC] MemoryVC crash: %@", e); return; }
-        }
-        newVC = self.memoryVC;
-        self.subtitleLabel.text = @"Memory Editor";
-    }
-    else if (index == 3) {
-        if (!self.methodVC) {
-            @try { self.methodVC = [[MethodCallerVC alloc] init]; }
-            @catch (NSException *e) { NSLog(@"[ToolVC] MethodCallerVC crash: %@", e); return; }
-        }
-        newVC = self.methodVC;
-        self.subtitleLabel.text = @"Method Caller";
-    }
-    else if (index == 4) {
-        if (!self.luaVC) {
-            @try { self.luaVC = [[LuaVC alloc] init]; }
-            @catch (NSException *e) { NSLog(@"[ToolVC] LuaVC crash: %@", e); return; }
-        }
-        newVC = self.luaVC;
-        self.subtitleLabel.text = @"Lua Console";
-    }
-    else if (index == 5) {
-        if (!self.espVC) {
-            @try { self.espVC = [[ESPVC alloc] init]; }
-            @catch (NSException *e) { NSLog(@"[ToolVC] ESPVC crash: %@", e); return; }
-        }
-        newVC = self.espVC;
-        self.subtitleLabel.text = @"ESP Overlay";
+    for (UIView *sub in self.contentView.subviews) {
+        [sub removeFromSuperview];
     }
 
-    if (!newVC) return;
+    UIViewController *vc = self.controllers[index];
+    vc.view.frame = self.contentView.bounds;
+    vc.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.contentView addSubview:vc.view];
 
     @try {
-        [self addChildViewController:newVC];
-        newVC.view.frame = self.contentView.bounds;
-        newVC.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        [self.contentView addSubview:newVC.view];
-        [newVC didMoveToParentViewController:self];
-    } @catch (NSException *e) {
-        NSLog(@"[ToolVC] addChild crash: %@", e);
-        return;
-    }
-
-    self.currentVC = newVC;
-    self.currentTab = index;
-
-    self.aiButton.active = (index == 0);
-    self.dumpButton.active = (index == 1);
-    self.memoryButton.active = (index == 2);
-    self.methodButton.active = (index == 3);
-    self.luaButton.active = (index == 4);
-    self.espButton.active = (index == 5);
-}
-
-- (void)closeTapped { [[ToolWindow shared] hide]; }
-
-- (void)handlePan:(UIPanGestureRecognizer *)g {
-    if (self.isResizing) return;
-
-    CGPoint p = [g translationInView:self.view];
-    CGPoint center = self.panel.center;
-
-    center.x += p.x;
-    center.y += p.y;
-
-    self.panel.center = center;
-
-    [g setTranslation:CGPointZero inView:self.view];
-}
-
-- (void)handleResize:(UIPanGestureRecognizer *)g {
-    CGPoint p = [g translationInView:self.view];
-
-    if (g.state == UIGestureRecognizerStateBegan) {
-        self.isResizing = YES;
-        self.dragStartSize = self.panel.frame.size;
-        self.dragStartPoint = self.panel.frame.origin;
-    }
-
-    if (g.state == UIGestureRecognizerStateChanged) {
-        CGFloat newW = MAX(200, self.dragStartSize.width + p.x);
-        CGFloat newH = MAX(150, self.dragStartSize.height + p.y);
-        self.panel.frame = CGRectMake(self.dragStartPoint.x, self.dragStartPoint.y, newW, newH);
-        [self updateLayoutForPanelSize:CGSizeMake(newW, newH)];
-    }
-
-    if (g.state == UIGestureRecognizerStateEnded ||
-        g.state == UIGestureRecognizerStateCancelled) {
-        self.isResizing = NO;
-    }
-}
-
-- (void)updateLayoutForPanelSize:(CGSize)panelSize {
-    CGFloat panelW = panelSize.width;
-    CGFloat panelH = panelSize.height;
-    CGFloat railW = 60;
-
-    self.titleBar.frame = CGRectMake(0, 0, panelW, 36);
-    self.closeButton.frame = CGRectMake(panelW - 36, 4, 28, 28);
-    self.subtitleLabel.frame = CGRectMake(100, 0, MAX(0, panelW - 160), 36);
-    self.railView.frame = CGRectMake(0, 36, railW, panelH - 36);
-
-    for (UIView *v in self.railView.subviews) {
-        if (v != self.railStack) {
-            v.frame = CGRectMake(railW - 1, 0, 1, panelH - 36);
+        if ([vc respondsToSelector:@selector(reload)]) {
+            [vc performSelector:@selector(reload)];
         }
-    }
-
-    self.contentView.frame = CGRectMake(railW, 36, panelW - railW, panelH - 36);
-
-    CGFloat handleSize = 28;
-    self.resizeHandle.frame = CGRectMake(panelW - handleSize, panelH - handleSize, handleSize, handleSize);
-
-    if (self.currentVC) {
-        self.currentVC.view.frame = self.contentView.bounds;
-    }
+    } @catch (NSException *e) {}
 }
 
 - (void)reload {
-    @try { if (self.aiVC) [self.aiVC reload]; } @catch (NSException *e) {}
-    @try { if (self.dumpVC) [self.dumpVC reload]; } @catch (NSException *e) {}
-    @try { if (self.memoryVC) [self.memoryVC reload]; } @catch (NSException *e) {}
-    @try { if (self.methodVC) [self.methodVC reload]; } @catch (NSException *e) {}
-    @try { if (self.luaVC) [self.luaVC reload]; } @catch (NSException *e) {}
-    @try { if (self.espVC) [self.espVC reload]; } @catch (NSException *e) {}
-}
-
-#pragma mark - UIGestureRecognizerDelegate
-
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)g
-       shouldReceiveTouch:(UITouch *)touch {
-    UIView *v = touch.view;
-    while (v && v != self.panel) {
-        if ([v isKindOfClass:[UITableView class]])  return NO;
-        if ([v isKindOfClass:[UITextView class]])   return NO;
-        if ([v isKindOfClass:[UITextField class]])  return NO;
-        if ([v isKindOfClass:[UIScrollView class]]) return NO;
-        v = v.superview;
+    if (self.currentIndex < self.controllers.count) {
+        UIViewController *vc = self.controllers[self.currentIndex];
+        @try {
+            if ([vc respondsToSelector:@selector(reload)]) {
+                [vc performSelector:@selector(reload)];
+            }
+        } @catch (NSException *e) {}
     }
-    return YES;
-}
-
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)g
-shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
-    return YES;
 }
 
 @end
