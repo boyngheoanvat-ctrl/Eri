@@ -72,15 +72,15 @@
         [self.scrollView addSubview:title];
         y += 40;
 
-        self.espSwitch = [self addRow:@"Kích Hoạt ESP" desc:@"Hiển thị trực tiếp lên màn hình game" y:y on:YES action:@selector(toggleESP:)];
+        self.espSwitch = [self addRow:@"Kích Hoạt ESP" desc:@"Hiển thị trực tiếp lên màn hình game" y:y on:NO action:@selector(toggleESP:)];
         y += 65;
-        self.boxSwitch = [self addRow:@"Bật/Tắt ESP Box" desc:@"Khung bao quanh mục tiêu" y:y on:YES action:nil];
+        self.boxSwitch = [self addRow:@"Bật/Tắt ESP Box" desc:@"Khung bao quanh mục tiêu" y:y on:NO action:nil];
         y += 65;
-        self.lineSwitch = [self addRow:@"Bật/Tắt ESP Line" desc:@"Đường chỉ hướng mục tiêu" y:y on:YES action:nil];
+        self.lineSwitch = [self addRow:@"Bật/Tắt ESP Line" desc:@"Đường chỉ hướng mục tiêu" y:y on:NO action:nil];
         y += 65;
-        self.hpSwitch = [self addRow:@"Bật/Tắt ESP HP" desc:@"Hiển thị HP thời gian thực" y:y on:YES action:nil];
+        self.hpSwitch = [self addRow:@"Bật/Tắt ESP HP" desc:@"Hiển thị HP thời gian thực" y:y on:NO action:nil];
         y += 65;
-        self.nameDistSwitch = [self addRow:@"Bật/Tắt ESP Tên/Khoảng cách" desc:@"Hiển thị tên và khoảng cách (CM)" y:y on:YES action:nil];
+        self.nameDistSwitch = [self addRow:@"Bật/Tắt ESP Tên/Khoảng cách" desc:@"Hiển thị tên và khoảng cách (CM)" y:y on:NO action:nil];
         y += 80;
 
         self.scrollView.contentSize = CGSizeMake(w, y);
