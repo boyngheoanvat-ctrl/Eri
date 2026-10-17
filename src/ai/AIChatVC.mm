@@ -74,7 +74,10 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.messages) {
         self.messages = [NSMutableArray arrayWithArray:@[
-            @{@"role": @"assistant", @"content": @"Chào người anh em tôi là tool do Eri Nguyễn tạo ra"}
+            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!!"
+                                                 @"💳 Cre : Eri Nguyễn 💳"
+                                                 @"📞 Zalo : 0896734790 📞"
+                                                 @"🎵 Facebook : Nguyễn Minh Thiện 🎵"}
         ]];
     }
     [self buildUI];
@@ -185,7 +188,7 @@
         
         BOOL isGreeting = [lower containsString:@"hi"] || [lower containsString:@"hello"] || [lower containsString:@"chào"] || [lower containsString:@"hướng dẫn"] || [lower containsString:@"giúp"];
         if (isGreeting && userInput.length < 15) {
-            NSString *reply = @"cre : Eri Nguyễn/n Nguyễn Minh Thiện/n Zalo 0896734790";
+            NSString *reply = @"Chào người anh em tôi là tool do Eri Nguyễn tạo ra";
             [self.messages addObject:@{@"role": @"assistant", @"content": reply}];
             [self.tableView reloadData];
             [self scrollToBottom];
