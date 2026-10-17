@@ -12,7 +12,6 @@
     static ToolWindow *instance;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        // Kích thước menu nhỏ lại ban đầu (ví dụ: width 480, height 300, căn giữa màn hình)
         CGRect screen = [UIScreen mainScreen].bounds;
         CGFloat initW = 480;
         CGFloat initH = 300;
@@ -33,7 +32,7 @@
                 if (!scene) {
                     for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
                         if ([s isKindOfClass:[UIWindowScene class]]) {
-                            scene = (UIWindowScene *)s;
+                            scene = (UIScene *)s;
                             break;
                         }
                     }
@@ -68,7 +67,6 @@
             self.toolVC = [[ToolViewController alloc] init];
             self.rootViewController = self.toolVC;
             
-            // Thêm nút kéo to nhỏ (Resize Handle) ở góc phải dưới menu
             CGFloat handleSize = 22;
             self.resizeHandle = [[UIView alloc] initWithFrame:CGRectMake(CGRectGetWidth(self.bounds) - handleSize - 6,
                                                                          CGRectGetHeight(self.bounds) - handleSize - 6,
@@ -77,7 +75,6 @@
             self.resizeHandle.layer.cornerRadius = 4;
             self.resizeHandle.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin;
             
-            // Gắn Pan Gesture để nhận thao tác kéo thay đổi kích thước
             UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleResizePan:)];
             [self.resizeHandle addGestureRecognizer:pan];
             
@@ -97,15 +94,18 @@
 }
 
 - (void)handleResizePan:(UIPanGestureRecognizer *)pan {
-    CGPoint translation = [pan translationInView:self];
     if (pan.state == UIGestureRecognizerStateChanged || pan.state == UIGestureRecognizerStateEnded) {
+        CGPoint translation = [pan translationInView:self.superview];
         CGRect newFrame = self.frame;
-        // Đặt giới hạn kích thước tối thiểu (Width >= 320, Height >= 200)
+        
+        // Tính toán kích thước mới dựa trên độ dịch chuyển thực tế từ điểm bắt đầu kéo
         newFrame.size.width = MAX(320, newFrame.size.width + translation.x);
         newFrame.size.height = MAX(200, newFrame.size.height + translation.y);
         
         self.frame = newFrame;
-        [pan setTranslation:CGPointZero inView:self];
+        
+        // Reset translation ngay sau mỗi bước để tránh bị cộng dồn gây lệch tốc độ
+        [pan setTranslation:CGPointZero inView:self.superview];
         
         if (self.rootViewController) {
             self.rootViewController.view.frame = self.bounds;
