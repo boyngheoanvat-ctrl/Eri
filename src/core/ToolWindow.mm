@@ -4,6 +4,8 @@
 @interface ToolWindow () <UIGestureRecognizerDelegate>
 @property (nonatomic, strong) ToolViewController *toolVC;
 @property (nonatomic, strong) UIView *resizeHandle;
+@property (nonatomic, assign) CGRect startFrame;
+@property (nonatomic, assign) CGPoint panStartCenter;
 @end
 
 @implementation ToolWindow
@@ -15,6 +17,7 @@
         CGRect screen = [UIScreen mainScreen].bounds;
         CGFloat initW = 480;
         CGFloat initH = 300;
+        // Đặt vị trí xuất hiện ban đầu ở giữa màn hình (hoặc bất kỳ đâu tuỳ ý)
         CGFloat initX = (CGRectGetWidth(screen) - initW) / 2.0;
         CGFloat initY = (CGRectGetHeight(screen) - initH) / 2.0;
         CGRect initialRect = CGRectMake(initX, initY, initW, initH);
@@ -67,16 +70,21 @@
             self.toolVC = [[ToolViewController alloc] init];
             self.rootViewController = self.toolVC;
             
-            CGFloat handleSize = 22;
-            self.resizeHandle = [[UIView alloc] initWithFrame:CGRectMake(CGRectGetWidth(self.bounds) - handleSize - 6,
-                                                                         CGRectGetHeight(self.bounds) - handleSize - 6,
+            // 1. Thêm gesture kéo di chuyển toàn bộ menu (Drag Gesture cho cả view controller)
+            UIPanGestureRecognizer *movePan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleMovePan:)];
+            [self.toolVC.view addGestureRecognizer:movePan];
+            
+            // 2. Nút kéo phóng to/thu nhỏ ở góc phải dưới
+            CGFloat handleSize = 24;
+            self.resizeHandle = [[UIView alloc] initWithFrame:CGRectMake(CGRectGetWidth(self.bounds) - handleSize - 4,
+                                                                         CGRectGetHeight(self.bounds) - handleSize - 4,
                                                                          handleSize, handleSize)];
-            self.resizeHandle.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.4 alpha:0.8];
+            self.resizeHandle.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.4 alpha:0.9];
             self.resizeHandle.layer.cornerRadius = 4;
             self.resizeHandle.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin;
             
-            UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleResizePan:)];
-            [self.resizeHandle addGestureRecognizer:pan];
+            UIPanGestureRecognizer *resizePan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleResizePan:)];
+            [self.resizeHandle addGestureRecognizer:resizePan];
             
             [self.toolVC.view addSubview:self.resizeHandle];
             [self.toolVC.view bringSubviewToFront:self.resizeHandle];
@@ -93,19 +101,34 @@
     } @catch (NSException *e) {}
 }
 
-- (void)handleResizePan:(UIPanGestureRecognizer *)pan {
-    if (pan.state == UIGestureRecognizerStateChanged || pan.state == UIGestureRecognizerStateEnded) {
+// Xử lý kéo di chuyển menu đi bất cứ đâu trên màn hình
+- (void)handleMovePan:(UIPanGestureRecognizer * _Nonnull)pan {
+    // Tránh xung đột khi người dùng đang kéo nút resize ở góc phải dưới
+    CGPoint loc = [pan locationInView:self.toolVC.view];
+    if (loc.x > CGRectGetWidth(self.bounds) - 45 && loc.y > CGRectGetHeight(self.bounds) - 45) {
+        return;
+    }
+    
+    if (pan.state == UIGestureRecognizerStateBegan) {
+        self.panStartCenter = self.center;
+    } else if (pan.state == UIGestureRecognizerStateChanged || pan.state == UIGestureRecognizerStateEnded) {
         CGPoint translation = [pan translationInView:self.superview];
-        CGRect newFrame = self.frame;
+        self.center = CGPointMake(self.panStartCenter.x + translation.x, self.panStartCenter.y + translation.y);
+    }
+}
+
+// Xử lý kéo thay đổi kích thước mượt mà không bị nhảy
+- (void)handleResizePan:(UIPanGestureRecognizer * _Nonnull)pan {
+    if (pan.state == UIGestureRecognizerStateBegan) {
+        self.startFrame = self.frame;
+    } else if (pan.state == UIGestureRecognizerStateChanged || pan.state == UIGestureRecognizerStateEnded) {
+        CGPoint translation = [pan translationInView:self];
+        CGRect newFrame = self.startFrame;
         
-        // Tính toán kích thước mới dựa trên độ dịch chuyển thực tế từ điểm bắt đầu kéo
         newFrame.size.width = MAX(320, newFrame.size.width + translation.x);
         newFrame.size.height = MAX(200, newFrame.size.height + translation.y);
         
         self.frame = newFrame;
-        
-        // Reset translation ngay sau mỗi bước để tránh bị cộng dồn gây lệch tốc độ
-        [pan setTranslation:CGPointZero inView:self.superview];
         
         if (self.rootViewController) {
             self.rootViewController.view.frame = self.bounds;
