@@ -1,14 +1,19 @@
 #import "LuaEngine.h"
 #import <UIKit/UIKit.h>
-#import <dlfcn.h>
+#import <mach/mach.h>
+#import <sys/mman.h>
+#import <mach-o/dyld.h>
 
 extern "C" {
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+// Khai báo hàm xoá cache lệnh CPU ARM64
+void sys_icache_invalidate(void *start, size_t len);
 }
 
 static UIView *floatingMenuContainer = nil;
+static UIButton *floatingLuaIcon = nil;
 static NSMutableDictionary *luaCallbacks = nil;
 
 @interface LuaEngine ()
@@ -27,6 +32,26 @@ static NSMutableDictionary *luaCallbacks = nil;
 - (BOOL)isAvailable { return YES; }
 
 // ==========================================
+// HÀM PATCH BỘ NHỚ AN TOÀN TRÊN IOS (vm_protect)
+// ==========================================
+static BOOL PatchMemoryARM64(uintptr_t address, uint32_t value) {
+    if (address < 0x100000000) return NO;
+    
+    vm_prot_t protection = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY;
+    kern_return_t kr = vm_protect(mach_task_self(), (vm_address_t)address, sizeof(uint32_t), FALSE, protection);
+    
+    if (kr == KERN_SUCCESS) {
+        *(uint32_t *)address = value;
+        // Phôi phục lại quyền Execute
+        vm_protect(mach_task_self(), (vm_address_t)address, sizeof(uint32_t), FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+        // Xóa instruction cache của CPU ARM64
+        sys_icache_invalidate((void *)address, sizeof(uint32_t));
+        return YES;
+    }
+    return NO;
+}
+
+// ==========================================
 // LUA BRIDGE IMPLEMENTATION (UI & GG)
 // ==========================================
 
@@ -39,60 +64,74 @@ static int l_create_window(lua_State *L) {
     if (height <= 0) height = 310;
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        // Xóa menu cũ nếu đang tồn tại
         if (floatingMenuContainer) {
             [floatingMenuContainer removeFromSuperview];
             floatingMenuContainer = nil;
         }
+        if (floatingLuaIcon) {
+            [floatingLuaIcon removeFromSuperview];
+            floatingLuaIcon = nil;
+        }
 
         UIWindow *keyWindow = nil;
         for (UIWindow *win in [UIApplication sharedApplication].windows) {
-            if (win.isKeyWindow) {
-                keyWindow = win;
-                break;
-            }
+            if (win.isKeyWindow) { keyWindow = win; break; }
         }
         if (!keyWindow) keyWindow = [UIApplication sharedApplication].delegate.window;
         if (!keyWindow) return;
 
         CGFloat screenW = keyWindow.bounds.size.width;
-        CGFloat screenH = keyWindow.bounds.size.height;
 
-        // Tạo container nổi trực tiếp trên keyWindow
+        // 1. Tạo Container Menu Nổi chính
         floatingMenuContainer = [[UIView alloc] initWithFrame:CGRectMake((screenW - width) / 2, 80, width, height)];
-        floatingMenuContainer.backgroundColor = [UIColor colorWithRed:0.12 green:0.14 blue:0.18 alpha:0.95];
-        floatingMenuContainer.layer.cornerRadius = 10;
+        floatingMenuContainer.backgroundColor = [UIColor colorWithRed:0.10 green:0.12 blue:0.16 alpha:0.95];
+        floatingMenuContainer.layer.cornerRadius = 12;
         floatingMenuContainer.layer.borderWidth = 1.2;
         floatingMenuContainer.layer.borderColor = [UIColor colorWithRed:0.0 green:0.85 blue:0.55 alpha:1.0].CGColor;
         
-        // Cho phép kéo thả menu
-        UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:[LuaEngine shared] action:@selector(handlePan:)];
+        UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:[LuaEngine shared] action:@selector(handlePanMenu:)];
         [floatingMenuContainer addGestureRecognizer:pan];
-        floatingMenuContainer.userInteractionEnabled = YES;
 
         // Tiêu đề
         UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, width - 44, 28)];
-        titleLbl.text = title ? [NSString stringWithUTF8String:title] : @"MOD MENU";
+        titleLbl.text = title ? [NSString stringWithUTF8String:title] : @"LUA MOD MENU";
         titleLbl.textColor = [UIColor colorWithRed:0.0 green:0.85 blue:0.55 alpha:1.0];
         titleLbl.font = [UIFont boldSystemFontOfSize:13];
         [floatingMenuContainer addSubview:titleLbl];
 
-        // Nút đóng (X)
+        // Nút thu nhỏ Menu (✕)
         UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
         closeBtn.frame = CGRectMake(width - 32, 8, 24, 24);
         [closeBtn setTitle:@"✕" forState:UIControlStateNormal];
-        [closeBtn setTitleColor:[UIColor redColor] forState:UIControlStateNormal];
-        [closeBtn addTarget:[LuaEngine shared] action:@selector(closeFloatingMenu) forControlEvents:UIControlEventTouchUpInside];
+        [closeBtn setTitleColor:[UIColor colorWithRed:1.0 green:0.3 blue:0.3 alpha:1.0] forState:UIControlStateNormal];
+        [closeBtn addTarget:[LuaEngine shared] action:@selector(minimizeMenu) forControlEvents:UIControlEventTouchUpInside];
         [floatingMenuContainer addSubview:closeBtn];
 
-        // ScrollView chứa các tính năng
+        // ScrollView chứa các nút gạt
         UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(8, 40, width - 16, height - 48)];
         scrollView.tag = 8888;
         scrollView.contentSize = CGSizeMake(width - 16, 400);
         [floatingMenuContainer addSubview:scrollView];
 
+        // 2. Tạo Icon Tròn Nổi Mở Lại Menu (Lua Floating Icon)
+        floatingLuaIcon = [UIButton buttonWithType:UIButtonTypeCustom];
+        floatingLuaIcon.frame = CGRectMake(15, 120, 44, 44);
+        floatingLuaIcon.backgroundColor = [UIColor colorWithRed:0.0 green:0.85 blue:0.55 alpha:0.9];
+        floatingLuaIcon.layer.cornerRadius = 22;
+        floatingLuaIcon.layer.borderWidth = 1.5;
+        floatingLuaIcon.layer.borderColor = [UIColor whiteColor].CGColor;
+        [floatingLuaIcon setTitle:@"LUA" forState:UIControlStateNormal];
+        [floatingLuaIcon setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
+        floatingLuaIcon.titleLabel.font = [UIFont boldSystemFontOfSize:11];
+        
+        UIPanGestureRecognizer *iconPan = [[UIPanGestureRecognizer alloc] initWithTarget:[LuaEngine shared] action:@selector(handlePanIcon:)];
+        [floatingLuaIcon addGestureRecognizer:iconPan];
+        [floatingLuaIcon addTarget:[LuaEngine shared] action:@selector(expandMenu) forControlEvents:UIControlEventTouchUpInside];
+
         [keyWindow addSubview:floatingMenuContainer];
-        [keyWindow bringSubviewToFront:floatingMenuContainer];
+        [keyWindow addSubview:floatingLuaIcon];
+        
+        floatingLuaIcon.hidden = YES; // Mặc định hiện Menu, ẩn Icon
     });
 
     return 0;
@@ -118,7 +157,6 @@ static int l_add_label(lua_State *L) {
         lbl.textColor = [UIColor whiteColor];
         lbl.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
         [scrollView addSubview:lbl];
-        
         scrollView.contentSize = CGSizeMake(scrollView.bounds.size.width, currentY + 28);
     });
     return 0;
@@ -167,6 +205,7 @@ static int l_add_toggle(lua_State *L) {
 
 static int l_show_window(lua_State *L) { return 0; }
 
+// Patch Memory qua GG Bridge
 static int l_gg_set_values(lua_State *L) {
     if (lua_istable(L, 1)) {
         lua_pushnil(L);
@@ -182,12 +221,11 @@ static int l_gg_set_values(lua_State *L) {
 
                 if (addr > 0) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        uint32_t *targetPtr = (uint32_t *)addr;
-                        @try {
-                            *targetPtr = val;
-                            NSLog(@"[LuaPatch] Ghi thành công 0x%X vào 0x%llX", val, addr);
-                        } @catch (NSException *ex) {
-                            NSLog(@"[LuaPatch Lỗi]: %@", ex.reason);
+                        BOOL ok = PatchMemoryARM64((uintptr_t)addr, val);
+                        if (ok) {
+                            NSLog(@"[LuaPatch Thành Công] Address: 0x%llX -> Value: 0x%X", addr, val);
+                        } else {
+                            NSLog(@"[LuaPatch Lỗi] Lỗi vm_protect tại 0x%llX", addr);
                         }
                     });
                 }
@@ -204,18 +242,30 @@ static int l_gg_toast(lua_State *L) {
     return 0;
 }
 
-- (void)handlePan:(UIPanGestureRecognizer *)gesture {
+// ==========================================
+// THAO TÁC GIAO DIỆN NỔI
+// ==========================================
+
+- (void)handlePanMenu:(UIPanGestureRecognizer *)gesture {
     CGPoint translation = [gesture translationInView:floatingMenuContainer.superview];
-    CGPoint center = floatingMenuContainer.center;
-    floatingMenuContainer.center = CGPointMake(center.x + translation.x, center.y + translation.y);
+    floatingMenuContainer.center = CGPointMake(floatingMenuContainer.center.x + translation.x, floatingMenuContainer.center.y + translation.y);
     [gesture setTranslation:CGPointZero inView:floatingMenuContainer.superview];
 }
 
-- (void)closeFloatingMenu {
-    if (floatingMenuContainer) {
-        [floatingMenuContainer removeFromSuperview];
-        floatingMenuContainer = nil;
-    }
+- (void)handlePanIcon:(UIPanGestureRecognizer *)gesture {
+    CGPoint translation = [gesture translationInView:floatingLuaIcon.superview];
+    floatingLuaIcon.center = CGPointMake(floatingLuaIcon.center.x + translation.x, floatingLuaIcon.center.y + translation.y);
+    [gesture setTranslation:CGPointZero inView:floatingLuaIcon.superview];
+}
+
+- (void)minimizeMenu {
+    floatingMenuContainer.hidden = YES;
+    floatingLuaIcon.hidden = NO;
+}
+
+- (void)expandMenu {
+    floatingMenuContainer.hidden = NO;
+    floatingLuaIcon.hidden = YES;
 }
 
 - (void)didToggleSwitch:(UISwitch *)sender {
@@ -229,7 +279,7 @@ static int l_gg_toast(lua_State *L) {
     lua_pushboolean(L, sender.isOn);
     if (lua_pcall(L, 1, 0, 0) != 0) {
         const char *err = lua_tostring(L, -1);
-        NSLog(@"[Lua Error]: %s", err ? err : "unknown");
+        NSLog(@"[Lua Callback Lỗi]: %s", err ? err : "unknown");
         lua_pop(L, 1);
     }
 }
@@ -265,17 +315,15 @@ static int l_gg_toast(lua_State *L) {
         lua_close(L);
         self.L = NULL;
     } else {
-        result = @"[Lua] Đã vẽ menu nổi trên màn hình thành công!";
+        result = @"[Lua] Đã nạp Menu Lua thành công!";
     }
     return result;
 }
 
 - (void)stop {
-    [self closeFloatingMenu];
-    if (self.L) {
-        lua_close(self.L);
-        self.L = NULL;
-    }
+    if (floatingMenuContainer) [floatingMenuContainer removeFromSuperview];
+    if (floatingLuaIcon) [floatingLuaIcon removeFromSuperview];
+    if (self.L) { lua_close(self.L); self.L = NULL; }
 }
 
 @end
