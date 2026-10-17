@@ -51,7 +51,7 @@
         [self.view addSubview:header];
 
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(12, 0, 200, 40)];
-        title.text = @"ToolKit - AI Agent";
+        title.text = @"Tool Mod By Eri Nguyễn";
         title.textColor = [ToolTheme shared].textPrimary;
         title.font = [[ToolTheme shared] monoBoldFont:13];
         [header addSubview:title];
