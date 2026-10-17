@@ -74,7 +74,7 @@
     self.view.backgroundColor = [ToolTheme shared].background;
     if (!self.messages) {
         self.messages = [NSMutableArray arrayWithArray:@[
-            @{@"role": @"assistant", @"content": @"Hello Chào Người Anh Em !!! RVA Scan & Universal AI Agent sẵn sàng."}
+            @{@"role": @"assistant", @"content": @"Hello Người Anh Em !!! Đã kết nối bộ quét dump.cs thực tế. Hãy nhập từ khóa cần tìm."}
         ]];
     }
     [self buildUI];
@@ -150,7 +150,7 @@
         [self.view addSubview:self.bottomBar];
 
         self.inputField = [[UITextField alloc] initWithFrame:CGRectMake(12, 6, w - 84, 38)];
-        self.inputField.placeholder = @"Nhập bất kỳ yêu cầu nào (Hệ thống tự quét RVA)...";
+        self.inputField.placeholder = @"Nhập tên Class hoặc Method cần tìm trong dump.cs...";
         self.inputField.backgroundColor = [ToolTheme shared].surfaceAlt;
         self.inputField.textColor = [ToolTheme shared].textPrimary;
         self.inputField.font = [[ToolTheme shared] monoFont:12];
@@ -174,39 +174,66 @@
 
 - (void)didTapSend {
     @autoreleasepool {
-        NSString *text = [self.inputField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (text.length == 0 || self.isWaitingResponse) return;
+        NSString *keyword = [self.inputField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (keyword.length == 0 || self.isWaitingResponse) return;
         [self.inputField resignFirstResponder];
         self.inputField.text = @"";
         
-        [self.messages addObject:@{@"role": @"user", @"content": text}];
-        [self.messages addObject:@{@"role": @"assistant", @"content": @"[Ghidra RVA Universal Scanner] Đang phân tích bộ nhớ và trích xuất phương thức..."}];
+        [self.messages addObject:@{@"role": @"user", @"content": keyword}];
+        [self.messages addObject:@{@"role": @"assistant", @"content": [NSString stringWithFormat:@"[Đang quét file dump.cs thực tế] Đang tìm kiếm từ khóa '%@'...", keyword]}];
         [self.tableView reloadData];
         [self scrollToBottom];
         
-        // Tự động kích hoạt bộ quét RVA trực tiếp cho MỌI câu hỏi của người dùng
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // Quét file dump.cs thực tế trên thiết bị
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             @autoreleasepool {
-                IL2CPPResolver *r = [IL2CPPResolver shared];
-                [r resolve];
-                uint64_t base = [r il2cppBase];
+                NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+                NSString *csPath = [docs stringByAppendingPathComponent:@"IL2CPP_Dump/dump.cs"];
                 
-                NSString *lower = [text lowercaseString];
-                NSString *result = @"";
+                NSString *finalResult = @"";
                 
-                if ([lower containsString:@"camera"] || [lower containsString:@"xa"] || [lower containsString:@"zoom"]) {
-                    result = [NSString stringWithFormat:@"[Thành công] Phân tích hoàn tất cho yêu cầu '%@':\n- Class: CameraController\n- Method: SetFieldOfView (RVA: 0x10892B40, VA: 0x%llX)\n- Method: UpdateZoom (RVA: 0x10893150, VA: 0x%llX)", text, base + 0x10892B40, base + 0x10893150];
-                } else if ([lower containsString:@"map"] || [lower containsString:@"sương"] || [lower containsString:@"fog"]) {
-                    result = [NSString stringWithFormat:@"[Thành công] Phân tích hoàn tất cho yêu cầu '%@':\n- Class: MinimapController\n- Method: UpdateFogOfWar (RVA: 0x10745A20, VA: 0x%llX)", text, base + 0x10745A20];
-                } else if ([lower containsString:@"esp"] || [lower containsString:@"wallhack"] || [lower containsString:@"khung"]) {
-                    result = [NSString stringWithFormat:@"[Thành công] Phân tích hoàn tất cho yêu cầu '%@':\n- Class: ESPPlayerRender\n- Method: DrawBoxAndLine (RVA: 0x10612300, VA: 0x%llX)", text, base + 0x10612300];
+                if ([[NSFileManager defaultManager] fileExistsAtPath:csPath]) {
+                    // Đọc file dump.cs thật (giới hạn một phần dung lượng hoặc đọc dòng để tối ưu)
+                    NSError *error = nil;
+                    NSString *content = [NSString stringWithContentsOfFile:csPath encoding:NSUTF8StringEncoding error:&error];
+                    if (content && content.length > 0) {
+                        NSMutableArray *matchedLines = [NSMutableArray array];
+                        NSArray *lines = [content componentsSeparatedByString:@"\n"];
+                        
+                        for (NSString *line in lines) {
+                            if ([line localizedCaseInsensitiveContainsString:keyword]) {
+                                [matchedLines addObject:line];
+                                if (matchedLines.count >= 15) break; // Lấy tối đa 15 kết quả khớp nhất
+                            }
+                        }
+                        
+                        if (matchedLines.count > 0) {
+                            IL2CPPResolver *r = [IL2CPPResolver shared];
+                            [r resolve];
+                            uint64_t base = [r il2cppBase];
+                            
+                            NSMutableString *resStr = [NSMutableString stringWithFormat:@"[Thành công] Tìm thấy %lu kết quả thực tế trong dump.cs cho '%@' (Base: 0x%llX):\n\n", (unsigned long)matchedLines.count, keyword, base];
+                            for (NSString *ml in matchedLines) {
+                                [resStr appendFormat:@"• %@\n", ml];
+                            }
+                            finalResult = resStr;
+                        } else {
+                            finalResult = [NSString stringWithFormat:@"[Kết quả] Không tìm thấy từ khóa '%@' trong file dump.cs hiện tại. Ngài hãy thử từ khóa khác (ví dụ: Player, Camera, Game, Menu...).", keyword];
+                        }
+                    } else {
+                        finalResult = @"[Lỗi] File dump.cs trống hoặc chưa được tạo. Ngài hãy vào tab 'Dump' và bấm nút 'Generate Dump' trước nhé!";
+                    }
                 } else {
-                    result = [NSString stringWithFormat:@"[Thành công] Phân tích IL2CPP thành công cho: '%@'\n- Target Class: GameCoreManager\n- Target Method: ExecuteHookLogic (RVA: 0x10528400, VA: 0x%llX)", text, base + 0x10528400];
+                    finalResult = @"[Lỗi] Chưa tìm thấy file dump.cs trong thư mục IL2CPP_Dump. Ngài vui lòng sang tab 'Dump' thực hiện Generate Dump trước!";
                 }
                 
-                self.messages[self.messages.count - 1] = @{@"role": @"assistant", @"content": result};
-                [self.tableView reloadData];
-                [self scrollToBottom];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    @autoreleasepool {
+                        self.messages[self.messages.count - 1] = @{@"role": @"assistant", @"content": finalResult};
+                        [self.tableView reloadData];
+                        [self scrollToBottom];
+                    }
+                });
             }
         });
     }
