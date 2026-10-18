@@ -1,0 +1,126 @@
+name: Build ToolKit
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang lld make git curl xz-utils \
+            libplist-dev pkg-config \
+            libssl-dev build-essential \
+            llvm
+
+      - name: Download iOS SDK
+        run: |
+          mkdir -p $HOME/sdks
+          cd $HOME/sdks
+          curl -L --fail -o iPhoneOS16.5.sdk.tar.xz \
+            https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
+          tar -xf iPhoneOS16.5.sdk.tar.xz
+
+      - name: Install ldid
+        run: |
+          git clone https://github.com/ProcursusTeam/ldid.git
+          cd ldid
+          git submodule update --init
+          make CXX=clang++
+          sudo cp ldid /usr/local/bin/
+
+      - name: Download Lua 5.4.6 source
+        run: |
+          cd $HOME
+          curl -L --fail -o lua-5.4.6.tar.gz \
+            https://www.lua.org/ftp/lua-5.4.6.tar.gz
+          tar -xf lua-5.4.6.tar.gz
+          echo "Lua downloaded"
+
+      - name: Compile Lua for iOS (arm64)
+        run: |
+          SDK=$HOME/sdks/iPhoneOS16.5.sdk
+          cd $HOME/lua-5.4.6/src
+
+          SRC="lapi.c lauxlib.c lbaselib.c lcode.c lcorolib.c lctype.c ldblib.c \
+               ldebug.c ldo.c ldump.c lfunc.c lgc.c linit.c liolib.c llex.c \
+               lmathlib.c lmem.c loadlib.c lobject.c lopcodes.c loslib.c \
+               lparser.c lstate.c lstring.c lstrlib.c ltable.c ltablib.c \
+               ltm.c lundump.c lutf8lib.c lvm.c lzio.c"
+
+          for f in $SRC; do
+            if [ -f "$f" ]; then
+              clang \
+                -target arm64-apple-ios14.0 \
+                -isysroot "$SDK" \
+                -c "$f" \
+                -DLUA_USE_IOS \
+                -Wno-everything \
+                -o "${f%.c}.o" || echo "Failed: $f"
+            fi
+          done
+
+          llvm-ar rcs liblua.a *.o
+          mkdir -p $GITHUB_WORKSPACE/libs
+          cp liblua.a $GITHUB_WORKSPACE/libs/
+          cp *.h $GITHUB_WORKSPACE/libs/
+
+      - name: Verify liblua
+        run: |
+          ls -la libs/
+          echo "=== liblua.a info ==="
+          llvm-ar t libs/liblua.a | head -20
+
+      - name: Build dylib with Lua
+        run: |
+          SDK=$HOME/sdks/iPhoneOS16.5.sdk
+          SRC=$(find src -name "*.mm" | tr '\n' ' ')
+          echo "Sources: $SRC"
+          clang++ \
+            -target arm64-apple-ios14.0 \
+            -dynamiclib \
+            -isysroot "$SDK" \
+            -fuse-ld=lld \
+            -fobjc-arc \
+            -framework Foundation \
+            -framework UIKit \
+            -framework CoreGraphics \
+            -framework QuartzCore \
+            -install_name @rpath/libtool.dylib \
+            -I. -Isrc -Isrc/core -Isrc/ui -Isrc/ai \
+            -Isrc/memory -Isrc/dump -Isrc/lua -Isrc/esp \
+            -Isrc/c \
+            -Ilibs \
+            -Llibs \
+            -llua \
+            -o libtool.dylib \
+            $SRC
+
+      - name: Sign dylib
+        run: |
+          ldid -S libtool.dylib
+          ls -la libtool.dylib
+
+      - name: Create .so
+        run: |
+          cp libtool.dylib libtool.so
+          ls -la *.dylib *.so
+
+      - name: Upload dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: libtool-dylib
+          path: libtool.dylib
+
+      - name: Upload so
+        uses: actions/upload-artifact@v4
+        with:
+          name: libtool-so
+          path: libtool.so
